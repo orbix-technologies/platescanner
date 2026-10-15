@@ -22,9 +22,11 @@ class EthiopianPlateParser {
   /// or six / seven digits (new Ge'ez-format plates).
   static final serialPattern = RegExp(r'^([A-Z]?\d{5}|\d{6,7})$');
 
-  static final _splitter = RegExp(r'[^A-Za-z0-9ሀ-፿]+');
+  // Ge'ez is never read: the region comes from its Latin letters only, so
+  // Ge'ez characters split tokens like punctuation.
+  static final _splitter = RegExp(r'[^A-Za-z0-9]+');
   static final _latinLetter = RegExp(r'^[A-Z]$');
-  static const _ignored = {'ETHIOPIA', 'ETH', 'ኢትዮጵያ'};
+  static const _ignored = {'ETHIOPIA', 'ETH'};
   static final _circled = RegExp('[\u2460-\u2464]');
 
   // Common OCR confusions on plate fonts.
@@ -101,8 +103,6 @@ class EthiopianPlateParser {
     if (regionHit != null) {
       regionCode = regionHit.region.code;
       corrections += regionHit.corrections;
-    } else {
-      regionCode = EthiopianRegion.findAmharic(rawText)?.code;
     }
 
     final issues = validate(code: code, regionCode: regionCode, serial: serial);
@@ -157,6 +157,47 @@ class EthiopianPlateParser {
       issues.add(PlateIssue.missingSerial);
     }
     return issues;
+  }
+
+  /// Reads one token as a serial, correcting common OCR confusions.
+  ///
+  /// `mergedCode` is set when a code digit was fused onto the front
+  /// (`2A12345`); `alternative` is a (code, serial) split to use only when no
+  /// code is found elsewhere (`212345`).
+  ({
+    String serial,
+    String? mergedCode,
+    (String, String)? alternative,
+    int corrections,
+  })? readSerial(String token) {
+    final hit = _serialFrom(token.toUpperCase(), const []);
+    if (hit == null) return null;
+    return (
+      serial: hit.value,
+      mergedCode: hit.mergedCode,
+      alternative: hit.mergedAlternative,
+      corrections: hit.corrections,
+    );
+  }
+
+  /// Reads one token as a service code (`1`–`5`, `CD`, `AU`, `UN`, `POLICE`),
+  /// correcting a letter read for a digit (`I` → `1`). Returns `null` otherwise.
+  String? readCode(String token) {
+    final t = token.toUpperCase();
+    final special = PlateServiceType.fromCode(t);
+    if (special != null) return special.code;
+    if (t.length != 1) return null;
+    final digit = _isDigit(t) ? t : _toDigit[t];
+    return PlateServiceType.isKnown(digit) ? digit : null;
+  }
+
+  /// Reads Latin letters as a region (`AA`, `OM`, `0R` → `OR`), or `null`.
+  EthiopianRegion? readRegion(String token) {
+    final t = token.toUpperCase();
+    return EthiopianRegion.fromLatin(t) ??
+        EthiopianRegion.fromLatin(
+          t.split('').map((c) => _toLetter[c] ?? c).join(),
+        );
   }
 
   /// Normalises a user-typed serial (`a 12345` → `A12345`), or `null`.
@@ -280,8 +321,6 @@ class EthiopianPlateParser {
       if (used.contains(t.index)) continue;
       final direct = EthiopianRegion.fromLatin(t.text);
       if (direct != null) return _RegionHit(direct, 0);
-      final amharic = EthiopianRegion.findAmharic(t.text);
-      if (amharic != null) return _RegionHit(amharic, 0);
     }
     for (final t in tokens) {
       if (used.contains(t.index) || t.text.length > 4) continue;
@@ -315,8 +354,7 @@ class EthiopianPlateParser {
                 (boxA.width > boxB.width ? boxA.width : boxB.width);
         if (!sameLine && !stacked) continue;
         final pair = a.text + b.text;
-        final region = EthiopianRegion.fromLatin(pair) ??
-            EthiopianRegion.findAmharic(pair);
+        final region = EthiopianRegion.fromLatin(pair);
         if (region != null) return _RegionHit(region, 0);
       }
     }

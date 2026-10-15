@@ -11,7 +11,14 @@ import 'package:flutter/services.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final out = StringBuffer();
-  for (final name in ['new_plate_ebr.png']) {
+  // Every image dropped into assets/samples/.
+  final manifest = await AssetManifest.loadFromAssetBundle(rootBundle);
+  final samples = manifest
+      .listAssets()
+      .where((a) => a.startsWith('assets/samples/'))
+      .map((a) => a.substring('assets/samples/'.length))
+      .toList();
+  for (final name in samples) {
     final data = await rootBundle.load('assets/samples/$name');
     final file = File('${Directory.systemTemp.path}/$name');
     await file.writeAsBytes(data.buffer.asUint8List());
@@ -22,12 +29,21 @@ Future<void> main() async {
       out.writeln('OCR "${l.text}" conf=${l.confidence?.toStringAsFixed(2)}');
     }
     out.writeln('CODE HINT ${frame.codeHint}');
-    final candidate = await PlateReader.readImage(
-      file.path,
-      // The plate band in this sample (excludes the headline and logo).
-      region: const NormalizedRect(0, 0.27, 1, 0.53),
-    );
-    out.writeln('PARSED $candidate');
+    // Steps 1–4 as the scanner runs them: detect the area, then read it.
+    final area = const PlateAreaDetector().detect(frame.lines) ??
+        const NormalizedRect(0, 0, 1, 1);
+    out.writeln('AREA $area');
+    final ocr = await PlateReader.recognizeArea(file.path, area);
+    for (final e in ocr.elements) {
+      out.writeln('ELEMENT "${e.text}" symbols=${e.symbols.map((s) => s.text).join()}');
+    }
+    out.writeln('AREA CODE HINT ${ocr.codeHint}');
+    final arranged = const PlateArranger().arrange(ocr);
+    out.writeln('ARRANGED ${arranged.arrangement.layoutText}');
+    for (final col in arranged.arrangement.columns) {
+      out.writeln('  column ${col.map((s) => '${s.text}:${s.role.name}').join(' / ')}');
+    }
+    out.writeln('CANDIDATE ${arranged.candidate}');
   }
   debugPrint(out.toString());
   runApp(

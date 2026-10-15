@@ -1,7 +1,10 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 import '../controller/plate_reader_controller.dart';
 import '../models/ocr_frame.dart';
+import '../models/plate_area.dart';
 import '../models/plate_record.dart';
 import '../parsing/ethiopian_region.dart';
 import '../parsing/plate_service_type.dart';
@@ -113,7 +116,7 @@ class _PlateScannerViewState extends State<PlateScannerView> {
 
   Future<void> _confirm() async {
     try {
-      final record = await widget.controller.confirmCurrent();
+      final record = await widget.controller.confirm();
       widget.onPlateConfirmed?.call(record);
     } catch (e) {
       widget.onError?.call(e);
@@ -133,13 +136,21 @@ class _PlateScannerViewState extends State<PlateScannerView> {
     final showUnsupported = !controller.isSupported &&
         controller.error != null &&
         !controller.isLoading;
+    final frame = controller.capturedFrame;
+    final frozen = frame != null &&
+        const {
+          ScanPhase.confirmingArea,
+          ScanPhase.reading,
+          ScanPhase.review,
+          ScanPhase.confirmed,
+        }.contains(controller.phase);
 
     return LayoutBuilder(
       builder: (context, constraints) {
         final size = constraints.biggest;
         final guide = PlateScannerView.guideRect(size);
-        // Read only what is inside the drawn box. The preview fills this
-        // widget, so view-normalized = preview-normalized coordinates.
+        // Search only inside the drawn box. The preview fills this widget,
+        // so view-normalized = preview-normalized coordinates.
         if (size.width > 0 && size.height > 0) {
           controller.regionOfInterest = NormalizedRect(
             guide.left / size.width,
@@ -158,6 +169,14 @@ class _PlateScannerViewState extends State<PlateScannerView> {
                 key: _previewKey,
                 service: controller.service,
               ),
+            // The captured still covers exactly the visible preview, so
+            // filling the view keeps normalized coordinates aligned.
+            if (frozen)
+              Image.file(
+                File(frame.path),
+                fit: BoxFit.fill,
+                gaplessPlayback: true,
+              ),
             if (controller.isLoading)
               const Center(
                 child: SizedBox(
@@ -175,13 +194,15 @@ class _PlateScannerViewState extends State<PlateScannerView> {
                 onClose: widget.onCancel,
               )
             else if (controller.isSupported) ...[
-              _GuideFrame(rect: guide, controller: controller),
+              if (controller.phase == ScanPhase.detecting)
+                _DetectionLayer(guide: guide, controller: controller)
+              else if (frozen && controller.plateArea != null)
+                _AreaLayer(controller: controller, size: size),
               if (widget.overlayBuilder != null)
                 widget.overlayBuilder!(context, controller)
               else
                 _DefaultOverlay(
                   controller: controller,
-                  guide: guide,
                   onConfirm: _confirm,
                   onClose: () async {
                     await controller.cancelSession();
@@ -198,66 +219,265 @@ class _PlateScannerViewState extends State<PlateScannerView> {
 
 const _accent = Color(0xFFF5C518);
 const _good = Color(0xFF4CAF50);
+const _dim = Color(0x8C000000);
 
-/// Dims everything outside the guide box and outlines it.
-class _GuideFrame extends StatelessWidget {
-  const _GuideFrame({required this.rect, required this.controller});
+Rect _toView(NormalizedRect r, Size size) => Rect.fromLTRB(
+      r.left * size.width,
+      r.top * size.height,
+      r.right * size.width,
+      r.bottom * size.height,
+    );
 
-  final Rect rect;
+/// Step 1: guide box (search area) with the live detected plate area.
+class _DetectionLayer extends StatelessWidget {
+  const _DetectionLayer({required this.guide, required this.controller});
+
+  final Rect guide;
   final PlateReaderController controller;
 
   @override
   Widget build(BuildContext context) {
-    final live = controller.liveCandidate;
-    final color = switch (controller.phase) {
-      ScanPhase.locked || ScanPhase.confirmed => _good,
-      _ when live?.isValid ?? false => _accent,
-      _ => Colors.white70,
-    };
     return IgnorePointer(
-      child: CustomPaint(painter: _GuidePainter(rect, color)),
+      child: LayoutBuilder(
+        builder: (context, c) {
+          final area = controller.detectedArea;
+          return CustomPaint(
+            size: c.biggest,
+            painter: _DetectionPainter(
+              guide: guide,
+              detected: area == null ? null : _toView(area, c.biggest),
+            ),
+          );
+        },
+      ),
     );
   }
 }
 
-class _GuidePainter extends CustomPainter {
-  _GuidePainter(this.rect, this.color);
+class _DetectionPainter extends CustomPainter {
+  _DetectionPainter({required this.guide, required this.detected});
 
-  final Rect rect;
-  final Color color;
+  final Rect guide;
+  final Rect? detected;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final box = RRect.fromRectAndRadius(rect, const Radius.circular(14));
-    final outside = Path()
-      ..fillType = PathFillType.evenOdd
-      ..addRect(Offset.zero & size)
-      ..addRRect(box);
-    canvas.drawPath(outside, Paint()..color = const Color(0x8C000000));
+    final box = RRect.fromRectAndRadius(guide, const Radius.circular(14));
+    canvas.drawPath(
+      Path()
+        ..fillType = PathFillType.evenOdd
+        ..addRect(Offset.zero & size)
+        ..addRRect(box),
+      Paint()..color = _dim,
+    );
     canvas.drawRRect(
       box,
+      Paint()
+        ..color = Colors.white70
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2,
+    );
+    final d = detected;
+    if (d != null) {
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(d, const Radius.circular(6)),
+        Paint()
+          ..color = _accent
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 3,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_DetectionPainter old) =>
+      old.guide != guide || old.detected != detected;
+}
+
+/// Steps 2–4 on the frozen frame: the plate area (draggable while
+/// confirming) and, in review, a box around each arranged segment.
+class _AreaLayer extends StatelessWidget {
+  const _AreaLayer({required this.controller, required this.size});
+
+  final PlateReaderController controller;
+  final Size size;
+
+  @override
+  Widget build(BuildContext context) {
+    final area = _toView(controller.plateArea!, size);
+    final editing = controller.phase == ScanPhase.confirmingArea;
+    final segments = controller.phase == ScanPhase.review
+        ? controller.arrangement?.segments ?? const <PlateSegment>[]
+        : const <PlateSegment>[];
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        IgnorePointer(
+          child: CustomPaint(
+            painter: _AreaPainter(
+              area: area,
+              color: editing ? _accent : _good,
+              segments: [
+                for (final s in segments)
+                  (
+                    Rect.fromLTRB(
+                      area.left + s.box.left * area.width,
+                      area.top + s.box.top * area.height,
+                      area.left + s.box.right * area.width,
+                      area.top + s.box.bottom * area.height,
+                    ),
+                    s.role,
+                  ),
+              ],
+            ),
+          ),
+        ),
+        if (editing)
+          _AreaEditor(
+            area: area,
+            onChanged: (r) => controller.adjustArea(
+              NormalizedRect(
+                r.left / size.width,
+                r.top / size.height,
+                r.right / size.width,
+                r.bottom / size.height,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+Color _roleColor(PlateSegmentRole role) => switch (role) {
+      PlateSegmentRole.code => const Color(0xFF64B5F6),
+      PlateSegmentRole.serial => _accent,
+      PlateSegmentRole.region => const Color(0xFF81C784),
+      PlateSegmentRole.ignored => Colors.white38,
+    };
+
+class _AreaPainter extends CustomPainter {
+  _AreaPainter({
+    required this.area,
+    required this.color,
+    required this.segments,
+  });
+
+  final Rect area;
+  final Color color;
+  final List<(Rect, PlateSegmentRole)> segments;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.drawPath(
+      Path()
+        ..fillType = PathFillType.evenOdd
+        ..addRect(Offset.zero & size)
+        ..addRect(area),
+      Paint()..color = _dim,
+    );
+    canvas.drawRect(
+      area,
       Paint()
         ..color = color
         ..style = PaintingStyle.stroke
         ..strokeWidth = 3,
     );
+    for (final (rect, role) in segments) {
+      canvas.drawRect(
+        rect.inflate(2),
+        Paint()
+          ..color = _roleColor(role)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2,
+      );
+    }
   }
 
   @override
-  bool shouldRepaint(_GuidePainter old) =>
-      old.rect != rect || old.color != color;
+  bool shouldRepaint(_AreaPainter old) =>
+      old.area != area || old.color != color || old.segments != segments;
+}
+
+/// Drag the body to move the area, a corner handle to resize it.
+class _AreaEditor extends StatelessWidget {
+  const _AreaEditor({required this.area, required this.onChanged});
+
+  final Rect area;
+  final ValueChanged<Rect> onChanged;
+
+  static const _handle = 36.0;
+
+  @override
+  Widget build(BuildContext context) {
+    Widget corner(Alignment a, Rect Function(Offset d) resize) {
+      final x = a.x < 0 ? area.left : area.right;
+      final y = a.y < 0 ? area.top : area.bottom;
+      return Positioned(
+        left: x - _handle / 2,
+        top: y - _handle / 2,
+        width: _handle,
+        height: _handle,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onPanUpdate: (d) => onChanged(resize(d.delta)),
+          child: Center(
+            child: Container(
+              width: 18,
+              height: 18,
+              decoration: BoxDecoration(
+                color: _accent,
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.black54, width: 2),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Stack(
+      children: [
+        Positioned.fromRect(
+          rect: area,
+          child: GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            onPanUpdate: (d) => onChanged(area.shift(d.delta)),
+          ),
+        ),
+        corner(
+          Alignment.topLeft,
+          (d) => Rect.fromLTRB(
+              area.left + d.dx, area.top + d.dy, area.right, area.bottom),
+        ),
+        corner(
+          Alignment.topRight,
+          (d) => Rect.fromLTRB(
+              area.left, area.top + d.dy, area.right + d.dx, area.bottom),
+        ),
+        corner(
+          Alignment.bottomLeft,
+          (d) => Rect.fromLTRB(
+              area.left + d.dx, area.top, area.right, area.bottom + d.dy),
+        ),
+        corner(
+          Alignment.bottomRight,
+          (d) => Rect.fromLTRB(
+              area.left, area.top, area.right + d.dx, area.bottom + d.dy),
+        ),
+      ],
+    );
+  }
 }
 
 class _DefaultOverlay extends StatefulWidget {
   const _DefaultOverlay({
     required this.controller,
-    required this.guide,
     required this.onConfirm,
     required this.onClose,
   });
 
   final PlateReaderController controller;
-  final Rect guide;
   final VoidCallback onConfirm;
   final VoidCallback onClose;
 
@@ -270,9 +490,50 @@ class _DefaultOverlayState extends State<_DefaultOverlay> {
 
   @override
   Widget build(BuildContext context) {
-    final controller = widget.controller;
-    final phase = controller.phase;
-    if (phase != ScanPhase.locked) _editing = false;
+    final c = widget.controller;
+    if (c.phase != ScanPhase.review) _editing = false;
+
+    final panel = switch (c.phase) {
+      ScanPhase.detecting => _DetectingPanel(controller: c),
+      ScanPhase.confirmingArea => _ConfirmAreaPanel(controller: c),
+      ScanPhase.reading => const _Card(
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.white70,
+                ),
+              ),
+              SizedBox(width: 12),
+              Text(
+                'Reading characters…',
+                style: TextStyle(color: Colors.white70),
+              ),
+            ],
+          ),
+        ),
+      ScanPhase.review => Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (_editing) ...[
+              _EditPanel(controller: c),
+              const SizedBox(height: 8),
+            ],
+            _ReviewPanel(
+              controller: c,
+              onDone: widget.onConfirm,
+              onEdit: () => setState(() => _editing = !_editing),
+            ),
+          ],
+        ),
+      ScanPhase.error => _ErrorPanel(controller: c),
+      _ => const SizedBox.shrink(),
+    };
 
     return Stack(
       children: [
@@ -283,37 +544,21 @@ class _DefaultOverlayState extends State<_DefaultOverlay> {
               children: [
                 _HudIconButton(icon: Icons.close, onPressed: widget.onClose),
                 const Spacer(),
-                _HudIconButton(
-                  icon: controller.torchOn ? Icons.flash_on : Icons.flash_off,
-                  onPressed: controller.toggleTorch,
-                ),
+                if (c.phase == ScanPhase.detecting)
+                  _HudIconButton(
+                    icon: c.torchOn ? Icons.flash_on : Icons.flash_off,
+                    onPressed: c.toggleTorch,
+                  ),
               ],
             ),
           ),
         ),
-        if (phase == ScanPhase.scanning || phase == ScanPhase.locked)
-          Positioned(
-            top: widget.guide.bottom + 12,
-            left: widget.guide.left,
-            width: widget.guide.width,
-            child: _ReadingBar(
-              controller: controller,
-              onDone: widget.onConfirm,
-              onEdit: () => setState(() => _editing = !_editing),
-            ),
-          ),
-        if (_editing || phase == ScanPhase.error)
-          Positioned(
-            left: 16,
-            right: 16,
-            bottom: 16,
-            child: SafeArea(
-              top: false,
-              child: phase == ScanPhase.error
-                  ? _ErrorPanel(controller: controller)
-                  : _EditPanel(controller: controller),
-            ),
-          ),
+        Positioned(
+          left: 16,
+          right: 16,
+          bottom: 16,
+          child: SafeArea(top: false, child: panel),
+        ),
       ],
     );
   }
@@ -323,12 +568,113 @@ String _issueText(PlateIssue issue) => switch (issue) {
       PlateIssue.missingCode => 'Code not read',
       PlateIssue.unknownCode => 'Unknown code',
       PlateIssue.missingRegion => 'Region not read',
-      PlateIssue.missingSerial => 'Serial must be 5 digits (optional letter)',
+      PlateIssue.missingSerial => 'Serial not read',
     };
 
-/// The detected plate with its Done button, right under the guide box.
-class _ReadingBar extends StatelessWidget {
-  const _ReadingBar({
+const _hint = TextStyle(color: Colors.white70, fontSize: 14);
+
+/// Step 1 controls.
+class _DetectingPanel extends StatelessWidget {
+  const _DetectingPanel({required this.controller});
+
+  final PlateReaderController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final found = controller.detectedArea != null;
+    return _Card(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  found
+                      ? 'Plate found — hold steady'
+                      : 'Fit the plate inside the box',
+                  style: _hint,
+                ),
+              ),
+              const SizedBox(width: 12),
+              FilledButton(
+                onPressed: controller.captureArea,
+                style: FilledButton.styleFrom(
+                  backgroundColor: _accent,
+                  foregroundColor: Colors.black,
+                ),
+                child: const Text('Capture'),
+              ),
+            ],
+          ),
+          if (found) ...[
+            const SizedBox(height: 10),
+            LinearProgressIndicator(
+              value: controller.detectionProgress,
+              color: _accent,
+              backgroundColor: Colors.white12,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Step 2 controls.
+class _ConfirmAreaPanel extends StatelessWidget {
+  const _ConfirmAreaPanel({required this.controller});
+
+  final PlateReaderController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return _Card(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text(
+            'Is the whole plate inside the yellow box?\n'
+            'Drag the box or its corners to adjust.',
+            textAlign: TextAlign.center,
+            style: _hint,
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: controller.retake,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.white,
+                  ),
+                  child: const Text('Retake'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: FilledButton(
+                  onPressed: controller.confirmArea,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: _accent,
+                    foregroundColor: Colors.black,
+                  ),
+                  child: const Text('Confirm area'),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Step 4: the plate as arranged, its fields, and Done.
+class _ReviewPanel extends StatelessWidget {
+  const _ReviewPanel({
     required this.controller,
     required this.onDone,
     required this.onEdit,
@@ -341,36 +687,38 @@ class _ReadingBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = controller;
-    final locked = c.phase == ScanPhase.locked;
-    final live = c.liveCandidate;
-
-    if (!locked && live == null) {
-      return const _Card(
-        child: Text(
-          'Fit the plate inside the box',
-          textAlign: TextAlign.center,
-          style: TextStyle(color: Colors.white70, fontSize: 14),
-        ),
-      );
-    }
-
-    final code = locked ? c.draftCode : live!.code;
-    final region = locked ? c.draftRegionCode : live!.regionCode;
-    final serial = locked ? c.draftSerial : live!.serial;
-    final issues = locked ? c.draftIssues : live!.issues;
-    final canDone = issues.isEmpty;
-    final reading = [code ?? '–', region ?? '–', serial ?? '–'].join('  ·  ');
-    final status = issues.isNotEmpty
-        ? _issueText(issues.first)
-        : locked
-            ? 'Plate detected'
-            : 'Hold steady…';
+    final issues = c.draftIssues;
+    final region = EthiopianRegion.fromCode(c.draftRegionCode);
+    final columns = c.arrangement?.columns ?? const <List<PlateSegment>>[];
 
     return _Card(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          // The plate as placed: columns left→right, stacked rows top→bottom.
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                for (final col in columns)
+                  if (col.any((s) => s.role != PlateSegmentRole.ignored))
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          for (final s in col)
+                            if (s.role != PlateSegmentRole.ignored)
+                              _SegmentChip(segment: s),
+                        ],
+                      ),
+                    ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
           Row(
             children: [
               Expanded(
@@ -382,7 +730,11 @@ class _ReadingBar extends StatelessWidget {
                       fit: BoxFit.scaleDown,
                       alignment: Alignment.centerLeft,
                       child: Text(
-                        reading,
+                        [
+                          c.draftCode ?? '–',
+                          c.draftRegionCode ?? '–',
+                          c.draftSerial ?? '–',
+                        ].join('  ·  '),
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 22,
@@ -393,7 +745,11 @@ class _ReadingBar extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      status,
+                      issues.isNotEmpty
+                          ? issues.map(_issueText).join(' · ')
+                          : region == null
+                              ? 'Plate read'
+                              : '${region.amharicLabel} · ${region.englishName}',
                       style: TextStyle(
                         color: issues.isEmpty
                             ? Colors.white70
@@ -406,7 +762,7 @@ class _ReadingBar extends StatelessWidget {
               ),
               const SizedBox(width: 12),
               FilledButton(
-                onPressed: canDone ? onDone : null,
+                onPressed: c.canConfirm ? onDone : null,
                 style: FilledButton.styleFrom(
                   backgroundColor: _accent,
                   foregroundColor: Colors.black,
@@ -416,21 +772,57 @@ class _ReadingBar extends StatelessWidget {
               ),
             ],
           ),
-          if (!locked) ...[
-            const SizedBox(height: 10),
-            LinearProgressIndicator(
-              value: c.lockProgress,
-              color: _accent,
-              backgroundColor: Colors.white12,
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              TextButton(onPressed: onEdit, child: const Text('Edit')),
+              TextButton(
+                onPressed: c.adjustAgain,
+                child: const Text('Adjust area'),
+              ),
+              TextButton(onPressed: c.retake, child: const Text('Retake')),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SegmentChip extends StatelessWidget {
+  const _SegmentChip({required this.segment});
+
+  final PlateSegment segment;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = _roleColor(segment.role);
+    final label = switch (segment.role) {
+      PlateSegmentRole.code => 'Code',
+      PlateSegmentRole.serial => 'Serial',
+      PlateSegmentRole.region => 'Region',
+      PlateSegmentRole.ignored => '',
+    };
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        border: Border.all(color: color, width: 1.5),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            segment.text,
+            style: TextStyle(
+              color: color,
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
             ),
-          ] else
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                TextButton(onPressed: onEdit, child: const Text('Edit')),
-                TextButton(onPressed: c.rescan, child: const Text('Rescan')),
-              ],
-            ),
+          ),
+          Text(label,
+              style: const TextStyle(color: Colors.white54, fontSize: 10)),
         ],
       ),
     );
@@ -564,7 +956,7 @@ class _ErrorPanel extends StatelessWidget {
             style: const TextStyle(color: Colors.white70),
           ),
           TextButton(
-            onPressed: controller.rescan,
+            onPressed: controller.retake,
             child: const Text('Try again'),
           ),
         ],

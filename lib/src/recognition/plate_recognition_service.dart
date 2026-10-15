@@ -3,6 +3,7 @@ import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart' show kIsWeb;
 
 import '../models/ocr_frame.dart';
+import '../models/plate_area.dart';
 import 'channel_plate_recognition_service.dart';
 
 /// Abstraction over the native camera + recognition pipeline.
@@ -27,6 +28,12 @@ abstract class PlateRecognitionService {
 
   /// Stop frame analysis; the preview keeps running.
   Future<void> pause();
+
+  /// Save the next camera frame (exactly the visible preview) as a still.
+  Future<CapturedFrame> captureFrame();
+
+  /// Read every character inside [area] (normalized) of a captured still.
+  Future<AreaOcr> recognizeArea(String path, NormalizedRect area);
 
   /// Turn the torch on or off. Returns the resulting state.
   Future<bool> setTorch(bool on);

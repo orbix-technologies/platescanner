@@ -12,8 +12,11 @@ enum CodeDiscReader {
   private static let visibleCode = try! NSRegularExpression(
     pattern: "(^|[^0-9])[1-5]([^0-9]|$)|[\\u2460-\\u2464]")
 
-  // Disc centre offsets from the line's left edge, × line height.
-  private static let centreOffsets: [CGFloat] = [0.35, 0.0, -1.45, -1.1]
+  // Disc centre offsets from the line's left edge, × line height: a fine
+  // scan near the edge, then further left (see CodeDiscReader.kt).
+  private static let centreOffsets: [CGFloat] = [
+    0.1, 0.2, 0.0, 0.3, -0.1, 0.4, -0.2, -1.45, -1.1, -0.8,
+  ]
 
   /// Returns "1"..."5", or nil. `image` is only called when a pass is needed
   /// and must return the upright image the observations refer to.
@@ -65,9 +68,11 @@ enum CodeDiscReader {
     let src = area.intersection(bounds).integral
     guard src.width >= 8, src.height >= 8, let crop = image.cropping(to: src) else { return nil }
 
-    // Inner disc ×3, centred on a white page 3× larger again.
-    let cw = Int(src.width) * 3
-    let ch = Int(src.height) * 3
+    // Inner disc scaled to ~180 px (a fixed ×3 blurs crops that were
+    // already upscaled), centred on a white page 3× larger again.
+    let scale = min(max(180 / src.width, 0.5), 4)
+    let cw = Int(src.width * scale)
+    let ch = Int(src.height * scale)
     guard
       let ctx = CGContext(
         data: nil, width: cw * 3, height: ch * 3, bitsPerComponent: 8, bytesPerRow: 0,
@@ -88,10 +93,24 @@ enum CodeDiscReader {
     } catch {
       return nil
     }
-    let chars = (request.results ?? [])
+    let text = (request.results ?? [])
       .compactMap { $0.topCandidates(1).first?.string }
       .joined()
-      .filter { !$0.isWhitespace }
+    return digitOf(text)
+  }
+
+  // Ring fragments read as brackets / O are dropped; glyphs commonly read
+  // for the code digit are mapped (mirrors CodeDiscReader.kt).
+  private static let ringNoise: Set<Character> = [
+    "(", ")", "[", "]", "{", "}", "O", "o", "C", "c", "0", ".", ",", "-",
+  ]
+  private static let asDigit: [Character: Character] = [
+    "I": "1", "l": "1", "|": "1", "i": "1", "Z": "2", "z": "2", "S": "5", "s": "5",
+  ]
+
+  static func digitOf(_ text: String) -> String? {
+    let chars = text.filter { !$0.isWhitespace && !ringNoise.contains($0) }
+      .map { asDigit[$0] ?? $0 }
     guard let first = chars.first, chars.allSatisfy({ $0 == first }),
       ("1"..."5").contains(String(first))
     else { return nil }

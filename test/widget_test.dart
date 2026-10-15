@@ -2,6 +2,7 @@ import 'package:et_plate_reader/et_plate_reader.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'controller_test.dart' show plateOcr;
 import 'fake_plate_service.dart';
 
 void main() {
@@ -9,15 +10,16 @@ void main() {
   late PlateReaderController controller;
 
   setUp(() {
-    fake = FakePlateService();
+    fake = FakePlateService()..areaOcr = plateOcr;
     controller = PlateReaderController(
       service: fake,
       requestCameraPermission: () async => true,
-      stableFrames: 2,
+      autoCapture: false,
     );
   });
 
-  Future<void> pumpView(WidgetTester tester, {
+  Future<void> pumpView(
+    WidgetTester tester, {
     PlateScannerOverlayBuilder? overlay,
     ValueChanged<PlateRecord>? onConfirmed,
   }) async {
@@ -36,87 +38,45 @@ void main() {
     await tester.pump();
   }
 
-  testWidgets('Done sits beside the reading and confirms after lock',
+  testWidgets('full flow: detect → confirm area → review → Done',
       (tester) async {
     PlateRecord? confirmed;
     await pumpView(tester, onConfirmed: (r) => confirmed = r);
-    expect(controller.phase, ScanPhase.scanning);
     expect(find.text('Fit the plate inside the box'), findsOneWidget);
 
-    fake.emitLines(['2 AA A12345']);
+    fake.emitLines(['D-0123456']);
     await tester.pump();
     await tester.pump();
-    expect(find.text('2  ·  AA  ·  A12345'), findsOneWidget);
-    expect(find.widgetWithText(FilledButton, 'Done'), findsOneWidget);
+    expect(find.text('Plate found — hold steady'), findsOneWidget);
 
-    fake.emitLines(['2 AA A12345']);
+    // Image.file can't load in tests; the flow itself is what's checked.
+    await tester.runAsync(() => controller.captureArea());
     await tester.pump();
-    await tester.pump();
-    expect(controller.phase, ScanPhase.locked);
-    expect(find.text('Plate detected'), findsOneWidget);
+    expect(find.text('Confirm area'), findsOneWidget);
+    expect(find.text('Retake'), findsOneWidget);
 
-    await tester.tap(find.text('Done'));
-    await tester.pump();
-    expect(confirmed?.canonical, '2-AA-A12345');
-  });
-
-  testWidgets('Done while scanning confirms the live reading', (tester) async {
-    PlateRecord? confirmed;
-    await pumpView(tester, onConfirmed: (r) => confirmed = r);
-    fake.emitLines(['3 OR 54321']);
+    await tester.tap(find.text('Confirm area'));
     await tester.pump();
     await tester.pump();
-    expect(controller.phase, ScanPhase.scanning);
+    expect(controller.phase, ScanPhase.review);
+    expect(find.text('0123456'), findsOneWidget); // serial chip
+    expect(find.text('Serial'), findsOneWidget);
+    expect(find.text('1  ·  AA  ·  0123456'), findsOneWidget);
+    expect(find.text('አአ · Addis Ababa'), findsOneWidget);
 
     await tester.tap(find.text('Done'));
     await tester.pump();
-    expect(confirmed?.canonical, '3-OR-54321');
+    expect(confirmed?.canonical, '1-AA-0123456');
   });
 
-  testWidgets('Done is disabled for an incomplete reading', (tester) async {
-    await pumpView(tester);
-    fake.emitLines(['2 12345']);
-    await tester.pump();
-    await tester.pump();
-    final done = tester.widget<FilledButton>(
-      find.widgetWithText(FilledButton, 'Done'),
-    );
-    expect(done.onPressed, isNull);
-    expect(find.text('Region not read'), findsOneWidget);
-  });
-
-  testWidgets('region of interest follows the drawn guide box',
-      (tester) async {
+  testWidgets('region of interest follows the drawn guide box', (tester) async {
     await pumpView(tester);
     final size = tester.getSize(find.byType(PlateScannerView));
     final guide = PlateScannerView.guideRect(size);
-    final roi = controller.regionOfInterest;
-    expect(roi.left, closeTo(guide.left / size.width, 1e-9));
-    expect(roi.bottom, closeTo(guide.bottom / size.height, 1e-9));
-
-    // A plate above the box is ignored.
-    fake.emitFrame([
-      OcrLine(
-        text: '2 AA 99999',
-        box: NormalizedRect(0.2, roi.top - 0.12, 0.8, roi.top - 0.04),
-        confidence: 0.95,
-      ),
-    ]);
-    await tester.pump();
-    await tester.pump();
-    expect(controller.liveCandidate, isNull);
-  });
-
-  testWidgets('Edit opens the field editor after lock', (tester) async {
-    await pumpView(tester);
-    fake.emitLines(['2 AA 12345']);
-    fake.emitLines(['2 AA 12345']);
-    await tester.pump();
-    await tester.pump();
-    expect(controller.phase, ScanPhase.locked);
-    await tester.tap(find.text('Edit'));
-    await tester.pump();
-    expect(find.text('Serial'), findsOneWidget);
+    expect(
+      controller.regionOfInterest.left,
+      closeTo(guide.left / size.width, 1e-9),
+    );
   });
 
   testWidgets('custom overlay replaces the default HUD', (tester) async {
@@ -124,8 +84,8 @@ void main() {
       tester,
       overlay: (context, c) => Text('phase: ${c.phase.name}'),
     );
-    expect(find.text('phase: scanning'), findsOneWidget);
-    expect(find.text('Fit the plate inside the box'), findsNothing);
+    expect(find.text('phase: detecting'), findsOneWidget);
+    expect(find.text('Capture'), findsNothing);
   });
 
   testWidgets('unsupported device shows the message', (tester) async {

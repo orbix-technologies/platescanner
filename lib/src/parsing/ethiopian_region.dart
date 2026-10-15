@@ -1,6 +1,7 @@
 /// Regions (and the federal series) printed on Ethiopian plates.
 ///
-/// Latin codes and Amharic labels are provisional — verify against the
+/// Plates are read by their Latin letters only; [amharicLabel] is a display
+/// mapping, never recognised. Codes are provisional — verify against the
 /// Ministry of Transport and Logistics plate specification before release
 /// (see doc/PLATE_FORMAT.md).
 enum EthiopianRegion {
@@ -8,7 +9,7 @@ enum EthiopianRegion {
   addisAbaba('AA', 'Addis Ababa', 'አአ'),
 
   /// Oromia.
-  oromia('OR', 'Oromia', 'ኦሮ'),
+  oromia('OR', 'Oromia', 'ኦሮ', aliases: ['OM']),
 
   /// Amhara.
   amhara('AM', 'Amhara', 'አማ'),
@@ -80,14 +81,6 @@ enum EthiopianRegion {
     if (code == null) return null;
     for (final r in values) {
       if (r.code == code) return r;
-    }
-    return null;
-  }
-
-  /// Region whose Amharic label occurs in [text], or `null`.
-  static EthiopianRegion? findAmharic(String text) {
-    for (final r in values) {
-      if (text.contains(r.amharicLabel)) return r;
     }
     return null;
   }

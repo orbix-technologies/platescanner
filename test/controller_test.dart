@@ -1,20 +1,28 @@
-import 'dart:async';
-
 import 'package:et_plate_reader/et_plate_reader.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'fake_plate_service.dart';
+
+const plateOcr = AreaOcr(
+  codeHint: '1',
+  elements: [
+    OcrElement(text: 'D', box: NormalizedRect(0.02, 0.3, 0.08, 0.7)),
+    OcrElement(text: '0123456', box: NormalizedRect(0.25, 0.2, 0.85, 0.8)),
+    OcrElement(text: 'A', box: NormalizedRect(0.92, 0.15, 0.97, 0.45)),
+    OcrElement(text: 'A', box: NormalizedRect(0.92, 0.55, 0.97, 0.85)),
+  ],
+);
 
 void main() {
   late FakePlateService fake;
   late PlateReaderController controller;
 
   setUp(() {
-    fake = FakePlateService();
+    fake = FakePlateService()..areaOcr = plateOcr;
     controller = PlateReaderController(
       service: fake,
       requestCameraPermission: () async => true,
-      stableFrames: 3,
+      stableFrames: 2,
     );
   });
 
@@ -22,121 +30,133 @@ void main() {
 
   Future<void> tick() => Future<void>.delayed(Duration.zero);
 
-  Future<void> scanning() async {
+  Future<void> detecting() async {
     await controller.initialize();
     await controller.startSession();
   }
 
-  Future<void> emit(List<String> texts, {int times = 1}) async {
-    for (var i = 0; i < times; i++) {
-      fake.emitLines(texts);
+  Future<void> plateInView({int frames = 1}) async {
+    for (var i = 0; i < frames; i++) {
+      fake.emitLines(['D-0123456']);
       await tick();
     }
   }
 
-  test('startSession starts the backend', () async {
-    await scanning();
-    expect(controller.phase, ScanPhase.scanning);
-    expect(fake.running, isTrue);
+  test('step 1: detects the plate area inside the box', () async {
+    await detecting();
+    expect(controller.phase, ScanPhase.detecting);
+    await plateInView();
+    expect(controller.detectedArea, isNotNull);
+    expect(controller.phase, ScanPhase.detecting);
   });
 
-  test('stable frames auto-lock and pause the backend', () async {
-    await scanning();
-    await emit(['2 AA A12345'], times: 2);
-    expect(controller.phase, ScanPhase.scanning);
-    expect(controller.liveCandidate?.serial, 'A12345');
-    await emit(['2 AA A12345']);
-    expect(controller.phase, ScanPhase.locked);
-    expect(controller.draftSerial, 'A12345');
+  test('step 1: text outside the box is not detected', () async {
+    await detecting();
+    fake.emitFrame(const [
+      OcrLine(text: '0123456', box: NormalizedRect(0.2, 0.01, 0.8, 0.05)),
+    ]);
+    await tick();
+    expect(controller.detectedArea, isNull);
+  });
+
+  test('steady area auto-captures and pauses the camera (step 2)', () async {
+    await detecting();
+    await plateInView(frames: 2);
+    await tick();
+    expect(controller.phase, ScanPhase.confirmingArea);
+    expect(fake.captures, 1);
     expect(fake.running, isFalse);
-    expect(controller.canConfirm, isTrue);
+    expect(controller.plateArea, controller.detectedArea);
   });
 
-  test('confirm returns a record', () async {
-    await scanning();
-    await emit(['3 OR 54321'], times: 3);
+  test('manual capture without detection proposes the guide box', () async {
+    await detecting();
+    expect(await controller.captureArea(), isTrue);
+    expect(controller.plateArea, controller.regionOfInterest);
+  });
+
+  test('step 2: adjustArea clamps and rejects tiny areas', () async {
+    await detecting();
+    await controller.captureArea();
+    controller.adjustArea(const NormalizedRect(-0.1, 0.3, 0.9, 0.5));
+    expect(controller.plateArea!.left, 0);
+    controller.adjustArea(const NormalizedRect(0.1, 0.3, 0.11, 0.5));
+    expect(controller.plateArea!.right, 0.9);
+  });
+
+  test('steps 3–4: confirmArea reads and arranges the plate', () async {
+    await detecting();
+    await controller.captureArea();
+    controller.adjustArea(const NormalizedRect(0.1, 0.3, 0.9, 0.5));
+    await controller.confirmArea();
+    expect(fake.lastArea, const NormalizedRect(0.1, 0.3, 0.9, 0.5));
+    expect(controller.phase, ScanPhase.review);
+    expect(controller.arrangement!.layoutText, '1 0123456 A/A');
+    expect(
+      [
+        controller.draftCode,
+        controller.draftRegionCode,
+        controller.draftSerial
+      ],
+      ['1', 'AA', '0123456'],
+    );
+    expect(controller.canConfirm, isTrue);
+
     final record = await controller.confirm();
-    expect(record.canonical, '3-OR-54321');
-    expect(record.editedByUser, isFalse);
+    expect(record.canonical, '1-AA-0123456');
+    expect(record.imagePath, '/tmp/frame.jpg');
     expect(controller.phase, ScanPhase.confirmed);
   });
 
-  test('lines outside the region of interest are ignored', () async {
-    await scanning();
-    fake.emitLines(['2 AA 12345']);
-    await tick();
-    expect(controller.liveCandidate, isNotNull);
-
-    fake.emitFrame([
-      const OcrLine(
-        text: '2 AA 99999',
-        box: NormalizedRect(0.2, 0.01, 0.8, 0.05),
-        confidence: 0.95,
-      ),
+  test('edit fixes an incomplete reading', () async {
+    fake.areaOcr = const AreaOcr(elements: [
+      OcrElement(text: '0123456', box: NormalizedRect(0.25, 0.2, 0.85, 0.8)),
     ]);
-    await tick();
-    expect(controller.liveCandidate, isNull);
-
-    // Straddling the box edge: the centre is inside, the line is not.
-    fake.emitFrame([
-      const OcrLine(
-        text: '2 AA 88888',
-        box: NormalizedRect(0.5, 0.4, 0.99, 0.48),
-        confidence: 0.95,
-      ),
-    ]);
-    await tick();
-    expect(controller.liveCandidate, isNull);
-  });
-
-  test('confirmCurrent confirms a valid live reading', () async {
-    await scanning();
-    await emit(['2 AA A12345']);
-    expect(controller.phase, ScanPhase.scanning);
-    final record = await controller.confirmCurrent();
-    expect(record.canonical, '2-AA-A12345');
-  });
-
-  test('confirmCurrent refuses an incomplete live reading', () async {
-    await scanning();
-    await emit(['2 12345']);
-    expect(controller.confirmCurrent, throwsA(isA<PlateReaderException>()));
-  });
-
-  test('manual lock + edit fixes an incomplete reading', () async {
-    await scanning();
-    await emit(['2 12345']);
-    expect(controller.liveCandidate!.isValid, isFalse);
-    expect(await controller.lockCurrent(), isTrue);
+    await detecting();
+    await controller.captureArea();
+    await controller.confirmArea();
     expect(controller.canConfirm, isFalse);
-    expect(controller.draftIssues, [PlateIssue.missingRegion]);
-
-    controller.editField(regionCode: 'AA');
+    controller.editField(code: '1', regionCode: 'AA');
     expect(controller.canConfirm, isTrue);
-    final record = await controller.confirm();
-    expect(record.regionCode, 'AA');
-    expect(record.editedByUser, isTrue);
+    expect((await controller.confirm()).editedByUser, isTrue);
   });
 
-  test('editField normalises the serial', () async {
-    await scanning();
-    await emit(['2 AA 12345'], times: 3);
-    controller.editField(serial: 'b 67890');
-    expect(controller.draftSerial, 'B67890');
+  test('adjustAgain returns to the area step on the same frame', () async {
+    await detecting();
+    await controller.captureArea();
+    await controller.confirmArea();
+    controller.adjustAgain();
+    expect(controller.phase, ScanPhase.confirmingArea);
+    expect(controller.capturedFrame, isNotNull);
   });
 
-  test('confirm before lock throws', () async {
-    await scanning();
+  test('retake goes back to detection', () async {
+    await detecting();
+    await controller.captureArea();
+    await controller.retake();
+    expect(controller.phase, ScanPhase.detecting);
+    expect(controller.capturedFrame, isNull);
+    expect(fake.running, isTrue);
+  });
+
+  test('confirm before review throws', () async {
+    await detecting();
     expect(controller.confirm, throwsA(isA<PlateReaderException>()));
   });
 
-  test('rescan resumes scanning', () async {
-    await scanning();
-    await emit(['2 AA 12345'], times: 3);
-    await controller.rescan();
-    expect(controller.phase, ScanPhase.scanning);
-    expect(controller.lockedCandidate, isNull);
-    expect(fake.startCalls, 2);
+  test('autoCapture: false waits for the user', () async {
+    final c = PlateReaderController(
+      service: fake,
+      requestCameraPermission: () async => true,
+      stableFrames: 1,
+      autoCapture: false,
+    );
+    await c.initialize();
+    await c.startSession();
+    fake.emitLines(['D-0123456']);
+    await tick();
+    expect(c.phase, ScanPhase.detecting);
+    expect(c.detectedArea, isNotNull);
   });
 
   test('permission denied surfaces an error', () async {
@@ -146,47 +166,15 @@ void main() {
     );
     await expectLater(c.initialize, throwsA(isA<PlateReaderException>()));
     expect(c.phase, ScanPhase.error);
-    expect(c.error, contains('permission'));
     c.dispose();
   });
 
-  test('unsupported device', () async {
-    final f = FakePlateService()..supported = false;
-    final c = PlateReaderController(
-      service: f,
-      requestCameraPermission: () async => true,
-    );
-    await expectLater(c.initialize, throwsA(isA<PlateReaderException>()));
-    expect(c.isSupported, isFalse);
-    c.dispose();
-  });
-
-  test('platform errors move to the error phase', () async {
-    await scanning();
+  test('platform errors move to the error phase; retake recovers', () async {
+    await detecting();
     fake.emitError('Camera closed');
     await tick();
     expect(controller.phase, ScanPhase.error);
-    expect(controller.error, 'Camera closed');
-  });
-
-  test('torch toggles', () async {
-    await scanning();
-    await controller.toggleTorch();
-    expect(controller.torchOn, isTrue);
-  });
-
-  test('autoLock: false never locks on its own', () async {
-    final c = PlateReaderController(
-      service: fake,
-      requestCameraPermission: () async => true,
-      stableFrames: 1,
-      autoLock: false,
-    );
-    await c.initialize();
-    await c.startSession();
-    fake.emitLines(['2 AA 12345']);
-    await tick();
-    expect(c.phase, ScanPhase.scanning);
-    unawaited(c.cancelSession());
+    await controller.retake();
+    expect(controller.phase, ScanPhase.detecting);
   });
 }

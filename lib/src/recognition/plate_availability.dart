@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../exceptions/plate_reader_exception.dart';
 import '../models/ocr_frame.dart';
+import '../models/plate_area.dart';
 import '../models/plate_record.dart';
 import '../parsing/ethiopian_plate_parser.dart';
 
@@ -111,6 +112,28 @@ class PlateReader {
       throw PlateReaderException(
         PlateReaderErrorCode.channelError,
         e.message ?? 'Image could not be read',
+        cause: e,
+      );
+    }
+  }
+
+  /// Step 3: every character inside [area] (normalized image coordinates)
+  /// of the image at [path], with per-character boxes relative to [area].
+  static Future<AreaOcr> recognizeArea(String path, NormalizedRect area) async {
+    try {
+      final result = await availabilityChannel
+          .invokeMapMethod<String, Object?>('recognizeArea', {
+        'path': path,
+        'left': area.left,
+        'top': area.top,
+        'right': area.right,
+        'bottom': area.bottom,
+      });
+      return AreaOcr.fromMap(result ?? const {});
+    } on PlatformException catch (e) {
+      throw PlateReaderException(
+        PlateReaderErrorCode.channelError,
+        e.message ?? 'Plate area could not be read',
         cause: e,
       );
     }

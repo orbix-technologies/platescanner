@@ -55,10 +55,9 @@ void main() {
       expect(c.layout, PlateLayout.twoRow);
     });
 
-    test('Amharic region label is recognised', () {
+    test("Amharic region label is not read (Latin letters only)", () {
       final c = parser.parse(lines(['4 ኦሮ', '11111']));
-      expect(c.regionCode, 'OR');
-      expect(c.isValid, isTrue);
+      expect(c.regionCode, isNull);
     });
   });
 
@@ -153,7 +152,7 @@ void main() {
       expect(c.regionCode, 'AA');
     });
 
-    test('stacked Ge\'ez region', () {
+    test("stacked Ge'ez is ignored", () {
       final c = parser.parse([
         const OcrLine(text: 'አ', box: NormalizedRect(0.1, 0.3, 0.15, 0.35)),
         const OcrLine(text: 'አ', box: NormalizedRect(0.1, 0.4, 0.15, 0.45)),
@@ -162,7 +161,7 @@ void main() {
           box: NormalizedRect(0.2, 0.3, 0.9, 0.45),
         ),
       ], codeHint: '2');
-      expect([c.code, c.regionCode, c.serial], ['2', 'AA', '0123456']);
+      expect([c.code, c.regionCode, c.serial], ['2', null, '0123456']);
     });
 
     test('an unknown code hint is ignored', () {

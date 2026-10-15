@@ -11,13 +11,22 @@ preflight → controller → view → record, with optional SQLite persistence.
 - **[Recognition model decision](doc/MODEL_DECISION.md)** — why ML Kit / Vision now, custom model next
 - **[Plate format](doc/PLATE_FORMAT.md)** — fields, regions, open questions
 
-## Capture loop
+## Capture flow
 
-1. **Scan** — fit the plate in the guide box
-2. **Read** — live reading (code · region · serial) appears
-3. **Lock** — auto-locks after 4 identical valid frames, or tap *Use this reading*
-4. **Edit / Rescan** — fix any field or start over
-5. **Done** → host receives a `PlateRecord`
+1. **Detect the plate area** — live OCR inside the guide box finds the serial
+   and grows a box over the whole plate (code, region, border). It is drawn
+   on the preview; when it holds steady the frame freezes (or tap *Capture*).
+2. **Confirm or adjust** — the frozen frame shows the area; drag it or its
+   corners, then *Confirm area* (or *Retake*).
+3. **Read the characters** — native OCR runs on the confirmed crop only
+   (upscaled), returning every character with its box. A second pass reads
+   the circled code, which Latin OCR misreads as a letter.
+4. **Arrange** — characters are grouped into columns left to right, stacked
+   letters top to bottom, as placed on the plate; each group is tagged
+   Code / Serial / Region (`1 0123456 A/A`). Review, edit if needed, *Done*.
+5. **Latin only** — Ge'ez is ignored. The region comes from its Latin letters
+   (AA, TG, AM, ET, OM, …) and is mapped to the region table, which carries
+   the Amharic label for display.
 
 ## Quick start
 
@@ -83,6 +92,10 @@ cd example && flutter run
 ```
 
 Demos: default HUD, custom overlay, SQLite history with duplicate detection.
+
+OCR diagnostics on real photos: drop images into `example/assets/samples/`
+and run `flutter run -t lib/ocr_probe.dart`; it logs the detected area, the
+characters read, the arrangement and the reading for each.
 
 ### Device checklist
 

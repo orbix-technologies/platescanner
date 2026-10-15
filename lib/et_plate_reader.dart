@@ -15,11 +15,23 @@ export 'src/controller/plate_reader_controller.dart'
     show PlateReaderController, ScanPhase;
 export 'src/exceptions/plate_reader_exception.dart';
 export 'src/models/ocr_frame.dart' show NormalizedRect, OcrLine, OcrFrame;
+export 'src/models/plate_area.dart'
+    show
+        AreaOcr,
+        CapturedFrame,
+        OcrElement,
+        OcrSymbol,
+        PlateArrangement,
+        PlateSegment,
+        PlateSegmentRole;
 export 'src/models/plate_record.dart'
     show PlateCandidate, PlateIssue, PlateLayout, PlateLocation, PlateRecord;
 export 'src/parsing/ethiopian_plate_parser.dart' show EthiopianPlateParser;
 export 'src/parsing/ethiopian_region.dart' show EthiopianRegion;
 export 'src/parsing/plate_service_type.dart' show PlateServiceType;
+export 'src/parsing/plate_area_detector.dart'
+    show PlateAreaDetector, PlateAreaTracker;
+export 'src/parsing/plate_arranger.dart' show PlateArranger;
 export 'src/parsing/plate_stability_voter.dart' show PlateStabilityVoter;
 export 'src/recognition/plate_availability.dart'
     show PlateReader, PlateReaderAvailability, PlateReaderAvailabilityStatus;

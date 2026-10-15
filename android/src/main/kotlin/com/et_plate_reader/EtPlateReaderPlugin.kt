@@ -5,6 +5,10 @@ import android.content.pm.PackageManager
 import android.hardware.camera2.CameraManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.Rect
 import android.graphics.Matrix
 import android.net.Uri
 import android.os.Handler
@@ -20,6 +24,11 @@ import io.flutter.plugin.common.MethodChannel
 
 /** Registers the availability channel and the `et_plate_reader/scanner` view. */
 class EtPlateReaderPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
+    companion object {
+        /** Crops are scaled up to about this many pixels tall before OCR. */
+        private const val AREA_TARGET_HEIGHT = 480f
+    }
+
     private lateinit var availabilityChannel: MethodChannel
     private lateinit var context: Context
 
@@ -37,6 +46,7 @@ class EtPlateReaderPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
         when (call.method) {
             "checkAvailability" -> result.success(mapOf("status" to availability()))
             "recognizeImage" -> recognizeImage(call.argument<String>("path"), result)
+            "recognizeArea" -> recognizeArea(call, result)
             else -> result.notImplemented()
         }
     }
@@ -89,6 +99,77 @@ class EtPlateReaderPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                 val payload = HashMap<String, Any>()
                 payload["lines"] = lines
                 CodeDiscReader.read(recognizer, text) { bitmap }?.let { payload["codeHint"] = it }
+                main.post { result.success(payload) }
+            } catch (e: Exception) {
+                main.post { result.error("ocr_failed", e.message, null) }
+            } finally {
+                recognizer.close()
+            }
+        }.start()
+    }
+
+    /**
+     * Step 3: every character inside a normalized area of a still. The crop
+     * is upscaled (plate text small in the frame reads poorly) and padded
+     * with white; boxes come back normalized to the area.
+     */
+    private fun recognizeArea(call: MethodCall, result: MethodChannel.Result) {
+        val path = call.argument<String>("path")
+        val left = call.argument<Double>("left")
+        val top = call.argument<Double>("top")
+        val right = call.argument<Double>("right")
+        val bottom = call.argument<Double>("bottom")
+        if (path == null || left == null || top == null || right == null || bottom == null) {
+            result.error("bad_args", "path and area are required", null)
+            return
+        }
+        val main = Handler(Looper.getMainLooper())
+        Thread {
+            val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+            try {
+                val image = BitmapFactory.decodeFile(path)
+                    ?: throw IllegalArgumentException("Unsupported image")
+                val src = Rect(
+                    (left * image.width).toInt().coerceIn(0, image.width - 1),
+                    (top * image.height).toInt().coerceIn(0, image.height - 1),
+                    (right * image.width).toInt().coerceIn(1, image.width),
+                    (bottom * image.height).toInt().coerceIn(1, image.height),
+                )
+                val scale = (AREA_TARGET_HEIGHT / src.height()).coerceIn(1f, 4f)
+                val w = (src.width() * scale).toInt()
+                val h = (src.height() * scale).toInt()
+                val pad = (h * 0.15f).toInt()
+                val page = Bitmap.createBitmap(w + 2 * pad, h + 2 * pad, Bitmap.Config.ARGB_8888)
+                Canvas(page).apply {
+                    drawColor(Color.WHITE)
+                    drawBitmap(image, src, Rect(pad, pad, pad + w, pad + h), Paint(Paint.FILTER_BITMAP_FLAG))
+                }
+
+                val text = Tasks.await(recognizer.process(InputImage.fromBitmap(page, 0)))
+                fun norm(b: Rect): Map<String, Double> = mapOf(
+                    "left" to (b.left - pad).toDouble() / w,
+                    "top" to (b.top - pad).toDouble() / h,
+                    "right" to (b.right - pad).toDouble() / w,
+                    "bottom" to (b.bottom - pad).toDouble() / h,
+                )
+                val elements = ArrayList<Map<String, Any>>()
+                for (block in text.textBlocks) for (line in block.lines) for (el in line.elements) {
+                    val box = el.boundingBox ?: continue
+                    val symbols = el.symbols.mapNotNull { sym ->
+                        val sb = sym.boundingBox ?: return@mapNotNull null
+                        norm(sb) + mapOf("text" to sym.text)
+                    }
+                    elements.add(
+                        norm(box) + mapOf(
+                            "text" to el.text,
+                            "confidence" to el.confidence.toDouble(),
+                            "symbols" to symbols,
+                        ),
+                    )
+                }
+                val payload = HashMap<String, Any>()
+                payload["elements"] = elements
+                CodeDiscReader.read(recognizer, text) { page }?.let { payload["codeHint"] = it }
                 main.post { result.success(payload) }
             } catch (e: Exception) {
                 main.post { result.error("ocr_failed", e.message, null) }

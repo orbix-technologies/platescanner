@@ -85,33 +85,32 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  /// Host-built HUD: shows how [PlateScannerOverlayBuilder] replaces the default.
+  /// Host-built HUD: shows how [PlateScannerOverlayBuilder] replaces the
+  /// default. One button per step; the view still draws the frame and area.
   Widget _minimalOverlay(BuildContext context, PlateReaderController c) {
-    final live = c.liveCandidate;
+    final (label, action) = switch (c.phase) {
+      ScanPhase.detecting => (
+          c.detectedArea == null ? 'Point at a plate' : 'Capture',
+          c.captureArea,
+        ),
+      ScanPhase.confirmingArea => ('Confirm area', c.confirmArea),
+      ScanPhase.reading => ('Reading…', null),
+      ScanPhase.review when c.canConfirm => (
+          'Use ${c.arrangement?.layoutText}',
+          () async {
+            final navigator = Navigator.of(context);
+            navigator.pop(await c.confirm());
+          },
+        ),
+      ScanPhase.review || ScanPhase.error => ('Retake', c.retake),
+      _ => ('…', null),
+    };
     return SafeArea(
       child: Align(
         alignment: Alignment.bottomCenter,
         child: Padding(
           padding: const EdgeInsets.all(24),
-          child: switch (c.phase) {
-            ScanPhase.locked => FilledButton(
-                onPressed: c.canConfirm
-                    ? () async {
-                        final navigator = Navigator.of(context);
-                        navigator.pop(await c.confirm());
-                      }
-                    : c.rescan,
-                child: Text(
-                  c.canConfirm
-                      ? 'Use ${c.draftCode} ${c.draftRegionCode ?? ''} ${c.draftSerial}'
-                      : 'Incomplete — rescan',
-                ),
-              ),
-            _ => Text(
-                live?.key ?? 'Point at a plate',
-                style: const TextStyle(color: Colors.white, fontSize: 20),
-              ),
-          },
+          child: FilledButton(onPressed: action, child: Text(label)),
         ),
       ),
     );

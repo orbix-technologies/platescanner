@@ -45,6 +45,7 @@ class PlateScannerView: UIView, AVCaptureVideoDataOutputSampleBufferDelegate {
   private var busy = false
   private var viewAspect: CGFloat = 9.0 / 16.0
   private var stopped = false
+  private var pendingCapture: FlutterResult?
 
   init(frame: CGRect, channel: FlutterMethodChannel) {
     self.channel = channel
@@ -103,6 +104,14 @@ class PlateScannerView: UIView, AVCaptureVideoDataOutputSampleBufferDelegate {
     case "pause":
       setAnalyzing(false)
       result(nil)
+    case "captureFrame":
+      lock.lock()
+      let busy = pendingCapture != nil
+      if !busy { pendingCapture = result }
+      lock.unlock()
+      if busy {
+        result(FlutterError(code: "busy", message: "Capture already in progress", details: nil))
+      }
     case "setTorch":
       let on = (call.arguments as? [String: Any])?["on"] as? Bool ?? false
       result(setTorch(on))
@@ -134,25 +143,27 @@ class PlateScannerView: UIView, AVCaptureVideoDataOutputSampleBufferDelegate {
     didOutput sampleBuffer: CMSampleBuffer,
     from connection: AVCaptureConnection
   ) {
+    guard let pixels = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
     lock.lock()
+    let capture = pendingCapture
+    pendingCapture = nil
     let shouldRun = analyzing && !busy && !stopped
     if shouldRun { busy = true }
     let aspect = viewAspect
     lock.unlock()
-    guard shouldRun, let pixels = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
 
     // Back camera in portrait: buffer is landscape, `.right` makes it upright.
     let uprightWidth = CGFloat(CVPixelBufferGetHeight(pixels))
     let uprightHeight = CGFloat(CVPixelBufferGetWidth(pixels))
     let visible = Self.visibleRect(imageAspect: uprightWidth / uprightHeight, viewAspect: aspect)
 
+    if let capture = capture {
+      saveStill(pixels, visible: visible, result: capture)
+    }
+    guard shouldRun else { return }
+
     let request = VNRecognizeTextRequest { [weak self] request, _ in
-      let observations = request.results as? [VNRecognizedTextObservation] ?? []
-      let codeHint = CodeDiscReader.read(observations) {
-        let upright = CIImage(cvPixelBuffer: pixels).oriented(.right)
-        return Self.ciContext.createCGImage(upright, from: upright.extent)
-      }
-      self?.deliver(observations, visible: visible, codeHint: codeHint)
+      self?.deliver(request.results as? [VNRecognizedTextObservation] ?? [], visible: visible)
     }
     request.recognitionLevel = .accurate
     request.usesLanguageCorrection = false
@@ -168,11 +179,7 @@ class PlateScannerView: UIView, AVCaptureVideoDataOutputSampleBufferDelegate {
 
   private static let ciContext = CIContext()
 
-  private func deliver(
-    _ observations: [VNRecognizedTextObservation],
-    visible: CGRect,
-    codeHint: String?
-  ) {
+  private func deliver(_ observations: [VNRecognizedTextObservation], visible: CGRect) {
     var lines: [[String: Any]] = []
     for obs in observations {
       guard let best = obs.topCandidates(1).first else { continue }
@@ -192,9 +199,34 @@ class PlateScannerView: UIView, AVCaptureVideoDataOutputSampleBufferDelegate {
     finishFrame()
     DispatchQueue.main.async { [weak self] in
       guard let self = self, !self.isStopped else { return }
-      var payload: [String: Any] = ["lines": lines]
-      if let codeHint = codeHint { payload["codeHint"] = codeHint }
-      self.channel.invokeMethod("onFrame", arguments: payload)
+      self.channel.invokeMethod("onFrame", arguments: ["lines": lines])
+    }
+  }
+
+  /// Saves this frame, cropped to the visible preview, as a JPEG still.
+  private func saveStill(_ pixels: CVPixelBuffer, visible: CGRect, result: @escaping FlutterResult) {
+    let upright = CIImage(cvPixelBuffer: pixels).oriented(.right)
+    let e = upright.extent
+    // `visible` has a top-left origin; Core Image's is bottom-left.
+    let rect = CGRect(
+      x: e.minX + visible.minX * e.width,
+      y: e.minY + (1 - visible.maxY) * e.height,
+      width: visible.width * e.width,
+      height: visible.height * e.height)
+    let cropped = upright.cropped(to: rect)
+    let url = FileManager.default.temporaryDirectory
+      .appendingPathComponent("et_plate_\(Int(Date().timeIntervalSince1970 * 1000)).jpg")
+    guard let cg = Self.ciContext.createCGImage(cropped, from: cropped.extent),
+      let data = UIImage(cgImage: cg).jpegData(compressionQuality: 0.92),
+      (try? data.write(to: url)) != nil
+    else {
+      DispatchQueue.main.async {
+        result(FlutterError(code: "capture_failed", message: "Could not save the frame", details: nil))
+      }
+      return
+    }
+    DispatchQueue.main.async {
+      result(["path": url.path, "width": cg.width, "height": cg.height])
     }
   }
 

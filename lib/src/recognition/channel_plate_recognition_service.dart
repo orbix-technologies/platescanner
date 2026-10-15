@@ -3,7 +3,9 @@ import 'dart:async';
 import 'package:flutter/services.dart';
 import 'package:logger/logger.dart';
 
+import '../exceptions/plate_reader_exception.dart';
 import '../models/ocr_frame.dart';
+import '../models/plate_area.dart';
 import 'plate_availability.dart';
 import 'plate_recognition_service.dart';
 
@@ -11,7 +13,8 @@ import 'plate_recognition_service.dart';
 ///
 /// Both natives implement the same contract on `et_plate_reader/scanner_<id>`:
 ///
-/// * Dart → native: `start`, `pause`, `setTorch {on}` → bool
+/// * Dart → native: `start`, `pause`, `setTorch {on}` → bool,
+///   `captureFrame` → `{path, width, height}`
 /// * native → Dart: `onReady`, `onFrame {lines: [{text, confidence, left,
 ///   top, right, bottom}]}`, `onError {message}`
 ///
@@ -129,6 +132,32 @@ class ChannelPlateRecognitionService extends PlateRecognitionService {
     _running = false;
     await _invoke('pause');
   }
+
+  @override
+  Future<CapturedFrame> captureFrame() async {
+    final channel = _channel;
+    if (channel == null) {
+      throw PlateReaderException(
+        PlateReaderErrorCode.cameraUnavailable,
+        'Camera is not ready',
+      );
+    }
+    try {
+      final result =
+          await channel.invokeMapMethod<String, Object?>('captureFrame');
+      return CapturedFrame.fromMap(result!);
+    } on PlatformException catch (e) {
+      throw PlateReaderException(
+        PlateReaderErrorCode.cameraUnavailable,
+        e.message ?? 'Could not capture the frame',
+        cause: e,
+      );
+    }
+  }
+
+  @override
+  Future<AreaOcr> recognizeArea(String path, NormalizedRect area) =>
+      PlateReader.recognizeArea(path, area);
 
   @override
   Future<bool> setTorch(bool on) async {

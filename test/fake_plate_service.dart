@@ -60,6 +60,24 @@ class FakePlateService extends PlateRecognitionService {
     pauseCalls++;
   }
 
+  /// What [recognizeArea] returns; set per test.
+  AreaOcr areaOcr = const AreaOcr(elements: []);
+  NormalizedRect? lastArea;
+  int captures = 0;
+
+  @override
+  Future<CapturedFrame> captureFrame() async {
+    captures++;
+    return const CapturedFrame(
+        path: '/tmp/frame.jpg', width: 1080, height: 2340);
+  }
+
+  @override
+  Future<AreaOcr> recognizeArea(String path, NormalizedRect area) async {
+    lastArea = area;
+    return areaOcr;
+  }
+
   @override
   Future<bool> setTorch(bool on) async => torch = on;
 

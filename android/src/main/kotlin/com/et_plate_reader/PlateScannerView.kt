@@ -31,6 +31,8 @@ import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.platform.PlatformView
+import java.io.File
+import java.io.FileOutputStream
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
@@ -61,6 +63,7 @@ class PlateScannerView(
     private var provider: ProcessCameraProvider? = null
     private var camera: Camera? = null
     private var disposed = false
+    @Volatile private var pendingCapture: MethodChannel.Result? = null
 
     override val lifecycle: Lifecycle get() = lifecycleRegistry
 
@@ -129,14 +132,17 @@ class PlateScannerView(
     @androidx.annotation.OptIn(androidx.camera.core.ExperimentalGetImage::class)
     private fun analyze(proxy: ImageProxy) {
         try {
-            val media = proxy.image
-            if (!analyzing.get() || disposed || media == null) return
             val rotation = proxy.imageInfo.rotationDegrees
             val crop = uprightRect(proxy.cropRect, proxy.width, proxy.height, rotation)
+            pendingCapture?.let { result ->
+                pendingCapture = null
+                capture(proxy, rotation, crop, result)
+            }
+            val media = proxy.image
+            if (!analyzing.get() || disposed || media == null) return
             val text = Tasks.await(recognizer.process(InputImage.fromMediaImage(media, rotation)))
             if (!analyzing.get() || disposed) return
 
-            val codeHint = CodeDiscReader.read(recognizer, text) { uprightBitmap(proxy, rotation) }
             val lines = ArrayList<Map<String, Any>>()
             for (block in text.textBlocks) {
                 for (line in block.lines) {
@@ -153,16 +159,28 @@ class PlateScannerView(
                     )
                 }
             }
-            val payload = HashMap<String, Any>()
-            payload["lines"] = lines
-            if (codeHint != null) payload["codeHint"] = codeHint
             main.post {
-                if (!disposed) channel.invokeMethod("onFrame", payload)
+                if (!disposed) channel.invokeMethod("onFrame", mapOf("lines" to lines))
             }
         } catch (e: Exception) {
             Log.w(TAG, "OCR failed", e)
         } finally {
             proxy.close()
+        }
+    }
+
+    /** Saves this frame, cropped to the visible preview, as a JPEG still. */
+    private fun capture(proxy: ImageProxy, rotation: Int, crop: Rect, result: MethodChannel.Result) {
+        try {
+            val upright = uprightBitmap(proxy, rotation)
+            val r = Rect(crop).apply { intersect(0, 0, upright.width, upright.height) }
+            val visible = Bitmap.createBitmap(upright, r.left, r.top, r.width(), r.height())
+            val file = File(context.cacheDir, "et_plate_${System.currentTimeMillis()}.jpg")
+            FileOutputStream(file).use { visible.compress(Bitmap.CompressFormat.JPEG, 92, it) }
+            val payload = mapOf("path" to file.absolutePath, "width" to visible.width, "height" to visible.height)
+            main.post { result.success(payload) }
+        } catch (e: Exception) {
+            main.post { result.error("capture_failed", e.message, null) }
         }
     }
 
@@ -182,6 +200,13 @@ class PlateScannerView(
             "pause" -> {
                 analyzing.set(false)
                 result.success(null)
+            }
+            "captureFrame" -> {
+                when {
+                    camera == null -> result.error("not_ready", "Camera is not ready", null)
+                    pendingCapture != null -> result.error("busy", "Capture already in progress", null)
+                    else -> pendingCapture = result
+                }
             }
             "setTorch" -> {
                 val on = call.argument<Boolean>("on") ?: false
