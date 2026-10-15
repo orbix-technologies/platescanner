@@ -38,7 +38,8 @@ class PlateSectionReader {
   static const _toDigit = {
     'O': '0', 'Q': '0', 'D': '0', 'U': '0', 'o': '0', //
     'I': '1', 'L': '1', 'l': '1', '|': '1', 'i': '1', 'J': '1',
-    'Z': '2', 'z': '2', 'S': '5', 's': '5', 'B': '8', 'G': '6',
+    // The plate font's notched 0 is read as G or D (session logs).
+    'Z': '2', 'z': '2', 'S': '5', 's': '5', 'B': '8', 'G': '0',
   };
   static const _toLetter = {
     '0': 'O',
@@ -55,7 +56,14 @@ class PlateSectionReader {
   };
 
   /// The crops to read for [seg], whose boxes are normalized to [area].
-  List<SectionCrop> cropsFor(PlateSegmentation seg, NormalizedRect area) {
+  ///
+  /// Single digits read poorly alone, so they are only requested with
+  /// [digits] — a second round when the whole-number reads disagree.
+  List<SectionCrop> cropsFor(
+    PlateSegmentation seg,
+    NormalizedRect area, {
+    bool digits = false,
+  }) {
     NormalizedRect frame(NormalizedRect r) => NormalizedRect(
           area.left + r.left * area.width,
           area.top + r.top * area.height,
@@ -104,8 +112,11 @@ class PlateSectionReader {
         ),
       ));
     }
-    for (var i = 0; i < seg.numberChars.length; i++) {
-      out.add(crop('digit', i, pad(seg.numberChars[i], 0.15, 0.08)));
+    if (digits) {
+      return [
+        for (var i = 0; i < seg.numberChars.length; i++)
+          crop('digit', i, pad(seg.numberChars[i], 0.15, 0.08)),
+      ];
     }
     for (var i = 0; i < seg.latinStack.length; i++) {
       out.add(crop('latin', i, pad(seg.latinStack[i], 0.2, 0.15)));
@@ -134,45 +145,70 @@ class PlateSectionReader {
       return const [];
     }
 
-    // Section 3: per-digit majority, checked against the whole-number read.
+    // Section 3: a vote over the whole-number reads (they rarely disagree);
+    // single-digit reads only fill positions the vote leaves open.
     final n = seg.numberChars.length;
     final perDigit = [
       for (var i = 0; i < n; i++)
         _majority(
-            readsOf('digit', i).map((t) => _single(t, _toDigit, digit: true))),
+          readsOf('digit', i).map((t) => _single(t, _toDigit, digit: true)),
+        ),
     ];
-    String? line;
-    for (final t in readsOf('number', 0)) {
-      final d = _digits(t);
-      if (d.length == n) {
-        line = d;
-        break;
-      }
-    }
-    final digits = <String>[];
-    for (var i = 0; i < n; i++) {
-      final p = perDigit[i];
-      final fromLine = line?[i];
-      // The line read knows context; a confident per-digit read overrides.
-      digits.add(p != null && p.$2 >= 2 ? p.$1 : (fromLine ?? p?.$1 ?? '?'));
-    }
-    final number = digits.join();
+    final number = _voteNumber(
+          readsOf('number', 0).map(_digits).toList(),
+          perDigit,
+          n,
+        ) ??
+        '';
+    // Boxes per digit: the segmentation's when the counts match, else the
+    // number box divided evenly (two touching digits found as one shape).
+    final nb = seg.number!;
+    final boxes = number.length == n
+        ? seg.numberChars
+        : [
+            for (var i = 0; i < number.length; i++)
+              NormalizedRect(
+                nb.left + nb.width * i / number.length,
+                nb.top,
+                nb.left + nb.width * (i + 1) / number.length,
+                nb.bottom,
+              ),
+          ];
     final numberSection = PlateSection(
       kind: PlateSectionKind.number,
-      value: number.contains('?') ? '' : number,
+      value: number,
       chars: [
-        for (var i = 0; i < n; i++) PlateChar(digits[i], seg.numberChars[i]),
+        for (var i = 0; i < number.length; i++) PlateChar(number[i], boxes[i]),
       ],
       box: seg.number,
-      detected: !number.contains('?') && n > 0,
+      detected: number.isNotEmpty,
     );
 
     // Section 4: each stacked letter read alone, top to bottom.
-    final letters = [
+    var letters = [
       for (var i = 0; i < seg.latinStack.length; i++)
-        _majority(readsOf('latin', i)
-            .map((t) => _single(t, _toLetter, digit: false)))?.$1,
+        _letter(readsOf('latin', i)),
     ];
+    // Strict reading incomplete or no region: try lenient readings (a single
+    // digit-for-letter vote, the font's U/N look-alikes) and keep one only
+    // if it names a region or a special plate.
+    bool known(String v) =>
+        parser.readRegion(v) != null || _specials.contains(v);
+    final strict = letters.every((l) => l != null) ? letters.join() : null;
+    if (letters.isNotEmpty && (strict == null || !known(strict))) {
+      final lenient = [
+        for (var i = 0; i < seg.latinStack.length; i++)
+          letters[i] ?? _letter(readsOf('latin', i), minMapped: 1),
+      ];
+      if (lenient.every((l) => l != null)) {
+        for (final v in _lookAlikes(lenient.join())) {
+          if (known(v)) {
+            letters = v.split('');
+            break;
+          }
+        }
+      }
+    }
     final latinValue =
         letters.any((l) => l == null) ? '' : letters.whereType<String>().join();
     final latinBox = seg.latinStack.isEmpty
@@ -248,7 +284,7 @@ class PlateSectionReader {
       serial: serial,
       layout: PlateLayout.singleRow,
       rawText: arrangement.layoutText,
-      confidence: _confidence(perDigit, letters, line != null),
+      confidence: _confidence(number, letters),
       issues: parser.validate(
         code: code,
         regionCode: region?.code,
@@ -256,6 +292,78 @@ class PlateSectionReader {
       ),
     );
     return (arrangement: arrangement, candidate: candidate);
+  }
+
+  /// The number agreed by at least two of [reads] (5–8 digits each); else a
+  /// per-position vote among reads of the most common length, with an open
+  /// position filled only by a [perDigit] read; null when undecided.
+  static String? _voteNumber(
+    List<String> reads,
+    List<(String, int)?> perDigit,
+    int segmented,
+  ) {
+    final usable = reads.where((r) => r.length >= 4 && r.length <= 8).toList();
+    final whole = _majority(usable);
+    if (whole != null && whole.$2 >= 2) return whole.$1;
+    if (usable.isEmpty) {
+      // Nothing from the line: all single digits must be read.
+      if (perDigit.isEmpty || perDigit.any((d) => d == null)) return null;
+      return perDigit.map((d) => d!.$1).join();
+    }
+    final lengths = _majority(usable.map((r) => '${r.length}'));
+    final length = lengths == null
+        ? (usable.any((r) => r.length == segmented)
+            ? segmented
+            : usable.first.length)
+        : int.parse(lengths.$1);
+    final same = usable.where((r) => r.length == length).toList();
+    final out = StringBuffer();
+    for (var i = 0; i < length; i++) {
+      final v = _majority(same.map((r) => r[i]));
+      final d = length == perDigit.length ? perDigit[i] : null;
+      if (v != null && same.length == 1 && d != null && d.$2 == 3) {
+        // One line read against three agreeing single-digit reads.
+        out.write(d.$1);
+      } else if (v != null && (v.$2 >= 2 || same.length == 1)) {
+        out.write(v.$1);
+      } else if (length == perDigit.length && perDigit[i] != null) {
+        out.write(perDigit[i]!.$1);
+      } else {
+        return null;
+      }
+    }
+    return out.toString();
+  }
+
+  /// One letter from a crop's reads: a letter read as such counts once; a
+  /// digit taken for a letter (`1` → `I`) needs two agreeing reads.
+  static String? _letter(List<String?> reads, {int minMapped = 2}) {
+    final native = <String?>[];
+    final mapped = <String?>[];
+    for (final t in reads) {
+      final plain = _single(t, const {}, digit: false);
+      if (plain != null) {
+        native.add(plain);
+      } else {
+        mapped.add(_single(t, _toLetter, digit: false));
+      }
+    }
+    final n = _majority(native);
+    if (n != null) return n.$1;
+    final m = _majority(mapped);
+    return m != null && m.$2 >= minMapped ? m.$1 : null;
+  }
+
+  /// [value] and its variants with the plate font's look-alike letters.
+  static Iterable<String> _lookAlikes(String value) sync* {
+    const alike = {'N': 'U', 'U': 'N', 'F': 'E', 'E': 'F'};
+    yield value;
+    for (var i = 0; i < value.length; i++) {
+      final alt = alike[value[i]];
+      if (alt != null) {
+        yield value.substring(0, i) + alt + value.substring(i + 1);
+      }
+    }
   }
 
   /// The one character in [text] after dropping noise, mapped by [map] when
@@ -307,17 +415,11 @@ class PlateSectionReader {
     return winners.length == 1 ? (winners.first.key, top) : null;
   }
 
-  static double _confidence(
-    List<(String, int)?> digits,
-    List<String?> letters,
-    bool lineAgreed,
-  ) {
+  static double _confidence(String number, List<String?> letters) {
     final parts = [
-      for (final d in digits) d == null ? 0.0 : d.$2 / 3,
+      if (number.isNotEmpty) 1.0 else 0.0,
       for (final l in letters) l == null ? 0.0 : 1.0,
-      if (lineAgreed) 1.0,
     ];
-    if (parts.isEmpty) return 0;
     return parts.reduce((a, b) => a + b) / parts.length;
   }
 }

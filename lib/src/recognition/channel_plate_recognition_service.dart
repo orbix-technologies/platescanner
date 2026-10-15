@@ -156,8 +156,12 @@ class ChannelPlateRecognitionService extends PlateRecognitionService {
   }
 
   @override
-  Future<AreaOcr> recognizeArea(String path, NormalizedRect area) =>
-      PlateReader.recognizeArea(path, area);
+  Future<AreaOcr> recognizeArea(
+    String path,
+    NormalizedRect area, {
+    bool sectionPasses = true,
+  }) =>
+      PlateReader.recognizeArea(path, area, sectionPasses: sectionPasses);
 
   @override
   Future<List<List<String?>>> readCrops(

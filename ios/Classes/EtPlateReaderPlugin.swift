@@ -74,6 +74,7 @@ public class EtPlateReaderPlugin: NSObject, FlutterPlugin {
       recognizeArea(
         URL(fileURLWithPath: path),
         area: CGRect(x: l, y: t, width: r - l, height: b - t),
+        sectionPasses: args["sectionPasses"] as? Bool ?? true,
         result: result)
     default:
       result(FlutterMethodNotImplemented)
@@ -94,7 +95,9 @@ public class EtPlateReaderPlugin: NSObject, FlutterPlugin {
   /// Step 3: every character inside a normalized `area` (top-left origin) of
   /// a still. The crop is upscaled and padded with white; boxes come back
   /// normalized to the area (mirrors recognizeArea in the Android plugin).
-  private func recognizeArea(_ url: URL, area: CGRect, result: @escaping FlutterResult) {
+  private func recognizeArea(
+    _ url: URL, area: CGRect, sectionPasses: Bool, result: @escaping FlutterResult
+  ) {
     DispatchQueue.global(qos: .userInitiated).async {
       func fail(_ message: String) {
         DispatchQueue.main.async {
@@ -174,7 +177,8 @@ public class EtPlateReaderPlugin: NSObject, FlutterPlugin {
       // What each section pass tried and read, for the session log.
       let log = PassLog()
       log.add("area: src=\(src) image=\(image.width)x\(image.height) scale=\(scale) page=\(pw)x\(ph) pad=\(pad)")
-      if let code = CodeDiscReader.read(observations, log: log, image: { page }) {
+      // Circle / stacked-letter passes: only without segmentation.
+      if sectionPasses, let code = CodeDiscReader.read(observations, log: log, image: { page }) {
         payload["codeHint"] = code
         payload["codeVotes"] = CodeDiscReader.lastVotes
       }
@@ -187,7 +191,8 @@ public class EtPlateReaderPlugin: NSObject, FlutterPlugin {
           "bottom": Double((r.maxY - CGFloat(pad)) / CGFloat(h)),
         ]
       }
-      payload["regionColumns"] = RegionStackReader.read(observations, image: page, log: log).map {
+      payload["regionColumns"] = (sectionPasses
+        ? RegionStackReader.read(observations, image: page, log: log) : []).map {
         col -> [String: Any] in
         var column = normPx(col.box)
         column["letters"] = col.letters

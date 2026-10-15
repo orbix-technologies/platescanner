@@ -33,7 +33,14 @@ abstract class PlateRecognitionService {
   Future<CapturedFrame> captureFrame();
 
   /// Read every character inside [area] (normalized) of a captured still.
-  Future<AreaOcr> recognizeArea(String path, NormalizedRect area);
+  ///
+  /// [sectionPasses] runs the slower circle / stacked-letter passes; they
+  /// are skipped when the sections come from image segmentation.
+  Future<AreaOcr> recognizeArea(
+    String path,
+    NormalizedRect area, {
+    bool sectionPasses = true,
+  });
 
   /// Reads each of [crops] (normalized to the image at [path]) alone; one
   /// `[colour, black-and-white, border-erased]` text triple per crop.

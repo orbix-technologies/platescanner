@@ -73,7 +73,11 @@ class FakePlateService extends PlateRecognitionService {
   }
 
   @override
-  Future<AreaOcr> recognizeArea(String path, NormalizedRect area) async {
+  Future<AreaOcr> recognizeArea(
+    String path,
+    NormalizedRect area, {
+    bool sectionPasses = true,
+  }) async {
     lastArea = area;
     return areaOcr;
   }
@@ -90,7 +94,9 @@ class FakePlateService extends PlateRecognitionService {
   }) async {
     cropRequests.add(crops);
     return cropReads?.call(crops) ??
-        [for (final _ in crops) const <String?>[null, null, null]];
+        [
+          for (final _ in crops) const <String?>[null, null, null]
+        ];
   }
 
   @override

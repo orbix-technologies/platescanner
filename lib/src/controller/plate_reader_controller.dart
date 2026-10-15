@@ -366,14 +366,10 @@ class PlateReaderController extends ChangeNotifier {
     _log?.event('confirmArea', {'area': SessionLog.rect(area)});
     _notify();
     try {
-      final ocr = await _service.recognizeArea(frame.path, area);
-      _log?.event('areaOcr', SessionLog.areaOcr(ocr));
-      if (_phase != ScanPhase.reading) return;
-      _areaOcr = ocr;
-
       // Sections from the image itself: each one cut out and read alone,
       // so a vertical stack can't be read into the number. The whole-area
-      // OCR is the fallback when no number is found in the image.
+      // OCR still measures colours, and is the fallback when no number is
+      // found in the image.
       PlateSegmentation? seg;
       try {
         seg = await segmentCapture(frame.path, area);
@@ -383,14 +379,33 @@ class PlateReaderController extends ChangeNotifier {
       if (seg != null) {
         _log?.event('segmentation', SessionLog.segmentation(seg));
       }
+      final segmented = seg != null && seg.found;
+      final ocr = await _service.recognizeArea(
+        frame.path,
+        area,
+        sectionPasses: !segmented,
+      );
+      _log?.event('areaOcr', SessionLog.areaOcr(ocr));
+      if (_phase != ScanPhase.reading) return;
+      _areaOcr = ocr;
+
       ({PlateArrangement arrangement, PlateCandidate candidate}) result;
-      if (seg != null && seg.found) {
-        final crops = _sectionReader.cropsFor(seg, area);
-        final reads = await _service
+      if (segmented) {
+        var crops = _sectionReader.cropsFor(seg, area);
+        var reads = await _service
             .readCrops(frame.path, [for (final c in crops) c.box]);
+        result = _sectionReader.read(seg, crops, reads, ocr);
+        if (result.arrangement.number.value.isEmpty) {
+          // The whole-number reads disagreed: read each digit alone too.
+          final digits = _sectionReader.cropsFor(seg, area, digits: true);
+          final more = await _service
+              .readCrops(frame.path, [for (final c in digits) c.box]);
+          crops = [...crops, ...digits];
+          reads = [...reads, ...more];
+          result = _sectionReader.read(seg, crops, reads, ocr);
+        }
         _log?.event('crops', {'crops': SessionLog.crops(crops, reads)});
         if (_phase != ScanPhase.reading) return;
-        result = _sectionReader.read(seg, crops, reads, ocr);
       } else {
         result = _arranger.arrange(ocr);
       }

@@ -119,11 +119,16 @@ class PlateReader {
 
   /// Step 3: every character inside [area] (normalized image coordinates)
   /// of the image at [path], with per-character boxes relative to [area].
-  static Future<AreaOcr> recognizeArea(String path, NormalizedRect area) async {
+  static Future<AreaOcr> recognizeArea(
+    String path,
+    NormalizedRect area, {
+    bool sectionPasses = true,
+  }) async {
     try {
       final result = await availabilityChannel
           .invokeMapMethod<String, Object?>('recognizeArea', {
         'path': path,
+        'sectionPasses': sectionPasses,
         'left': area.left,
         'top': area.top,
         'right': area.right,

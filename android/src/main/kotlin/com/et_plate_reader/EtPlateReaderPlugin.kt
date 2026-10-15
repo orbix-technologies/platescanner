@@ -174,11 +174,15 @@ class EtPlateReaderPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                 // What each section pass tried and read, for the session log.
                 val log = ArrayList<String>()
                 log.add("area: src=${src.toShortString()} image=${image.width}x${image.height} scale=$scale page=${page.width}x${page.height} pad=$pad")
-                CodeDiscReader.read(recognizer, text, log) { page }?.let {
-                    payload["codeHint"] = it
-                    payload["codeVotes"] = CodeDiscReader.lastVotes
+                // Circle / stacked-letter passes: only without segmentation.
+                val passes = call.argument<Boolean>("sectionPasses") ?: true
+                if (passes) {
+                    CodeDiscReader.read(recognizer, text, log) { page }?.let {
+                        payload["codeHint"] = it
+                        payload["codeVotes"] = CodeDiscReader.lastVotes
+                    }
                 }
-                payload["regionColumns"] = RegionStackReader.read(recognizer, text, page, log).map { col ->
+                payload["regionColumns"] = (if (passes) RegionStackReader.read(recognizer, text, page, log) else emptyList()).map { col ->
                     norm(col.box) + mapOf(
                         "letters" to col.letters,
                         "source" to col.source,

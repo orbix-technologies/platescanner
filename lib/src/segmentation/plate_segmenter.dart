@@ -215,14 +215,25 @@ class PlateSegmenter {
     final numberBox = number.map((c) => c.box).reduce((a, b) => a.union(b));
     final pitch = numberBox.width / number.length;
 
-    // Section 4: the first stack right of the number, within reach.
+    // Section 4: the first stack right of the number, within reach — or,
+    // with no stack (AU plates), two letter-sized shapes side by side.
     Column? latin;
+    final beside = <Column>[];
     for (final c in columns.skip(last + 1)) {
       if (c.box.left - numberBox.right > pitch * 2) break;
       if (c.kind == ColumnKind.stack) {
         latin = c;
         break;
       }
+      if (c.box.height >= hd * 0.3 && c.box.height <= hd * 0.85) beside.add(c);
+    }
+    if (latin == null && beside.length >= 2) {
+      final pair = beside.take(2).toList();
+      latin = Column(
+        [for (final c in pair) c.box],
+        pair[0].box.union(pair[1].box),
+        ColumnKind.short,
+      );
     }
 
     // Left of the number, right to left: the Ge'ez stack, then the circle.
