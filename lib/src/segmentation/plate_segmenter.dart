@@ -218,8 +218,9 @@ class PlateSegmenter {
 
     final blobs = _splitTouching(kept, ink, w, hd);
     final columns = _mergeHalves(_columns(blobs, hd), hd);
-    final number = _numberRun(columns, hd);
+    var number = _numberRun(columns, hd);
     if (number == null) return _empty(blobs, columns);
+    number = _splitJoinedStack(number, columns, ink, w, hd);
 
     NormalizedRect n(Blob b) =>
         NormalizedRect(b.left / w, b.top / h, b.right / w, b.bottom / h);
@@ -653,6 +654,51 @@ class PlateSegmenter {
     return ColumnKind.short;
   }
 
+  /// Two stacked letters joined into one shape (blur, a border or screw
+  /// between them) look like one more digit at the number's end — but
+  /// taller: digits share one height. Such a last column is split at its
+  /// narrowest row in the middle third and becomes the region stack.
+  List<Column> _splitJoinedStack(
+    List<Column> number,
+    List<Column> columns,
+    Uint8List ink,
+    int w,
+    double hd,
+  ) {
+    if (number.length < 4) return number;
+    final heights = number
+        .take(number.length - 1)
+        .map((c) => c.box.height)
+        .toList()
+      ..sort();
+    final typical = heights[heights.length ~/ 2];
+    final last = number.last;
+    final i = columns.indexOf(last);
+    final stackFollows = i + 1 < columns.length &&
+        columns[i + 1].kind == ColumnKind.stack &&
+        columns[i + 1].box.left - last.box.right <= hd * 0.6;
+    if (stackFollows || last.box.height <= typical * 1.12) return number;
+
+    final b = last.box;
+    final rows = List<int>.filled(b.height, 0);
+    for (var y = 0; y < b.height; y++) {
+      for (var x = b.left; x < b.right; x++) {
+        rows[y] += ink[(b.top + y) * w + x];
+      }
+    }
+    var neck = -1;
+    for (var y = (b.height / 3).round(); y <= (b.height * 2 / 3).round(); y++) {
+      if (y <= 0 || y >= b.height) continue;
+      if (neck < 0 || rows[y] < rows[neck]) neck = y;
+    }
+    if (neck <= 0) return number;
+    final top = Blob(b.left, b.top, b.right, b.top + neck, b.area ~/ 2);
+    final bottom =
+        Blob(b.left, b.top + neck + 1, b.right, b.bottom, b.area ~/ 2);
+    columns[i] = Column([top, bottom], b, ColumnKind.stack, strictStack: true);
+    return number.sublist(0, number.length - 1);
+  }
+
   /// A tall column and a neighbour with almost no gap between them that
   /// together are no wider than one digit are one digit: a stencil cut
   /// splitting a "0", or a "1" whose flag and foot are separate pieces.
@@ -720,13 +766,24 @@ class PlateSegmenter {
     // number's band (a stencil "1" whose stem barely shows leaves only its
     // flag and foot): they bridge the gap between the digits around them.
     var reach = -1;
-    for (final c in columns) {
+    for (var ci = 0; ci < columns.length; ci++) {
+      final c = columns[ci];
       // Inside the number, a digit broken in two (stencil gap, watermark)
-      // looks like a stack; only a strict stack ends the number.
+      // looks like a stack; only a strict stack ends the number. At the
+      // number's end it is the region stack (letters cut by a screw head).
+      // Next digit, looking past small pieces (a stencil "1" foot).
+      var nj = ci + 1;
+      while (nj < columns.length && columns[nj].kind == ColumnKind.short) {
+        nj++;
+      }
+      final digitFollows = nj < columns.length &&
+          columns[nj].kind == ColumnKind.tall &&
+          columns[nj].box.left - c.box.right <= hd * 0.8;
       final brokenDigit = c.kind == ColumnKind.stack &&
           !c.strictStack &&
           c.box.height >= hd * 0.7 &&
-          run.isNotEmpty;
+          run.isNotEmpty &&
+          digitFollows;
       if (c.kind != ColumnKind.tall && !brokenDigit) {
         // A stack or a circle is another section and ends the number; small
         // marks between digits (watermark letters, specks) are skipped —

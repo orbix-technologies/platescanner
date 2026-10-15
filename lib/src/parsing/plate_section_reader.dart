@@ -389,9 +389,22 @@ class PlateSectionReader {
     return ok ? c : null;
   }
 
-  /// Digits in [text], letters read for digits mapped, noise dropped.
+  /// Digits in [text], letters read for digits mapped, noise dropped. A
+  /// leading Latin letter before five digits is a series letter and kept
+  /// (`C06703`, `B88418`); before six it is the plate font's notched 0
+  /// read as a letter (`G123456`).
   static String _digits(String? text) {
     if (text == null) return '';
+    final kept = text
+        .split('')
+        .where((c) => RegExp(r'[0-9A-Za-z|]').hasMatch(c))
+        .toList();
+    if (kept.length == 6 &&
+        RegExp(r'^[A-Z]$').hasMatch(kept.first) &&
+        kept.skip(1).every(
+            (c) => RegExp(r'[0-9]').hasMatch(c) || _toDigit.containsKey(c))) {
+      return kept.first + _digits(kept.skip(1).join());
+    }
     final out = StringBuffer();
     for (final c in text.split('')) {
       if (RegExp(r'[0-9]').hasMatch(c)) {

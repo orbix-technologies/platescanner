@@ -98,4 +98,19 @@ void main() {
     );
     expect(r.arrangement.latinRegion.value, isEmpty);
   });
+
+  test('series letter before five digits is kept (real logs)', () {
+    final r = reader.read(
+      seg,
+      crops,
+      reads({
+        'number0': ['CO6703', 'CO6703', 'CI6713'],
+        'latin0': ['A', 'A', ''],
+        'latin1': ['A', 'A', ''],
+      }),
+      const AreaOcr(elements: []),
+    );
+    expect(r.arrangement.number.value, 'C06703');
+    expect(r.candidate.serial, 'C06703'); // series letter + five digits
+  });
 }

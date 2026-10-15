@@ -41,6 +41,23 @@ void main() {
   expectStandard('tilted_aa'); // plate photographed at an angle
   expectStandard('or_border_sliver'); // border line beside the O/R stack
 
+  // Real cars: series letter + five digits, or five digits; region A/A.
+  void expectReal(String name, int chars) {
+    test('$name: $chars number characters · Ge\'ez stack · A/A stack', () {
+      final s = seg(name);
+      expect(s.numberChars, hasLength(chars), reason: '${s.columns}');
+      expect(s.latinStack, hasLength(2), reason: '${s.columns}');
+      expect(s.geezStack, isNotEmpty, reason: '${s.columns}');
+      expect(s.latinStack.first.left, greaterThan(s.number!.right));
+    });
+  }
+
+  expectReal('real_70695_joined_aa', 5); // A/A joined into one tall shape
+  expectReal('real_70695_edge', 5);
+  expectReal('real_a41601', 6); // top A cut by a screw head
+  expectReal('real_c06703', 6);
+  expectReal('real_b88418', 6);
+
   test('police: Ge\'ez stack · 6 digits · Latin stack, no circle', () {
     final s = seg('police');
     expect(s.numberChars, hasLength(6));
