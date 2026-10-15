@@ -43,22 +43,32 @@ object CodeDiscReader {
         val digit = anchor.first
         val image = bitmap()
         val h = anchor.height.toFloat()
+        // Digit pitch: the plate's layout unit. The circle's centre sits
+        // ~2.8p left of the number (measured on real plates).
+        val p = (anchor.last.right - digit.left).toFloat() / (anchor.end - anchor.start)
         val half = h * 0.2f
         val cy = (anchor.top + anchor.bottom) / 2f
-        log?.add("code: anchor digit=${digit} numberHeight=$h image=${image.width}x${image.height}")
-        for (blackAndWhite in listOf(false, true)) {
-            var cx = maxOf(half, digit.left - 3.5f * h)
-            val end = digit.left - 0.4f * h
-            while (cx <= end) {
-                val crop = RectF(cx - half, cy - half, cx + half, cy + half)
+        log?.add("code: anchor digit=${digit} numberHeight=$h pitch=$p image=${image.width}x${image.height}")
+
+        // Read every crop across the code zone, in colour and in black and
+        // white, and vote: one stray glyph (Ge'ez, ring edge) misread as a
+        // digit must not decide the code.
+        val votes = HashMap<String, Int>()
+        var cx = maxOf(half, digit.left - 3.6f * p)
+        val end = digit.left - 2.0f * p
+        while (cx <= end) {
+            val crop = RectF(cx - half, cy - half, cx + half, cy + half)
+            for (blackAndWhite in listOf(false, true)) {
                 val read = CropOcr.read(recognizer, image, crop, DISC_SIZE, blackAndWhite)
-                val digitRead = digitOf(read)
-                log?.add("code: crop=${crop.toShortString()} bw=$blackAndWhite read='${read?.replace("\n", " ")}' -> $digitRead")
-                if (digitRead != null) return digitRead
-                cx += h * 0.15f
+                val d = digitOf(read)
+                log?.add("code: crop=${crop.toShortString()} bw=$blackAndWhite read='${read?.replace("\n", " ")}' -> $d")
+                if (d != null) votes[d] = (votes[d] ?: 0) + 1
             }
+            cx += h * 0.15f
         }
-        return null
+        val best = votes.maxByOrNull { it.value }
+        log?.add("code: votes=$votes -> ${best?.key}")
+        return best?.key
     }
 
     /** The single code digit in [text], or null. */

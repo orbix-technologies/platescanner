@@ -1,0 +1,511 @@
+{
+ "session": "1792063726737",
+ "expectedNumber": "0123456",
+ "events": [
+  {
+   "t_ms": 9463,
+   "event": "areaOcr",
+   "elements": [
+    {
+     "text": "//wwaMetbm",
+     "confidence": 0.3628906309604645,
+     "box": {
+      "left": 0.0887,
+      "top": 0.0063,
+      "right": 0.5506,
+      "bottom": 0.1983
+     },
+     "symbols": [
+      {
+       "text": "/",
+       "box": {
+        "left": 0.0887,
+        "top": 0.0459,
+        "right": 0.1089,
+        "bottom": 0.1983
+       }
+      },
+      {
+       "text": "/",
+       "box": {
+        "left": 0.1129,
+        "top": 0.0418,
+        "right": 0.1305,
+        "bottom": 0.1942
+       }
+      },
+      {
+       "text": "w",
+       "box": {
+        "left": 0.1357,
+        "top": 0.0418,
+        "right": 0.1539,
+        "bottom": 0.1942
+       }
+      },
+      {
+       "text": "w",
+       "box": {
+        "left": 0.1546,
+        "top": 0.0376,
+        "right": 0.182,
+        "bottom": 0.1921
+       }
+      },
+      {
+       "text": "a",
+       "box": {
+        "left": 0.199,
+        "top": 0.0334,
+        "right": 0.2309,
+        "bottom": 0.1879
+       }
+      },
+      {
+       "text": "M",
+       "box": {
+        "left": 0.2453,
+        "top": 0.0313,
+        "right": 0.2635,
+        "bottom": 0.1837
+       }
+      },
+      {
+       "text": "e",
+       "box": {
+        "left": 0.2609,
+        "top": 0.0292,
+        "right": 0.2792,
+        "bottom": 0.1816
+       }
+      },
+      {
+       "text": "t",
+       "box": {
+        "left": 0.2531,
+        "top": 0.0251,
+        "right": 0.349,
+        "bottom": 0.1837
+       }
+      },
+      {
+       "text": "b",
+       "box": {
+        "left": 0.4729,
+        "top": 0.0063,
+        "right": 0.5506,
+        "bottom": 0.1649
+       }
+      },
+      {
+       "text": "m",
+       "box": {
+        "left": 0.5316,
+        "top": 0.0063,
+        "right": 0.5395,
+        "bottom": 0.1587
+       }
+      }
+     ]
+    },
+    {
+     "text": "en8aS",
+     "confidence": 0.4312500059604645,
+     "box": {
+      "left": 0.6575,
+      "top": -0.0292,
+      "right": 0.955,
+      "bottom": 0.1482
+     },
+     "symbols": [
+      {
+       "text": "e",
+       "box": {
+        "left": 0.6575,
+        "top": -0.0042,
+        "right": 0.6778,
+        "bottom": 0.1482
+       }
+      },
+      {
+       "text": "n",
+       "box": {
+        "left": 0.681,
+        "top": -0.0063,
+        "right": 0.7019,
+        "bottom": 0.1461
+       }
+      },
+      {
+       "text": "8",
+       "box": {
+        "left": 0.6921,
+        "top": -0.0104,
+        "right": 0.7534,
+        "bottom": 0.1461
+       }
+      },
+      {
+       "text": "a",
+       "box": {
+        "left": 0.8102,
+        "top": -0.023,
+        "right": 0.8852,
+        "bottom": 0.1357
+       }
+      },
+      {
+       "text": "S",
+       "box": {
+        "left": 0.9119,
+        "top": -0.0271,
+        "right": 0.955,
+        "bottom": 0.1273
+       }
+      }
+     ]
+    },
+    {
+     "text": "o0123456",
+     "confidence": 0.70458984375,
+     "box": {
+      "left": 0.0705,
+      "top": 0.3612,
+      "right": 0.9341,
+      "bottom": 0.8601
+     },
+     "symbols": [
+      {
+       "text": "o",
+       "box": {
+        "left": 0.0705,
+        "top": 0.3925,
+        "right": 0.2674,
+        "bottom": 0.8601
+       }
+      },
+      {
+       "text": "0",
+       "box": {
+        "left": 0.3549,
+        "top": 0.382,
+        "right": 0.4599,
+        "bottom": 0.8476
+       }
+      },
+      {
+       "text": "1",
+       "box": {
+        "left": 0.4755,
+        "top": 0.3779,
+        "right": 0.5316,
+        "bottom": 0.8413
+       }
+      },
+      {
+       "text": "2",
+       "box": {
+        "left": 0.5421,
+        "top": 0.3758,
+        "right": 0.608,
+        "bottom": 0.8392
+       }
+      },
+      {
+       "text": "3",
+       "box": {
+        "left": 0.6393,
+        "top": 0.3716,
+        "right": 0.7032,
+        "bottom": 0.8351
+       }
+      },
+      {
+       "text": "4",
+       "box": {
+        "left": 0.7104,
+        "top": 0.3695,
+        "right": 0.775,
+        "bottom": 0.833
+       }
+      },
+      {
+       "text": "5",
+       "box": {
+        "left": 0.8063,
+        "top": 0.3653,
+        "right": 0.8708,
+        "bottom": 0.8288
+       }
+      },
+      {
+       "text": "6",
+       "box": {
+        "left": 0.8871,
+        "top": 0.3633,
+        "right": 0.9341,
+        "bottom": 0.8246
+       }
+      }
+     ]
+    },
+    {
+     "text": "/www.ietaApbmLicentepatds",
+     "confidence": 0.39671874046325684,
+     "box": {
+      "left": 0.12,
+      "top": 0.7182,
+      "right": 0.9354,
+      "bottom": 0.9415
+     },
+     "symbols": [
+      {
+       "text": "/",
+       "box": {
+        "left": 0.12,
+        "top": 0.8142,
+        "right": 0.1422,
+        "bottom": 0.9415
+       }
+      },
+      {
+       "text": "w",
+       "box": {
+        "left": 0.1455,
+        "top": 0.81,
+        "right": 0.167,
+        "bottom": 0.9374
+       }
+      },
+      {
+       "text": "w",
+       "box": {
+        "left": 0.1794,
+        "top": 0.8079,
+        "right": 0.1963,
+        "bottom": 0.9332
+       }
+      },
+      {
+       "text": "w",
+       "box": {
+        "left": 0.1924,
+        "top": 0.8058,
+        "right": 0.21,
+        "bottom": 0.9311
+       }
+      },
+      {
+       "text": ".",
+       "box": {
+        "left": 0.2205,
+        "top": 0.8017,
+        "right": 0.2459,
+        "bottom": 0.929
+       }
+      },
+      {
+       "text": "i",
+       "box": {
+        "left": 0.2557,
+        "top": 0.7996,
+        "right": 0.274,
+        "bottom": 0.9248
+       }
+      },
+      {
+       "text": "e",
+       "box": {
+        "left": 0.2753,
+        "top": 0.7975,
+        "right": 0.2929,
+        "bottom": 0.9228
+       }
+      },
+      {
+       "text": "t",
+       "box": {
+        "left": 0.2988,
+        "top": 0.7912,
+        "right": 0.3216,
+        "bottom": 0.9186
+       }
+      },
+      {
+       "text": "a",
+       "box": {
+        "left": 0.332,
+        "top": 0.7871,
+        "right": 0.3509,
+        "bottom": 0.9144
+       }
+      },
+      {
+       "text": "A",
+       "box": {
+        "left": 0.3523,
+        "top": 0.7871,
+        "right": 0.3699,
+        "bottom": 0.9123
+       }
+      },
+      {
+       "text": "p",
+       "box": {
+        "left": 0.3542,
+        "top": 0.7808,
+        "right": 0.4181,
+        "bottom": 0.9123
+       }
+      },
+      {
+       "text": "b",
+       "box": {
+        "left": 0.4945,
+        "top": 0.7641,
+        "right": 0.5486,
+        "bottom": 0.8956
+       }
+      },
+      {
+       "text": "m",
+       "box": {
+        "left": 0.5329,
+        "top": 0.7641,
+        "right": 0.5577,
+        "bottom": 0.8914
+       }
+      },
+      {
+       "text": "L",
+       "box": {
+        "left": 0.5819,
+        "top": 0.7578,
+        "right": 0.6106,
+        "bottom": 0.8852
+       }
+      },
+      {
+       "text": "i",
+       "box": {
+        "left": 0.6119,
+        "top": 0.7557,
+        "right": 0.6321,
+        "bottom": 0.8831
+       }
+      },
+      {
+       "text": "c",
+       "box": {
+        "left": 0.6438,
+        "top": 0.7516,
+        "right": 0.6634,
+        "bottom": 0.8789
+       }
+      },
+      {
+       "text": "e",
+       "box": {
+        "left": 0.6647,
+        "top": 0.7516,
+        "right": 0.6823,
+        "bottom": 0.8768
+       }
+      },
+      {
+       "text": "n",
+       "box": {
+        "left": 0.6875,
+        "top": 0.7453,
+        "right": 0.7104,
+        "bottom": 0.8727
+       }
+      },
+      {
+       "text": "t",
+       "box": {
+        "left": 0.7215,
+        "top": 0.7411,
+        "right": 0.7404,
+        "bottom": 0.8685
+       }
+      },
+      {
+       "text": "e",
+       "box": {
+        "left": 0.7358,
+        "top": 0.739,
+        "right": 0.7632,
+        "bottom": 0.8664
+       }
+      },
+      {
+       "text": "p",
+       "box": {
+        "left": 0.7808,
+        "top": 0.7328,
+        "right": 0.8219,
+        "bottom": 0.8622
+       }
+      },
+      {
+       "text": "a",
+       "box": {
+        "left": 0.8447,
+        "top": 0.7265,
+        "right": 0.8728,
+        "bottom": 0.8539
+       }
+      },
+      {
+       "text": "t",
+       "box": {
+        "left": 0.8754,
+        "top": 0.7265,
+        "right": 0.893,
+        "bottom": 0.8518
+       }
+      },
+      {
+       "text": "d",
+       "box": {
+        "left": 0.9008,
+        "top": 0.7223,
+        "right": 0.9185,
+        "bottom": 0.8476
+       }
+      },
+      {
+       "text": "s",
+       "box": {
+        "left": 0.9224,
+        "top": 0.7203,
+        "right": 0.9348,
+        "bottom": 0.8455
+       }
+      }
+     ]
+    }
+   ],
+   "codeHint": "5",
+   "regionColumns": [],
+   "nativePasses": [
+    "area: src=[206,603][647,741] image=886x1920 scale=3.4782608 page=1675x621 pad=71",
+    "code: anchor digit=Rect(615, 254 - 776, 477) numberHeight=232.0 image=1675x621",
+    "code: crop=[0.0,314.6][92.8,407.4] bw=false read='' -> null",
+    "code: crop=[34.800003,314.6][127.600006,407.4] bw=false read='' -> null",
+    "code: crop=[69.600006,314.6][162.40001,407.4] bw=false read='' -> null",
+    "code: crop=[104.40002,314.6][197.20001,407.4] bw=false read='' -> null",
+    "code: crop=[139.20001,314.6][232.00003,407.4] bw=false read='' -> null",
+    "code: crop=[174.00003,314.6][266.80002,407.4] bw=false read='' -> null",
+    "code: crop=[208.80002,314.6][301.60004,407.4] bw=false read='5) )' -> 5",
+    "region: zone/top crop=[1514,223][1675,361] bw=false read='|s' -> S",
+    "region: zone/bottom crop=[1514,361][1675,499] bw=false read='' -> null",
+    "region: zone/bottom crop=[1514,361][1675,499] bw=true read='' -> null",
+    "region: lastDigit/top crop=[1420,223][1514,361] bw=false read='' -> null",
+    "region: lastDigit/top crop=[1420,223][1514,361] bw=true read='' -> null",
+    "region: lastDigit/bottom crop=[1420,361][1514,499] bw=false read='S' -> S"
+   ]
+  }
+ ]
+}

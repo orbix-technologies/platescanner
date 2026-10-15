@@ -1,0 +1,366 @@
+{
+ "session": "1792063844393",
+ "expectedNumber": "0123456",
+ "events": [
+  {
+   "t_ms": 9708,
+   "event": "areaOcr",
+   "elements": [
+    {
+     "text": "O-0123456}",
+     "confidence": 0.641406238079071,
+     "box": {
+      "left": 0.0053,
+      "top": 0.2375,
+      "right": 0.9947,
+      "bottom": 0.7792
+     },
+     "symbols": [
+      {
+       "text": "O",
+       "box": {
+        "left": 0.0053,
+        "top": 0.2979,
+        "right": 0.1831,
+        "bottom": 0.7792
+       }
+      },
+      {
+       "text": "-",
+       "box": {
+        "left": 0.2276,
+        "top": 0.2875,
+        "right": 0.3205,
+        "bottom": 0.7625
+       }
+      },
+      {
+       "text": "0",
+       "box": {
+        "left": 0.3397,
+        "top": 0.2813,
+        "right": 0.42,
+        "bottom": 0.7542
+       }
+      },
+      {
+       "text": "1",
+       "box": {
+        "left": 0.4499,
+        "top": 0.2729,
+        "right": 0.5222,
+        "bottom": 0.7458
+       }
+      },
+      {
+       "text": "2",
+       "box": {
+        "left": 0.5289,
+        "top": 0.2667,
+        "right": 0.6025,
+        "bottom": 0.7396
+       }
+      },
+      {
+       "text": "3",
+       "box": {
+        "left": 0.635,
+        "top": 0.2604,
+        "right": 0.7087,
+        "bottom": 0.7333
+       }
+      },
+      {
+       "text": "4",
+       "box": {
+        "left": 0.7147,
+        "top": 0.2542,
+        "right": 0.7883,
+        "bottom": 0.7271
+       }
+      },
+      {
+       "text": "5",
+       "box": {
+        "left": 0.8208,
+        "top": 0.2458,
+        "right": 0.8945,
+        "bottom": 0.7188
+       }
+      },
+      {
+       "text": "6",
+       "box": {
+        "left": 0.9111,
+        "top": 0.2417,
+        "right": 0.9635,
+        "bottom": 0.7125
+       }
+      },
+      {
+       "text": "}",
+       "box": {
+        "left": 0.9701,
+        "top": 0.2396,
+        "right": 0.9947,
+        "bottom": 0.7083
+       }
+      }
+     ]
+    },
+    {
+     "text": "/wwOetapbnLicenepatds",
+     "confidence": 0.386904776096344,
+     "box": {
+      "left": 0.0544,
+      "top": 0.6354,
+      "right": 0.9642,
+      "bottom": 0.8313
+     },
+     "symbols": [
+      {
+       "text": "/",
+       "box": {
+        "left": 0.0544,
+        "top": 0.6896,
+        "right": 0.0856,
+        "bottom": 0.8313
+       }
+      },
+      {
+       "text": "w",
+       "box": {
+        "left": 0.0962,
+        "top": 0.6854,
+        "right": 0.1161,
+        "bottom": 0.8271
+       }
+      },
+      {
+       "text": "w",
+       "box": {
+        "left": 0.1108,
+        "top": 0.6854,
+        "right": 0.1453,
+        "bottom": 0.8271
+       }
+      },
+      {
+       "text": "O",
+       "box": {
+        "left": 0.1739,
+        "top": 0.6792,
+        "right": 0.217,
+        "bottom": 0.8229
+       }
+      },
+      {
+       "text": "e",
+       "box": {
+        "left": 0.2336,
+        "top": 0.6771,
+        "right": 0.2601,
+        "bottom": 0.8188
+       }
+      },
+      {
+       "text": "t",
+       "box": {
+        "left": 0.2648,
+        "top": 0.6771,
+        "right": 0.2887,
+        "bottom": 0.8188
+       }
+      },
+      {
+       "text": "a",
+       "box": {
+        "left": 0.2979,
+        "top": 0.675,
+        "right": 0.3285,
+        "bottom": 0.8167
+       }
+      },
+      {
+       "text": "p",
+       "box": {
+        "left": 0.3198,
+        "top": 0.6688,
+        "right": 0.3962,
+        "bottom": 0.8146
+       }
+      },
+      {
+       "text": "b",
+       "box": {
+        "left": 0.4831,
+        "top": 0.6604,
+        "right": 0.5415,
+        "bottom": 0.8042
+       }
+      },
+      {
+       "text": "n",
+       "box": {
+        "left": 0.5209,
+        "top": 0.6604,
+        "right": 0.5488,
+        "bottom": 0.8021
+       }
+      },
+      {
+       "text": "L",
+       "box": {
+        "left": 0.576,
+        "top": 0.6563,
+        "right": 0.6118,
+        "bottom": 0.8
+       }
+      },
+      {
+       "text": "i",
+       "box": {
+        "left": 0.6218,
+        "top": 0.6542,
+        "right": 0.641,
+        "bottom": 0.7958
+       }
+      },
+      {
+       "text": "c",
+       "box": {
+        "left": 0.6437,
+        "top": 0.6542,
+        "right": 0.6629,
+        "bottom": 0.7958
+       }
+      },
+      {
+       "text": "e",
+       "box": {
+        "left": 0.6735,
+        "top": 0.6521,
+        "right": 0.6928,
+        "bottom": 0.7938
+       }
+      },
+      {
+       "text": "n",
+       "box": {
+        "left": 0.6894,
+        "top": 0.65,
+        "right": 0.7206,
+        "bottom": 0.7917
+       }
+      },
+      {
+       "text": "e",
+       "box": {
+        "left": 0.7439,
+        "top": 0.6458,
+        "right": 0.7843,
+        "bottom": 0.7896
+       }
+      },
+      {
+       "text": "p",
+       "box": {
+        "left": 0.7963,
+        "top": 0.6417,
+        "right": 0.8354,
+        "bottom": 0.7854
+       }
+      },
+      {
+       "text": "a",
+       "box": {
+        "left": 0.858,
+        "top": 0.6417,
+        "right": 0.8912,
+        "bottom": 0.7833
+       }
+      },
+      {
+       "text": "t",
+       "box": {
+        "left": 0.9018,
+        "top": 0.6375,
+        "right": 0.9217,
+        "bottom": 0.7792
+       }
+      },
+      {
+       "text": "d",
+       "box": {
+        "left": 0.9257,
+        "top": 0.6375,
+        "right": 0.9423,
+        "bottom": 0.7792
+       }
+      },
+      {
+       "text": "s",
+       "box": {
+        "left": 0.9489,
+        "top": 0.6354,
+        "right": 0.9642,
+        "bottom": 0.7771
+       }
+      }
+     ]
+    }
+   ],
+   "codeHint": "2",
+   "regionColumns": [
+    {
+     "letters": "DR",
+     "source": "trailing",
+     "box": {
+      "left": 0.9622,
+      "top": 0.2417,
+      "right": 1.0027,
+      "bottom": 0.7542
+     }
+    },
+    {
+     "letters": "IS",
+     "source": "lastDigit",
+     "box": {
+      "left": 0.9031,
+      "top": 0.2417,
+      "right": 0.9715,
+      "bottom": 0.7542
+     }
+    }
+   ],
+   "nativePasses": [
+    "area: src=[85,700][512,836] image=886x1920 scale=3.5294118 page=1651x624 pad=72",
+    "code: anchor digit=Rect(584, 207 - 705, 434) numberHeight=246.0 image=1651x624",
+    "code: crop=[0.0,261.8][98.4,360.2] bw=false read='' -> null",
+    "code: crop=[36.900005,261.8][135.3,360.2] bw=false read='' -> null",
+    "code: crop=[73.8,261.8][172.20001,360.2] bw=false read='' -> null",
+    "code: crop=[110.70001,261.8][209.1,360.2] bw=false read='(' -> null",
+    "code: crop=[147.60002,261.8][246.00002,360.2] bw=false read='' -> null",
+    "code: crop=[184.50002,261.8][282.90002,360.2] bw=false read='' -> null",
+    "code: crop=[221.40001,261.8][319.80002,360.2] bw=false read='' -> null",
+    "code: crop=[258.3,261.8][356.7,360.2] bw=false read='' -> null",
+    "code: crop=[295.19998,261.8][393.6,360.2] bw=false read='' -> null",
+    "code: crop=[332.09998,261.8][430.5,360.2] bw=false read='' -> null",
+    "code: crop=[368.99997,261.8][467.4,360.2] bw=false read='' -> null",
+    "code: crop=[405.89996,261.8][504.3,360.2] bw=false read='' -> null",
+    "code: crop=[0.0,261.8][98.4,360.2] bw=true read='' -> null",
+    "code: crop=[36.900005,261.8][135.3,360.2] bw=true read='' -> null",
+    "code: crop=[73.8,261.8][172.20001,360.2] bw=true read='' -> null",
+    "code: crop=[110.70001,261.8][209.1,360.2] bw=true read=')' -> null",
+    "code: crop=[147.60002,261.8][246.00002,360.2] bw=true read='2)' -> 2",
+    "region: trailing/top crop=[1522,164][1583,311] bw=false read='D' -> D",
+    "region: trailing/bottom crop=[1522,311][1583,458] bw=false read='R' -> R",
+    "region: zone/top crop=[1536,164][1651,311] bw=false read='D' -> D",
+    "region: zone/bottom crop=[1536,311][1651,458] bw=false read='' -> null",
+    "region: zone/bottom crop=[1536,311][1651,458] bw=true read='' -> null",
+    "region: lastDigit/top crop=[1433,164][1536,311] bw=false read='1' -> I",
+    "region: lastDigit/bottom crop=[1433,311][1536,458] bw=false read='S' -> S"
+   ]
+  }
+ ]
+}

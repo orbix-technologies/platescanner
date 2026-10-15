@@ -49,7 +49,10 @@ object RegionStackReader {
         if (trailing.isNotEmpty()) {
             candidates.add("trailing" to (trailing.minOf { it.left } - pad..trailing.maxOf { it.right } + pad))
         }
-        val zoneRight = minOf(bitmap.width, last.right + (h * 1.3f).toInt())
+        // Latin stack: 0.05–1.1 digit pitch right of the number (measured
+        // on real plates); wider reaches stray text such as watermarks.
+        val p = (last.right - anchor.first.left).toFloat() / (anchor.end - anchor.start)
+        val zoneRight = minOf(bitmap.width, last.right + (p * 1.1f).toInt())
         if (zoneRight - last.right >= h / 4) {
             candidates.add("zone" to (last.right + pad..zoneRight))
         }
@@ -75,14 +78,19 @@ object RegionStackReader {
         log: MutableList<String>?,
         label: String,
     ): Char? {
-        for (blackAndWhite in listOf(false, true)) {
+        // Read in colour and in black and white; a letter counts when the
+        // two agree, or when only one of them reads a letter at all.
+        val reads = listOf(false, true).map { blackAndWhite ->
             val text = CropOcr.read(recognizer, bitmap, RectF(area), HALF_SIZE, blackAndWhite)
             val chars = (text ?: "").filter { !it.isWhitespace() && it !in noise }
                 .map { c -> asLetter[c] ?: c.uppercaseChar() }
             val letter = if (chars.size == 1 && chars[0] in 'A'..'Z') chars[0] else null
             log?.add("region: $label crop=${area.toShortString()} bw=$blackAndWhite read='${text?.replace("\n", " ")}' -> $letter")
-            if (letter != null) return letter
+            letter
         }
-        return null
+        val letters = reads.filterNotNull().distinct()
+        val result = if (letters.size == 1) letters[0] else null
+        if (letters.size > 1) log?.add("region: $label reads disagree $letters -> none")
+        return result
     }
 }

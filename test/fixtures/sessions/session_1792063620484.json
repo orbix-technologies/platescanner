@@ -1,0 +1,172 @@
+{
+ "session": "1792063620484",
+ "expectedNumber": "0123456",
+ "events": [
+  {
+   "t_ms": 9516,
+   "event": "areaOcr",
+   "elements": [
+    {
+     "text": "O-01234561",
+     "confidence": 0.645703136920929,
+     "box": {
+      "left": 0.0626,
+      "top": 0.25,
+      "right": 0.9174,
+      "bottom": 0.8413
+     },
+     "symbols": [
+      {
+       "text": "O",
+       "box": {
+        "left": 0.0626,
+        "top": 0.25,
+        "right": 0.1715,
+        "bottom": 0.8413
+       }
+      },
+      {
+       "text": "-",
+       "box": {
+        "left": 0.2008,
+        "top": 0.25,
+        "right": 0.2939,
+        "bottom": 0.8413
+       }
+      },
+      {
+       "text": "0",
+       "box": {
+        "left": 0.3454,
+        "top": 0.25,
+        "right": 0.4104,
+        "bottom": 0.8413
+       }
+      },
+      {
+       "text": "1",
+       "box": {
+        "left": 0.4052,
+        "top": 0.25,
+        "right": 0.4543,
+        "bottom": 0.8413
+       }
+      },
+      {
+       "text": "2",
+       "box": {
+        "left": 0.4713,
+        "top": 0.25,
+        "right": 0.5445,
+        "bottom": 0.8413
+       }
+      },
+      {
+       "text": "3",
+       "box": {
+        "left": 0.5779,
+        "top": 0.25,
+        "right": 0.6464,
+        "bottom": 0.8413
+       }
+      },
+      {
+       "text": "4",
+       "box": {
+        "left": 0.661,
+        "top": 0.25,
+        "right": 0.7201,
+        "bottom": 0.8413
+       }
+      },
+      {
+       "text": "5",
+       "box": {
+        "left": 0.7377,
+        "top": 0.25,
+        "right": 0.7986,
+        "bottom": 0.8413
+       }
+      },
+      {
+       "text": "6",
+       "box": {
+        "left": 0.8214,
+        "top": 0.25,
+        "right": 0.8718,
+        "bottom": 0.8413
+       }
+      },
+      {
+       "text": "1",
+       "box": {
+        "left": 0.88,
+        "top": 0.25,
+        "right": 0.9174,
+        "bottom": 0.8413
+       }
+      }
+     ]
+    },
+    {
+     "text": "3",
+     "confidence": 0.87109375,
+     "box": {
+      "left": 0.0193,
+      "top": 0.363,
+      "right": 0.0943,
+      "bottom": 0.6674
+     },
+     "symbols": [
+      {
+       "text": "3",
+       "box": {
+        "left": 0.0193,
+        "top": 0.363,
+        "right": 0.0943,
+        "bottom": 0.6674
+       }
+      }
+     ]
+    }
+   ],
+   "codeHint": "3",
+   "regionColumns": [
+    {
+     "letters": "IJ",
+     "source": "zone",
+     "box": {
+      "left": 0.9251,
+      "top": 0.25,
+      "right": 1.0404,
+      "bottom": 0.8413
+     }
+    },
+    {
+     "letters": "AA",
+     "source": "lastDigit",
+     "box": {
+      "left": 0.8724,
+      "top": 0.25,
+      "right": 0.9251,
+      "bottom": 0.8413
+     }
+    }
+   ],
+   "nativePasses": [
+    "area: src=[242,632][669,747] image=886x1920 scale=4.0 page=1846x598 pad=69",
+    "code: anchor digit=Rect(659, 184 - 770, 456) numberHeight=272.0 image=1846x598",
+    "code: crop=[0.0,265.6][108.8,374.4] bw=false read=')' -> null",
+    "code: crop=[40.800003,265.6][149.6,374.4] bw=false read='' -> null",
+    "code: crop=[81.6,265.6][190.4,374.4] bw=false read='' -> null",
+    "code: crop=[122.4,265.6][231.20001,374.4] bw=false read='3 3' -> 3",
+    "region: zone/top crop=[1649,158][1846,320] bw=false read='' -> null",
+    "region: zone/top crop=[1649,158][1846,320] bw=true read='1' -> I",
+    "region: zone/bottom crop=[1649,320][1846,482] bw=false read='' -> null",
+    "region: zone/bottom crop=[1649,320][1846,482] bw=true read='J' -> J",
+    "region: lastDigit/top crop=[1559,158][1649,320] bw=false read='A' -> A",
+    "region: lastDigit/bottom crop=[1559,320][1649,482] bw=false read='A' -> A"
+   ]
+  }
+ ]
+}

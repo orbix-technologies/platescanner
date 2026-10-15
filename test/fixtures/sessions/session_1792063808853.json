@@ -1,0 +1,138 @@
+{
+ "session": "1792063808853",
+ "expectedNumber": "0123456",
+ "events": [
+  {
+   "t_ms": 6487,
+   "event": "areaOcr",
+   "elements": [
+    {
+     "text": "O-0123456|",
+     "confidence": 0.684765636920929,
+     "box": {
+      "left": 0.0854,
+      "top": 0.2265,
+      "right": 0.9504,
+      "bottom": 0.7906
+     },
+     "symbols": [
+      {
+       "text": "O",
+       "box": {
+        "left": 0.0854,
+        "top": 0.2265,
+        "right": 0.221,
+        "bottom": 0.7906
+       }
+      },
+      {
+       "text": "-",
+       "box": {
+        "left": 0.2653,
+        "top": 0.2265,
+        "right": 0.3492,
+        "bottom": 0.7906
+       }
+      },
+      {
+       "text": "0",
+       "box": {
+        "left": 0.375,
+        "top": 0.2265,
+        "right": 0.4378,
+        "bottom": 0.7906
+       }
+      },
+      {
+       "text": "1",
+       "box": {
+        "left": 0.452,
+        "top": 0.2265,
+        "right": 0.509,
+        "bottom": 0.7906
+       }
+      },
+      {
+       "text": "2",
+       "box": {
+        "left": 0.5258,
+        "top": 0.2265,
+        "right": 0.5839,
+        "bottom": 0.7906
+       }
+      },
+      {
+       "text": "3",
+       "box": {
+        "left": 0.6002,
+        "top": 0.2265,
+        "right": 0.6582,
+        "bottom": 0.7906
+       }
+      },
+      {
+       "text": "4",
+       "box": {
+        "left": 0.6698,
+        "top": 0.2265,
+        "right": 0.7373,
+        "bottom": 0.7906
+       }
+      },
+      {
+       "text": "5",
+       "box": {
+        "left": 0.7695,
+        "top": 0.2265,
+        "right": 0.8354,
+        "bottom": 0.7906
+       }
+      },
+      {
+       "text": "6",
+       "box": {
+        "left": 0.8486,
+        "top": 0.2265,
+        "right": 0.9051,
+        "bottom": 0.7906
+       }
+      },
+      {
+       "text": "|",
+       "box": {
+        "left": 0.9251,
+        "top": 0.2265,
+        "right": 0.9504,
+        "bottom": 0.7906
+       }
+      }
+     ]
+    }
+   ],
+   "codeHint": "2",
+   "regionColumns": [],
+   "nativePasses": [
+    "area: src=[251,849][725,966] image=886x1920 scale=4.0 page=2036x608 pad=70",
+    "code: anchor digit=Rect(781, 176 - 900, 440) numberHeight=264.0 image=2036x608",
+    "code: crop=[0.0,255.2][105.6,360.8] bw=false read='' -> null",
+    "code: crop=[39.600002,255.2][145.2,360.8] bw=false read='' -> null",
+    "code: crop=[79.2,255.2][184.8,360.8] bw=false read='' -> null",
+    "code: crop=[118.8,255.2][224.40001,360.8] bw=false read='' -> null",
+    "code: crop=[158.40001,255.2][264.0,360.8] bw=false read='' -> null",
+    "code: crop=[198.00002,255.2][303.6,360.8] bw=false read='' -> null",
+    "code: crop=[237.60002,255.2][343.2,360.8] bw=false read='(2' -> 2",
+    "region: trailing/top crop=[1811,150][1885,308] bw=false read='' -> null",
+    "region: trailing/top crop=[1811,150][1885,308] bw=true read='' -> null",
+    "region: trailing/bottom crop=[1811,308][1885,466] bw=false read='' -> null",
+    "region: trailing/bottom crop=[1811,308][1885,466] bw=true read='' -> null",
+    "region: zone/top crop=[1799,150][2036,308] bw=false read='G|' -> G",
+    "region: zone/bottom crop=[1799,308][2036,466] bw=false read='' -> null",
+    "region: zone/bottom crop=[1799,308][2036,466] bw=true read='' -> null",
+    "region: lastDigit/top crop=[1666,150][1799,308] bw=false read='' -> null",
+    "region: lastDigit/top crop=[1666,150][1799,308] bw=true read='' -> null",
+    "region: lastDigit/bottom crop=[1666,308][1799,466] bw=false read='' -> null",
+    "region: lastDigit/bottom crop=[1666,308][1799,466] bw=true read='' -> null"
+   ]
+  }
+ ]
+}

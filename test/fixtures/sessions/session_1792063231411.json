@@ -1,0 +1,300 @@
+{
+ "session": "1792063231411",
+ "expectedNumber": "0123456",
+ "events": [
+  {
+   "t_ms": 18868,
+   "event": "areaOcr",
+   "elements": [
+    {
+     "text": "|o-01234561",
+     "confidence": 0.6303266882896423,
+     "box": {
+      "left": 0.0317,
+      "top": 0.2021,
+      "right": 0.9269,
+      "bottom": 0.8542
+     },
+     "symbols": [
+      {
+       "text": "|",
+       "box": {
+        "left": 0.0317,
+        "top": 0.2021,
+        "right": 0.0683,
+        "bottom": 0.8542
+       }
+      },
+      {
+       "text": "o",
+       "box": {
+        "left": 0.0794,
+        "top": 0.2021,
+        "right": 0.1727,
+        "bottom": 0.8542
+       }
+      },
+      {
+       "text": "-",
+       "box": {
+        "left": 0.2304,
+        "top": 0.2021,
+        "right": 0.3218,
+        "bottom": 0.8542
+       }
+      },
+      {
+       "text": "0",
+       "box": {
+        "left": 0.3454,
+        "top": 0.2021,
+        "right": 0.4074,
+        "bottom": 0.8542
+       }
+      },
+      {
+       "text": "1",
+       "box": {
+        "left": 0.4228,
+        "top": 0.2021,
+        "right": 0.4805,
+        "bottom": 0.8542
+       }
+      },
+      {
+       "text": "2",
+       "box": {
+        "left": 0.4974,
+        "top": 0.2021,
+        "right": 0.556,
+        "bottom": 0.8542
+       }
+      },
+      {
+       "text": "3",
+       "box": {
+        "left": 0.5676,
+        "top": 0.2021,
+        "right": 0.6359,
+        "bottom": 0.8542
+       }
+      },
+      {
+       "text": "4",
+       "box": {
+        "left": 0.6691,
+        "top": 0.2021,
+        "right": 0.7354,
+        "bottom": 0.8542
+       }
+      },
+      {
+       "text": "5",
+       "box": {
+        "left": 0.7489,
+        "top": 0.2021,
+        "right": 0.8057,
+        "bottom": 0.8542
+       }
+      },
+      {
+       "text": "6",
+       "box": {
+        "left": 0.823,
+        "top": 0.2021,
+        "right": 0.8817,
+        "bottom": 0.8542
+       }
+      },
+      {
+       "text": "1",
+       "box": {
+        "left": 0.9019,
+        "top": 0.2021,
+        "right": 0.9269,
+        "bottom": 0.8542
+       }
+      }
+     ]
+    },
+    {
+     "text": "WwMetaAdenates",
+     "confidence": 0.5262276530265808,
+     "box": {
+      "left": 0.1193,
+      "top": 0.7042,
+      "right": 0.8773,
+      "bottom": 0.8667
+     },
+     "symbols": [
+      {
+       "text": "W",
+       "box": {
+        "left": 0.1193,
+        "top": 0.7042,
+        "right": 0.1405,
+        "bottom": 0.8667
+       }
+      },
+      {
+       "text": "w",
+       "box": {
+        "left": 0.1361,
+        "top": 0.7042,
+        "right": 0.1741,
+        "bottom": 0.8667
+       }
+      },
+      {
+       "text": "M",
+       "box": {
+        "left": 0.214,
+        "top": 0.7042,
+        "right": 0.2463,
+        "bottom": 0.8667
+       }
+      },
+      {
+       "text": "e",
+       "box": {
+        "left": 0.2419,
+        "top": 0.7042,
+        "right": 0.2554,
+        "bottom": 0.8667
+       }
+      },
+      {
+       "text": "t",
+       "box": {
+        "left": 0.2641,
+        "top": 0.7042,
+        "right": 0.2838,
+        "bottom": 0.8667
+       }
+      },
+      {
+       "text": "a",
+       "box": {
+        "left": 0.2896,
+        "top": 0.7042,
+        "right": 0.3078,
+        "bottom": 0.8667
+       }
+      },
+      {
+       "text": "A",
+       "box": {
+        "left": 0.2641,
+        "top": 0.7042,
+        "right": 0.3834,
+        "bottom": 0.8667
+       }
+      },
+      {
+       "text": "d",
+       "box": {
+        "left": 0.5517,
+        "top": 0.7042,
+        "right": 0.6484,
+        "bottom": 0.8667
+       }
+      },
+      {
+       "text": "e",
+       "box": {
+        "left": 0.6118,
+        "top": 0.7042,
+        "right": 0.6253,
+        "bottom": 0.8667
+       }
+      },
+      {
+       "text": "n",
+       "box": {
+        "left": 0.6089,
+        "top": 0.7042,
+        "right": 0.6787,
+        "bottom": 0.8667
+       }
+      },
+      {
+       "text": "a",
+       "box": {
+        "left": 0.7633,
+        "top": 0.7042,
+        "right": 0.8244,
+        "bottom": 0.8667
+       }
+      },
+      {
+       "text": "t",
+       "box": {
+        "left": 0.8201,
+        "top": 0.7042,
+        "right": 0.8312,
+        "bottom": 0.8667
+       }
+      },
+      {
+       "text": "e",
+       "box": {
+        "left": 0.8355,
+        "top": 0.7042,
+        "right": 0.8533,
+        "bottom": 0.8667
+       }
+      },
+      {
+       "text": "s",
+       "box": {
+        "left": 0.861,
+        "top": 0.7042,
+        "right": 0.8773,
+        "bottom": 0.8667
+       }
+      }
+     ]
+    },
+    {
+     "text": "M",
+     "confidence": 0.171875,
+     "box": {
+      "left": 0.9014,
+      "top": 0.7042,
+      "right": 0.9125,
+      "bottom": 0.8667
+     },
+     "symbols": [
+      {
+       "text": "M",
+       "box": {
+        "left": 0.9014,
+        "top": 0.7042,
+        "right": 0.9125,
+        "bottom": 0.8667
+       }
+      }
+     ]
+    }
+   ],
+   "codeHint": "2",
+   "regionColumns": [],
+   "nativePasses": [
+    "area: src=[144,691][837,851] image=886x1920 scale=3.0 page=2223x624 pad=72",
+    "code: anchor digit=Rect(790, 169 - 919, 482) numberHeight=313.0 image=2223x624",
+    "code: crop=[0.0,262.9][125.200005,388.1] bw=false read='' -> null",
+    "code: crop=[46.95,262.9][172.15001,388.1] bw=false read='' -> null",
+    "code: crop=[93.899994,262.9][219.1,388.1] bw=false read='' -> null",
+    "code: crop=[140.84999,262.9][266.05,388.1] bw=false read='(2' -> 2",
+    "region: zone/top crop=[2014,139][2223,325] bw=false read='' -> null",
+    "region: zone/top crop=[2014,139][2223,325] bw=true read='' -> null",
+    "region: zone/bottom crop=[2014,325][2223,512] bw=false read='' -> null",
+    "region: zone/bottom crop=[2014,325][2223,512] bw=true read='' -> null",
+    "region: lastDigit/top crop=[1932,139][2014,325] bw=false read='' -> null",
+    "region: lastDigit/top crop=[1932,139][2014,325] bw=true read='' -> null",
+    "region: lastDigit/bottom crop=[1932,325][2014,512] bw=false read='' -> null",
+    "region: lastDigit/bottom crop=[1932,325][2014,512] bw=true read='' -> null"
+   ]
+  }
+ ]
+}

@@ -1,0 +1,171 @@
+{
+ "session": "1792063290034",
+ "expectedNumber": "0123456",
+ "events": [
+  {
+   "t_ms": 10494,
+   "event": "areaOcr",
+   "elements": [
+    {
+     "text": "OX-01234561",
+     "confidence": 0.60546875,
+     "box": {
+      "left": 0.034,
+      "top": 0.1763,
+      "right": 0.9593,
+      "bottom": 0.8132
+     },
+     "symbols": [
+      {
+       "text": "O",
+       "box": {
+        "left": 0.034,
+        "top": 0.1763,
+        "right": 0.1244,
+        "bottom": 0.8132
+       }
+      },
+      {
+       "text": "X",
+       "box": {
+        "left": 0.1535,
+        "top": 0.1763,
+        "right": 0.1936,
+        "bottom": 0.8132
+       }
+      },
+      {
+       "text": "-",
+       "box": {
+        "left": 0.2115,
+        "top": 0.1763,
+        "right": 0.255,
+        "bottom": 0.8132
+       }
+      },
+      {
+       "text": "0",
+       "box": {
+        "left": 0.2941,
+        "top": 0.1763,
+        "right": 0.3644,
+        "bottom": 0.8132
+       }
+      },
+      {
+       "text": "1",
+       "box": {
+        "left": 0.3845,
+        "top": 0.1763,
+        "right": 0.4548,
+        "bottom": 0.8132
+       }
+      },
+      {
+       "text": "2",
+       "box": {
+        "left": 0.4749,
+        "top": 0.1763,
+        "right": 0.5441,
+        "bottom": 0.8132
+       }
+      },
+      {
+       "text": "3",
+       "box": {
+        "left": 0.5653,
+        "top": 0.1763,
+        "right": 0.6345,
+        "bottom": 0.8132
+       }
+      },
+      {
+       "text": "4",
+       "box": {
+        "left": 0.6546,
+        "top": 0.1763,
+        "right": 0.7238,
+        "bottom": 0.8132
+       }
+      },
+      {
+       "text": "5",
+       "box": {
+        "left": 0.745,
+        "top": 0.1763,
+        "right": 0.8153,
+        "bottom": 0.8132
+       }
+      },
+      {
+       "text": "6",
+       "box": {
+        "left": 0.8343,
+        "top": 0.1763,
+        "right": 0.9046,
+        "bottom": 0.8132
+       }
+      },
+      {
+       "text": "1",
+       "box": {
+        "left": 0.9258,
+        "top": 0.1763,
+        "right": 0.9593,
+        "bottom": 0.8132
+       }
+      }
+     ]
+    },
+    {
+     "text": "3",
+     "confidence": 0.8359375,
+     "box": {
+      "left": 0.0435,
+      "top": 0.3105,
+      "right": 0.1049,
+      "bottom": 0.7105
+     },
+     "symbols": [
+      {
+       "text": "3",
+       "box": {
+        "left": 0.0435,
+        "top": 0.3105,
+        "right": 0.1049,
+        "bottom": 0.7105
+       }
+      }
+     ]
+    }
+   ],
+   "codeHint": "2",
+   "regionColumns": [
+    {
+     "letters": "AA",
+     "source": "lastDigit",
+     "box": {
+      "left": 0.9191,
+      "top": 0.1763,
+      "right": 0.966,
+      "bottom": 0.8132
+     }
+    }
+   ],
+   "nativePasses": [
+    "area: src=[201,863][649,958] image=886x1920 scale=4.0 page=1906x494 pad=57",
+    "code: anchor digit=Rect(584, 124 - 710, 366) numberHeight=242.0 image=1906x494",
+    "code: crop=[0.0,196.6][96.8,293.4] bw=false read='' -> null",
+    "code: crop=[36.300003,196.6][133.1,293.4] bw=false read='' -> null",
+    "code: crop=[72.600006,196.6][169.40001,293.4] bw=false read='' -> null",
+    "code: crop=[108.90002,196.6][205.70001,293.4] bw=false read='2' -> 2",
+    "region: zone/top crop=[1788,100][1906,245] bw=false read='' -> null",
+    "region: zone/top crop=[1788,100][1906,245] bw=true read='' -> null",
+    "region: zone/bottom crop=[1788,245][1906,390] bw=false read='' -> null",
+    "region: zone/bottom crop=[1788,245][1906,390] bw=true read='' -> null",
+    "region: lastDigit/top crop=[1704,100][1788,245] bw=false read='A' -> A",
+    "region: lastDigit/bottom crop=[1704,245][1788,390] bw=false read='A' -> A"
+   ]
+  }
+ ]
+}

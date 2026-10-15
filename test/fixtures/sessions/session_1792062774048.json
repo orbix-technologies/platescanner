@@ -1,0 +1,110 @@
+{
+ "session": "1792062774048",
+ "expectedNumber": "94529",
+ "events": [
+  {
+   "t_ms": 18620,
+   "event": "areaOcr",
+   "elements": [
+    {
+     "text": "94529A",
+     "confidence": 0.72265625,
+     "box": {
+      "left": 0.3548,
+      "top": 0.2167,
+      "right": 0.8877,
+      "bottom": 0.7875
+     },
+     "symbols": [
+      {
+       "text": "9",
+       "box": {
+        "left": 0.3548,
+        "top": 0.2167,
+        "right": 0.4333,
+        "bottom": 0.7667
+       }
+      },
+      {
+       "text": "4",
+       "box": {
+        "left": 0.4518,
+        "top": 0.2208,
+        "right": 0.5252,
+        "bottom": 0.7708
+       }
+      },
+      {
+       "text": "5",
+       "box": {
+        "left": 0.5437,
+        "top": 0.225,
+        "right": 0.6222,
+        "bottom": 0.775
+       }
+      },
+      {
+       "text": "2",
+       "box": {
+        "left": 0.6401,
+        "top": 0.2292,
+        "right": 0.7186,
+        "bottom": 0.7792
+       }
+      },
+      {
+       "text": "9",
+       "box": {
+        "left": 0.7326,
+        "top": 0.2333,
+        "right": 0.8111,
+        "bottom": 0.7833
+       }
+      },
+      {
+       "text": "A",
+       "box": {
+        "left": 0.8347,
+        "top": 0.2375,
+        "right": 0.8877,
+        "bottom": 0.7875
+       }
+      }
+     ]
+    }
+   ],
+   "codeHint": "2",
+   "regionColumns": [
+    {
+     "letters": "AA",
+     "source": "trailing",
+     "box": {
+      "left": 0.8264,
+      "top": 0.2167,
+      "right": 0.896,
+      "bottom": 0.7833
+     }
+    }
+   ],
+   "nativePasses": [
+    "area: src=[69,746][722,946] image=886x1920 scale=2.4 page=1711x624 pad=72",
+    "code: anchor digit=Rect(628, 176 - 751, 440) numberHeight=272.0 image=1711x624",
+    "code: crop=[0.0,257.6][108.8,366.4] bw=false read='' -> null",
+    "code: crop=[40.800003,257.6][149.6,366.4] bw=false read='' -> null",
+    "code: crop=[81.6,257.6][190.4,366.4] bw=false read='' -> null",
+    "code: crop=[122.4,257.6][231.20001,366.4] bw=false read='' -> null",
+    "code: crop=[163.20001,257.6][272.0,366.4] bw=false read='2' -> 2",
+    "region: trailing/top crop=[1367,150][1476,312] bw=false read='A' -> A",
+    "region: trailing/bottom crop=[1367,312][1476,474] bw=false read='A' -> A",
+    "region: zone/top crop=[1356,150][1696,312] bw=false read='A1 A' -> null",
+    "region: zone/top crop=[1356,150][1696,312] bw=true read='A' -> A",
+    "region: zone/bottom crop=[1356,312][1696,474] bw=false read='' -> null",
+    "region: zone/bottom crop=[1356,312][1696,474] bw=true read='' -> null",
+    "region: lastDigit/top crop=[1207,150][1356,312] bw=false read='' -> null",
+    "region: lastDigit/top crop=[1207,150][1356,312] bw=true read='' -> null",
+    "region: lastDigit/bottom crop=[1207,312][1356,474] bw=false read='' -> null",
+    "region: lastDigit/bottom crop=[1207,312][1356,474] bw=true read='' -> null"
+   ]
+  }
+ ]
+}

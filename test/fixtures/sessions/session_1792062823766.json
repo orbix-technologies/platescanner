@@ -1,0 +1,394 @@
+{
+ "session": "1792062823766",
+ "expectedNumber": "65623",
+ "events": [
+  {
+   "t_ms": 8608,
+   "event": "areaOcr",
+   "elements": [
+    {
+     "text": "CTH",
+     "confidence": 0.41015625,
+     "box": {
+      "left": 0.0269,
+      "top": 0.3292,
+      "right": 0.0546,
+      "bottom": 0.3583
+     },
+     "symbols": [
+      {
+       "text": "C",
+       "box": {
+        "left": 0.0269,
+        "top": 0.3292,
+        "right": 0.0336,
+        "bottom": 0.3583
+       }
+      },
+      {
+       "text": "T",
+       "box": {
+        "left": 0.0378,
+        "top": 0.3292,
+        "right": 0.042,
+        "bottom": 0.3583
+       }
+      },
+      {
+       "text": "H",
+       "box": {
+        "left": 0.0462,
+        "top": 0.3292,
+        "right": 0.0546,
+        "bottom": 0.3583
+       }
+      }
+     ]
+    },
+    {
+     "text": "ETH",
+     "confidence": 0.5807291865348816,
+     "box": {
+      "left": 0.0303,
+      "top": 0.7438,
+      "right": 0.058,
+      "bottom": 0.7729
+     },
+     "symbols": [
+      {
+       "text": "E",
+       "box": {
+        "left": 0.0303,
+        "top": 0.7438,
+        "right": 0.0429,
+        "bottom": 0.7729
+       }
+      },
+      {
+       "text": "T",
+       "box": {
+        "left": 0.0429,
+        "top": 0.7438,
+        "right": 0.0496,
+        "bottom": 0.7729
+       }
+      },
+      {
+       "text": "H",
+       "box": {
+        "left": 0.0529,
+        "top": 0.7438,
+        "right": 0.058,
+        "bottom": 0.7729
+       }
+      }
+     ]
+    },
+    {
+     "text": "Ethiopiauto.com",
+     "confidence": 0.8999999761581421,
+     "box": {
+      "left": 0.1714,
+      "top": 0.1125,
+      "right": 0.3622,
+      "bottom": 0.1833
+     },
+     "symbols": [
+      {
+       "text": "E",
+       "box": {
+        "left": 0.1714,
+        "top": 0.1146,
+        "right": 0.1874,
+        "bottom": 0.1729
+       }
+      },
+      {
+       "text": "t",
+       "box": {
+        "left": 0.1891,
+        "top": 0.1146,
+        "right": 0.1958,
+        "bottom": 0.1729
+       }
+      },
+      {
+       "text": "h",
+       "box": {
+        "left": 0.1975,
+        "top": 0.1146,
+        "right": 0.2101,
+        "bottom": 0.1729
+       }
+      },
+      {
+       "text": "i",
+       "box": {
+        "left": 0.2118,
+        "top": 0.1167,
+        "right": 0.216,
+        "bottom": 0.175
+       }
+      },
+      {
+       "text": "o",
+       "box": {
+        "left": 0.2176,
+        "top": 0.1167,
+        "right": 0.2311,
+        "bottom": 0.175
+       }
+      },
+      {
+       "text": "p",
+       "box": {
+        "left": 0.2336,
+        "top": 0.1167,
+        "right": 0.2462,
+        "bottom": 0.175
+       }
+      },
+      {
+       "text": "i",
+       "box": {
+        "left": 0.2487,
+        "top": 0.1188,
+        "right": 0.2521,
+        "bottom": 0.1771
+       }
+      },
+      {
+       "text": "a",
+       "box": {
+        "left": 0.2546,
+        "top": 0.1188,
+        "right": 0.2681,
+        "bottom": 0.1771
+       }
+      },
+      {
+       "text": "u",
+       "box": {
+        "left": 0.2689,
+        "top": 0.1188,
+        "right": 0.2815,
+        "bottom": 0.1771
+       }
+      },
+      {
+       "text": "t",
+       "box": {
+        "left": 0.2832,
+        "top": 0.1208,
+        "right": 0.2908,
+        "bottom": 0.1792
+       }
+      },
+      {
+       "text": "o",
+       "box": {
+        "left": 0.2916,
+        "top": 0.1208,
+        "right": 0.3042,
+        "bottom": 0.1792
+       }
+      },
+      {
+       "text": ".",
+       "box": {
+        "left": 0.3067,
+        "top": 0.1229,
+        "right": 0.3101,
+        "bottom": 0.1813
+       }
+      },
+      {
+       "text": "c",
+       "box": {
+        "left": 0.3134,
+        "top": 0.1229,
+        "right": 0.3252,
+        "bottom": 0.1813
+       }
+      },
+      {
+       "text": "o",
+       "box": {
+        "left": 0.3269,
+        "top": 0.1229,
+        "right": 0.3403,
+        "bottom": 0.1813
+       }
+      },
+      {
+       "text": "m",
+       "box": {
+        "left": 0.342,
+        "top": 0.125,
+        "right": 0.3622,
+        "bottom": 0.1833
+       }
+      }
+     ]
+    },
+    {
+     "text": "<",
+     "confidence": 0.49609375,
+     "box": {
+      "left": 0.6723,
+      "top": 0.1271,
+      "right": 0.6874,
+      "bottom": 0.1875
+     },
+     "symbols": [
+      {
+       "text": "<",
+       "box": {
+        "left": 0.6723,
+        "top": 0.1271,
+        "right": 0.6874,
+        "bottom": 0.1875
+       }
+      }
+     ]
+    },
+    {
+     "text": "X",
+     "confidence": 0.4296875,
+     "box": {
+      "left": 0.9269,
+      "top": 0.1188,
+      "right": 0.9571,
+      "bottom": 0.1917
+     },
+     "symbols": [
+      {
+       "text": "X",
+       "box": {
+        "left": 0.9269,
+        "top": 0.1188,
+        "right": 0.9571,
+        "bottom": 0.1917
+       }
+      }
+     ]
+    },
+    {
+     "text": "oA65623A",
+     "confidence": 0.67431640625,
+     "box": {
+      "left": 0.0622,
+      "top": 0.3458,
+      "right": 0.9311,
+      "bottom": 0.7875
+     },
+     "symbols": [
+      {
+       "text": "o",
+       "box": {
+        "left": 0.0622,
+        "top": 0.3458,
+        "right": 0.2378,
+        "bottom": 0.7875
+       }
+      },
+      {
+       "text": "A",
+       "box": {
+        "left": 0.3126,
+        "top": 0.3458,
+        "right": 0.4109,
+        "bottom": 0.7875
+       }
+      },
+      {
+       "text": "6",
+       "box": {
+        "left": 0.4151,
+        "top": 0.3458,
+        "right": 0.4924,
+        "bottom": 0.7875
+       }
+      },
+      {
+       "text": "5",
+       "box": {
+        "left": 0.5336,
+        "top": 0.3458,
+        "right": 0.6151,
+        "bottom": 0.7875
+       }
+      },
+      {
+       "text": "6",
+       "box": {
+        "left": 0.6319,
+        "top": 0.3458,
+        "right": 0.7008,
+        "bottom": 0.7875
+       }
+      },
+      {
+       "text": "2",
+       "box": {
+        "left": 0.7218,
+        "top": 0.3458,
+        "right": 0.7924,
+        "bottom": 0.7875
+       }
+      },
+      {
+       "text": "3",
+       "box": {
+        "left": 0.8185,
+        "top": 0.3458,
+        "right": 0.8773,
+        "bottom": 0.7875
+       }
+      },
+      {
+       "text": "A",
+       "box": {
+        "left": 0.8874,
+        "top": 0.3458,
+        "right": 0.9311,
+        "bottom": 0.7875
+       }
+      }
+     ]
+    }
+   ],
+   "codeHint": "3",
+   "regionColumns": [
+    {
+     "letters": "AA",
+     "source": "zone",
+     "box": {
+      "left": 0.8857,
+      "top": 0.3458,
+      "right": 1.0605,
+      "bottom": 0.7875
+     }
+    }
+   ],
+   "nativePasses": [
+    "area: src=[73,612][775,895] image=886x1920 scale=1.6961131 page=1334x624 pad=72",
+    "code: anchor digit=Rect(566, 238 - 658, 450) numberHeight=212.0 image=1334x624",
+    "code: crop=[0.0,301.6][84.8,386.4] bw=false read='' -> null",
+    "code: crop=[31.800003,301.6][116.600006,386.4] bw=false read='' -> null",
+    "code: crop=[63.600006,301.6][148.40001,386.4] bw=false read='' -> null",
+    "code: crop=[95.4,301.6][180.20001,386.4] bw=false read='' -> null",
+    "code: crop=[127.200005,301.6][212.0,386.4] bw=false read='3' -> 3",
+    "region: trailing/top crop=[1118,218][1190,344] bw=false read='A' -> A",
+    "region: trailing/bottom crop=[1118,344][1190,470] bw=false read='' -> null",
+    "region: trailing/bottom crop=[1118,344][1190,470] bw=true read='' -> null",
+    "region: zone/top crop=[1126,218][1334,344] bw=false read='A' -> A",
+    "region: zone/bottom crop=[1126,344][1334,470] bw=false read='A' -> A",
+    "region: lastDigit/top crop=[1036,218][1126,344] bw=false read='' -> null",
+    "region: lastDigit/top crop=[1036,218][1126,344] bw=true read='' -> null",
+    "region: lastDigit/bottom crop=[1036,344][1126,470] bw=false read='' -> null",
+    "region: lastDigit/bottom crop=[1036,344][1126,470] bw=true read='J' -> J"
+   ]
+  }
+ ]
+}

@@ -43,7 +43,10 @@ enum RegionStackReader {
       candidates.append(
         ("trailing", trailing.map { $0.minX }.min()! - pad, trailing.map { $0.maxX }.max()! + pad))
     }
-    let zoneRight = min(width, last.maxX + h * 1.3)
+    // Latin stack: 0.05–1.1 digit pitch right of the number (measured on
+    // real plates); wider reaches stray text such as watermarks.
+    let p = (last.maxX - anchor.first.minX) / CGFloat(anchor.end - anchor.start)
+    let zoneRight = min(width, last.maxX + p * 1.1)
     if zoneRight - last.maxX >= h / 4 {
       candidates.append(("zone", last.maxX + pad, zoneRight))
     }
@@ -69,6 +72,9 @@ enum RegionStackReader {
   private static func letter(
     _ image: CGImage, _ area: CGRect, _ log: PassLog?, _ label: String
   ) -> Character? {
+    // Read in colour and in black and white; a letter counts when the two
+    // agree, or when only one of them reads a letter at all.
+    var letters: [Character] = []
     for blackAndWhite in [false, true] {
       let text = CropOcr.read(image, area: area, size: halfSize, blackAndWhite: blackAndWhite)
       let chars = (text ?? "").filter { !$0.isWhitespace && !noise.contains($0) }
@@ -77,8 +83,9 @@ enum RegionStackReader {
       if chars.count == 1, let c = chars.first, ("A"..."Z").contains(String(c)) { letter = c }
       log?.add(
         "region: \(label) crop=\(area) bw=\(blackAndWhite) read='\(text ?? "nil")' -> \(letter.map(String.init) ?? "nil")")
-      if let letter = letter { return letter }
+      if let letter = letter, !letters.contains(letter) { letters.append(letter) }
     }
-    return nil
+    if letters.count > 1 { log?.add("region: \(label) reads disagree \(letters) -> none") }
+    return letters.count == 1 ? letters[0] : nil
   }
 }

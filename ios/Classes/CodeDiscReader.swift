@@ -27,21 +27,29 @@ enum CodeDiscReader {
     }
     log?.add("code: anchor digit=\(anchor.first) numberHeight=\(anchor.height) image=\(cg.width)x\(cg.height)")
     let h = anchor.height
+    // Digit pitch: the plate's layout unit; the circle's centre sits ~2.8p
+    // left of the number (measured on real plates).
+    let p = (anchor.last.maxX - anchor.first.minX) / CGFloat(anchor.end - anchor.start)
     let half = h * 0.2
     let cy = (anchor.top + anchor.bottom) / 2
-    for blackAndWhite in [false, true] {
-      var cx = max(half, anchor.first.minX - 3.5 * h)
-      let end = anchor.first.minX - 0.4 * h
-      while cx <= end {
-        let area = CGRect(x: cx - half, y: cy - half, width: half * 2, height: half * 2)
+    // Read every crop across the code zone, in colour and black and white,
+    // and vote: one stray glyph misread as a digit must not decide the code.
+    var votes: [String: Int] = [:]
+    var cx = max(half, anchor.first.minX - 3.6 * p)
+    let end = anchor.first.minX - 2.0 * p
+    while cx <= end {
+      let area = CGRect(x: cx - half, y: cy - half, width: half * 2, height: half * 2)
+      for blackAndWhite in [false, true] {
         let read = CropOcr.read(cg, area: area, size: discSize, blackAndWhite: blackAndWhite)
         let code = digitOf(read)
         log?.add("code: crop=\(area) bw=\(blackAndWhite) read='\(read ?? "nil")' -> \(code ?? "nil")")
-        if let code = code { return code }
-        cx += h * 0.15
+        if let code = code { votes[code, default: 0] += 1 }
       }
+      cx += h * 0.15
     }
-    return nil
+    let best = votes.max { $0.value < $1.value }?.key
+    log?.add("code: votes=\(votes) -> \(best ?? "nil")")
+    return best
   }
 
   // Ring fragments read as brackets / O are dropped; glyphs commonly read

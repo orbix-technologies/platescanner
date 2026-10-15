@@ -1,0 +1,229 @@
+{
+ "session": "1792063833588",
+ "expectedNumber": "0123456",
+ "events": [
+  {
+   "t_ms": 5612,
+   "event": "areaOcr",
+   "elements": [
+    {
+     "text": "O0123456",
+     "confidence": 0.7646484375,
+     "box": {
+      "left": 0.2126,
+      "top": 0.2208,
+      "right": 0.9684,
+      "bottom": 0.4625
+     },
+     "symbols": [
+      {
+       "text": "O",
+       "box": {
+        "left": 0.2126,
+        "top": 0.2479,
+        "right": 0.3852,
+        "bottom": 0.4625
+       }
+      },
+      {
+       "text": "0",
+       "box": {
+        "left": 0.4702,
+        "top": 0.2396,
+        "right": 0.5674,
+        "bottom": 0.45
+       }
+      },
+      {
+       "text": "1",
+       "box": {
+        "left": 0.5784,
+        "top": 0.2375,
+        "right": 0.627,
+        "bottom": 0.4458
+       }
+      },
+      {
+       "text": "2",
+       "box": {
+        "left": 0.6379,
+        "top": 0.2333,
+        "right": 0.6962,
+        "bottom": 0.4438
+       }
+      },
+      {
+       "text": "3",
+       "box": {
+        "left": 0.7205,
+        "top": 0.2292,
+        "right": 0.7764,
+        "bottom": 0.4396
+       }
+      },
+      {
+       "text": "4",
+       "box": {
+        "left": 0.7837,
+        "top": 0.2271,
+        "right": 0.8408,
+        "bottom": 0.4375
+       }
+      },
+      {
+       "text": "5",
+       "box": {
+        "left": 0.8663,
+        "top": 0.2229,
+        "right": 0.9235,
+        "bottom": 0.4333
+       }
+      },
+      {
+       "text": "6",
+       "box": {
+        "left": 0.9368,
+        "top": 0.2208,
+        "right": 0.9684,
+        "bottom": 0.4292
+       }
+      }
+     ]
+    },
+    {
+     "text": "O0123456",
+     "confidence": 0.70166015625,
+     "box": {
+      "left": 0.2211,
+      "top": 0.5708,
+      "right": 0.9745,
+      "bottom": 0.7833
+     },
+     "symbols": [
+      {
+       "text": "O",
+       "box": {
+        "left": 0.2211,
+        "top": 0.5708,
+        "right": 0.3888,
+        "bottom": 0.7833
+       }
+      },
+      {
+       "text": "0",
+       "box": {
+        "left": 0.4739,
+        "top": 0.5708,
+        "right": 0.5674,
+        "bottom": 0.7833
+       }
+      },
+      {
+       "text": "1",
+       "box": {
+        "left": 0.5796,
+        "top": 0.5708,
+        "right": 0.627,
+        "bottom": 0.7833
+       }
+      },
+      {
+       "text": "2",
+       "box": {
+        "left": 0.6355,
+        "top": 0.5708,
+        "right": 0.6914,
+        "bottom": 0.7833
+       }
+      },
+      {
+       "text": "3",
+       "box": {
+        "left": 0.7181,
+        "top": 0.5708,
+        "right": 0.7728,
+        "bottom": 0.7833
+       }
+      },
+      {
+       "text": "4",
+       "box": {
+        "left": 0.7789,
+        "top": 0.5708,
+        "right": 0.8335,
+        "bottom": 0.7833
+       }
+      },
+      {
+       "text": "5",
+       "box": {
+        "left": 0.8566,
+        "top": 0.5708,
+        "right": 0.9198,
+        "bottom": 0.7833
+       }
+      },
+      {
+       "text": "6",
+       "box": {
+        "left": 0.9441,
+        "top": 0.5708,
+        "right": 0.9745,
+        "bottom": 0.7833
+       }
+      }
+     ]
+    }
+   ],
+   "codeHint": "2",
+   "regionColumns": [],
+   "nativePasses": [
+    "area: src=[51,635][583,945] image=886x1920 scale=1.548387 page=967x624 pad=72",
+    "code: anchor digit=Rect(459, 187 - 539, 288) numberHeight=110.0 image=967x624",
+    "code: crop=[52.0,211.0][96.0,255.0] bw=false read='' -> null",
+    "code: crop=[68.5,211.0][112.5,255.0] bw=false read='' -> null",
+    "code: crop=[85.0,211.0][129.0,255.0] bw=false read='' -> null",
+    "code: crop=[101.5,211.0][145.5,255.0] bw=false read='' -> null",
+    "code: crop=[118.0,211.0][162.0,255.0] bw=false read='' -> null",
+    "code: crop=[134.5,211.0][178.5,255.0] bw=false read='' -> null",
+    "code: crop=[151.0,211.0][195.0,255.0] bw=false read='' -> null",
+    "code: crop=[167.5,211.0][211.5,255.0] bw=false read='' -> null",
+    "code: crop=[184.0,211.0][228.0,255.0] bw=false read='' -> null",
+    "code: crop=[200.5,211.0][244.5,255.0] bw=false read='' -> null",
+    "code: crop=[217.0,211.0][261.0,255.0] bw=false read='' -> null",
+    "code: crop=[233.5,211.0][277.5,255.0] bw=false read='' -> null",
+    "code: crop=[250.0,211.0][294.0,255.0] bw=false read='' -> null",
+    "code: crop=[266.5,211.0][310.5,255.0] bw=false read='' -> null",
+    "code: crop=[283.0,211.0][327.0,255.0] bw=false read='' -> null",
+    "code: crop=[299.5,211.0][343.5,255.0] bw=false read='' -> null",
+    "code: crop=[316.0,211.0][360.0,255.0] bw=false read='' -> null",
+    "code: crop=[332.5,211.0][376.5,255.0] bw=false read='' -> null",
+    "code: crop=[349.0,211.0][393.0,255.0] bw=false read='' -> null",
+    "code: crop=[365.5,211.0][409.5,255.0] bw=false read='' -> null",
+    "code: crop=[382.0,211.0][426.0,255.0] bw=false read='' -> null",
+    "code: crop=[52.0,211.0][96.0,255.0] bw=true read='' -> null",
+    "code: crop=[68.5,211.0][112.5,255.0] bw=true read='' -> null",
+    "code: crop=[85.0,211.0][129.0,255.0] bw=true read='' -> null",
+    "code: crop=[101.5,211.0][145.5,255.0] bw=true read='' -> null",
+    "code: crop=[118.0,211.0][162.0,255.0] bw=true read='' -> null",
+    "code: crop=[134.5,211.0][178.5,255.0] bw=true read='' -> null",
+    "code: crop=[151.0,211.0][195.0,255.0] bw=true read='' -> null",
+    "code: crop=[167.5,211.0][211.5,255.0] bw=true read='' -> null",
+    "code: crop=[184.0,211.0][228.0,255.0] bw=true read='' -> null",
+    "code: crop=[200.5,211.0][244.5,255.0] bw=true read='' -> null",
+    "code: crop=[217.0,211.0][261.0,255.0] bw=true read='' -> null",
+    "code: crop=[233.5,211.0][277.5,255.0] bw=true read='' -> null",
+    "code: crop=[250.0,211.0][294.0,255.0] bw=true read='.)' -> null",
+    "code: crop=[266.5,211.0][310.5,255.0] bw=true read='2)' -> 2",
+    "region: zone/top crop=[874,168][967,233] bw=false read='' -> null",
+    "region: zone/top crop=[874,168][967,233] bw=true read='' -> null",
+    "region: zone/bottom crop=[874,233][967,298] bw=false read='' -> null",
+    "region: zone/bottom crop=[874,233][967,298] bw=true read='' -> null",
+    "region: lastDigit/top crop=[838,168][874,233] bw=false read='' -> null",
+    "region: lastDigit/top crop=[838,168][874,233] bw=true read='' -> null",
+    "region: lastDigit/bottom crop=[838,233][874,298] bw=false read='' -> null",
+    "region: lastDigit/bottom crop=[838,233][874,298] bw=true read='' -> null"
+   ]
+  }
+ ]
+}

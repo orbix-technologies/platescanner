@@ -40,13 +40,30 @@ void main() {
       expect(r.arrangement.code.note, 'by colour');
     });
 
-    test('the circle read wins over the colour', () {
+    test('a clear colour wins when the circle read disagrees', () {
       final r = arranger.arrange(
         const AreaOcr(
             elements: [number], codeHint: '3', inkColor: [210, 60, 60]),
       );
-      expect(r.arrangement.code.value, '3');
+      expect(r.arrangement.code.value, '1');
+      expect(r.arrangement.code.note, 'by colour (circle read 3)');
+    });
+
+    test('agreeing circle and colour: no note', () {
+      final r = arranger.arrange(
+        const AreaOcr(
+            elements: [number], codeHint: '1', inkColor: [210, 60, 60]),
+      );
+      expect(r.arrangement.code.value, '1');
       expect(r.arrangement.code.note, isNull);
+    });
+
+    test('an unclear colour leaves the circle read', () {
+      final r = arranger.arrange(
+        const AreaOcr(
+            elements: [number], codeHint: '3', inkColor: [150, 150, 150]),
+      );
+      expect(r.arrangement.code.value, '3');
     });
   });
 }

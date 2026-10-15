@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import '../models/ocr_frame.dart';
 import '../models/plate_area.dart';
 import '../models/plate_record.dart';
@@ -56,12 +58,25 @@ class PlateArranger {
     // Section 4 from the stacked-letter pass: the first column whose letters
     // name a region. Its column is taken out before the number is found:
     // OCR often merges the two letters into one tall "digit" glued to it.
+    // A column cut from the number's last "digit" is only trusted when that
+    // character is no real digit (`|`, `!`) or the run was too long for a
+    // number — otherwise it would steal a real digit.
+    final raw = _number(chars);
     RegionColumn? column;
     for (final c in ocr.regionColumns) {
-      if (c.letters.length == 2 && parser.readRegion(c.letters) != null) {
-        column = c;
-        break;
+      if (c.letters.length != 2 || parser.readRegion(c.letters) == null) {
+        continue;
       }
+      if (c.source == 'lastDigit' && raw != null) {
+        final covered = raw.chars.where(
+            (x) => x.box.centerX >= c.box.left && x.box.centerX <= c.box.right);
+        final stealsDigit = covered.isNotEmpty &&
+            covered.every((x) => _isDigit(x.text)) &&
+            raw.runLength <= 7;
+        if (stealsDigit) continue;
+      }
+      column = c;
+      break;
     }
     final useColumn = column != null;
     if (column != null) {
@@ -172,12 +187,13 @@ class PlateArranger {
   /// All characters with boxes; spread evenly when the backend gave none.
   List<_Char> _chars(AreaOcr ocr) {
     final out = <_Char>[];
-    for (final e in ocr.elements) {
+    for (var ei = 0; ei < ocr.elements.length; ei++) {
+      final e = ocr.elements[ei];
       if (e.symbols.isNotEmpty) {
         for (final s in e.symbols) {
           final t = _normalize(s.text);
           if (t.trim().isNotEmpty) {
-            out.add(_Char(t, s.box, lowercase: _isLower(s.text)));
+            out.add(_Char(t, s.box, lowercase: _isLower(s.text), element: ei));
           }
         }
         continue;
@@ -192,6 +208,7 @@ class PlateArranger {
           t,
           NormalizedRect(l, e.box.top, l + step, e.box.bottom),
           lowercase: _isLower(text[i]),
+          element: ei,
         ));
       }
     }
@@ -222,6 +239,20 @@ class PlateArranger {
   /// by side on one row (5–7 long, mostly real digits). Anything else on the
   /// row between them (a `-`, a symbol) breaks the run.
   _Number? _number(List<_Char> chars) {
+    // Within each OCR element first: another line crossing the number (a
+    // watermark, a frame edge) would otherwise interleave with its digits.
+    _Number? best;
+    final elements = chars.map((c) => c.element).toSet();
+    for (final e in elements) {
+      final n = _numberIn(chars.where((c) => c.element == e).toList());
+      if (n != null && (best == null || n.realDigits > best.realDigits)) {
+        best = n;
+      }
+    }
+    return best ?? _numberIn(chars);
+  }
+
+  _Number? _numberIn(List<_Char> chars) {
     final digits = chars.where((c) => _isDigit(c.text)).toList();
     if (digits.isEmpty) return null;
     final tallest =
@@ -236,17 +267,26 @@ class PlateArranger {
     void close() {
       var kept = run;
       // Too long: drop letter-for-digit guesses at the edges (a ring read as
-      // "D"), then extra characters on the right (merged stacked letters).
+      // "D"), then the edge whose width is furthest from a digit's. Real
+      // logs: the ring read as "0" is ~3x a digit wide; stacked letters
+      // merged into one glyph are ~half a digit wide.
       while (kept.length > 7 && !_isDigit(kept.first.text)) {
         kept = kept.sublist(1);
       }
       while (kept.length > 7 && !_isDigit(kept.last.text)) {
         kept = kept.sublist(0, kept.length - 1);
       }
-      if (kept.length > 7) kept = kept.sublist(0, 7);
+      while (kept.length > 7) {
+        final widths = kept.map((c) => c.box.width).toList()..sort();
+        final median = widths[widths.length ~/ 2];
+        double off(_Char c) => (math.log(c.box.width / median)).abs();
+        kept = off(kept.first) > off(kept.last) + 0.15
+            ? kept.sublist(1)
+            : kept.sublist(0, kept.length - 1);
+      }
       final real = kept.where((c) => _isDigit(c.text)).length;
       if (kept.length >= 5 && real >= 4) {
-        final n = _Number(List.of(kept));
+        final n = _Number(List.of(kept), runLength: run.length);
         if (best == null || n.realDigits > best!.realDigits) best = n;
       }
       run = <_Char>[];
@@ -283,8 +323,8 @@ class PlateArranger {
   /// code zone (a ring read as a letter is not a code). [zone] is where the
   /// circle sits.
   ///
-  /// Last resort: the number's ink colour, which encodes the same category
-  /// (1 red, 2 blue, 3 green, 4 black, 5 orange).
+  /// The number's ink colour encodes the same category and decides when
+  /// it disagrees with the circle read.
   PlateSection _codeSection(
     List<_Char> chars,
     String? hint,
@@ -301,10 +341,17 @@ class PlateArranger {
         if (value != null) break;
       }
     }
-    if (value == null && ink != null && ink.length == 3) {
-      final colour = InkColor.classify(ink[0], ink[1], ink[2]);
-      value = PlateServiceType.fromInk(colour)?.code;
-      if (value != null) note = 'by colour';
+    // The number's colour encodes the same category (1 red, 2 blue,
+    // 3 green, 4 black, 5 orange). Real logs showed the circle read
+    // misfiring, so a clear colour wins when the two disagree.
+    if (ink != null && ink.length == 3) {
+      final byColour = PlateServiceType.fromInk(
+        InkColor.classify(ink[0], ink[1], ink[2]),
+      )?.code;
+      if (byColour != null && byColour != value) {
+        note = value == null ? 'by colour' : 'by colour (circle read $value)';
+        value = byColour;
+      }
     }
     final box = zone != null && zone.width > 0.01 ? zone : _union(chars);
     return PlateSection(
@@ -365,7 +412,13 @@ class PlateArranger {
           ? a.box.left.compareTo(b.box.left)
           : a.box.top.compareTo(b.box.top);
     });
-    final value = letters.map((c) => c.text).join();
+    var value = letters.map((c) => c.text).join();
+    // Loose letters count only if they name a region or are at most two
+    // (more is stray text crossing the plate, e.g. a watermark).
+    if (parser.readRegion(value) == null && letters.length > 2) {
+      letters.clear();
+      value = '';
+    }
     return PlateSection(
       kind: PlateSectionKind.latinRegion,
       value: value,
@@ -412,7 +465,10 @@ class PlateArranger {
 }
 
 class _Char {
-  _Char(this.text, this.box, {this.lowercase = false});
+  _Char(this.text, this.box, {this.lowercase = false, this.element = -1});
+
+  /// Index of the OCR element this character came from.
+  final int element;
   final String text;
   final NormalizedRect box;
 
@@ -422,8 +478,11 @@ class _Char {
 }
 
 class _Number {
-  _Number(this.chars);
+  _Number(this.chars, {required this.runLength});
   final List<_Char> chars;
+
+  /// Characters in the run before trimming to seven.
+  final int runLength;
 
   int get realDigits =>
       chars.where((c) => PlateArranger._isDigit(c.text)).length;

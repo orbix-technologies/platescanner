@@ -1,0 +1,235 @@
+{
+ "session": "1792063633521",
+ "expectedNumber": "0123456",
+ "events": [
+  {
+   "t_ms": 13907,
+   "event": "areaOcr",
+   "elements": [
+    {
+     "text": "o-01234565",
+     "confidence": 0.619921863079071,
+     "box": {
+      "left": 0.0449,
+      "top": 0.1833,
+      "right": 0.9261,
+      "bottom": 0.7
+     },
+     "symbols": [
+      {
+       "text": "o",
+       "box": {
+        "left": 0.0449,
+        "top": 0.1833,
+        "right": 0.1662,
+        "bottom": 0.7
+       }
+      },
+      {
+       "text": "-",
+       "box": {
+        "left": 0.2099,
+        "top": 0.1833,
+        "right": 0.2927,
+        "bottom": 0.7
+       }
+      },
+      {
+       "text": "0",
+       "box": {
+        "left": 0.3134,
+        "top": 0.1833,
+        "right": 0.3844,
+        "bottom": 0.7
+       }
+      },
+      {
+       "text": "1",
+       "box": {
+        "left": 0.4145,
+        "top": 0.1833,
+        "right": 0.4778,
+        "bottom": 0.7
+       }
+      },
+      {
+       "text": "2",
+       "box": {
+        "left": 0.4867,
+        "top": 0.1833,
+        "right": 0.5517,
+        "bottom": 0.7
+       }
+      },
+      {
+       "text": "3",
+       "box": {
+        "left": 0.5843,
+        "top": 0.1833,
+        "right": 0.6487,
+        "bottom": 0.7
+       }
+      },
+      {
+       "text": "4",
+       "box": {
+        "left": 0.657,
+        "top": 0.1833,
+        "right": 0.7221,
+        "bottom": 0.7
+       }
+      },
+      {
+       "text": "5",
+       "box": {
+        "left": 0.7552,
+        "top": 0.1833,
+        "right": 0.8196,
+        "bottom": 0.7
+       }
+      },
+      {
+       "text": "6",
+       "box": {
+        "left": 0.8374,
+        "top": 0.1833,
+        "right": 0.8823,
+        "bottom": 0.7
+       }
+      },
+      {
+       "text": "5",
+       "box": {
+        "left": 0.8906,
+        "top": 0.1833,
+        "right": 0.9261,
+        "bottom": 0.7
+       }
+      }
+     ]
+    },
+    {
+     "text": "wwiMetbcen",
+     "confidence": 0.557812511920929,
+     "box": {
+      "left": 0.0869,
+      "top": 0.6104,
+      "right": 0.644,
+      "bottom": 0.7792
+     },
+     "symbols": [
+      {
+       "text": "w",
+       "box": {
+        "left": 0.0869,
+        "top": 0.6104,
+        "right": 0.107,
+        "bottom": 0.7792
+       }
+      },
+      {
+       "text": "w",
+       "box": {
+        "left": 0.1118,
+        "top": 0.6104,
+        "right": 0.1301,
+        "bottom": 0.7792
+       }
+      },
+      {
+       "text": "i",
+       "box": {
+        "left": 0.1277,
+        "top": 0.6104,
+        "right": 0.162,
+        "bottom": 0.7792
+       }
+      },
+      {
+       "text": "M",
+       "box": {
+        "left": 0.1946,
+        "top": 0.6104,
+        "right": 0.2224,
+        "bottom": 0.7792
+       }
+      },
+      {
+       "text": "e",
+       "box": {
+        "left": 0.2153,
+        "top": 0.6104,
+        "right": 0.2324,
+        "bottom": 0.7792
+       }
+      },
+      {
+       "text": "t",
+       "box": {
+        "left": 0.2082,
+        "top": 0.6104,
+        "right": 0.3028,
+        "bottom": 0.7792
+       }
+      },
+      {
+       "text": "b",
+       "box": {
+        "left": 0.4027,
+        "top": 0.6104,
+        "right": 0.5198,
+        "bottom": 0.7792
+       }
+      },
+      {
+       "text": "c",
+       "box": {
+        "left": 0.5683,
+        "top": 0.6104,
+        "right": 0.6079,
+        "bottom": 0.7792
+       }
+      },
+      {
+       "text": "e",
+       "box": {
+        "left": 0.605,
+        "top": 0.6104,
+        "right": 0.6186,
+        "bottom": 0.7792
+       }
+      },
+      {
+       "text": "n",
+       "box": {
+        "left": 0.6263,
+        "top": 0.6104,
+        "right": 0.644,
+        "bottom": 0.7792
+       }
+      }
+     ]
+    }
+   ],
+   "codeHint": "4",
+   "regionColumns": [],
+   "nativePasses": [
+    "area: src=[212,676][642,798] image=886x1920 scale=3.9344263 page=1835x624 pad=72",
+    "code: anchor digit=Rect(602, 160 - 722, 408) numberHeight=248.0 image=1835x624",
+    "code: crop=[0.0,234.4][99.200005,333.6] bw=false read='' -> null",
+    "code: crop=[37.2,234.4][136.40001,333.6] bw=false read='' -> null",
+    "code: crop=[74.399994,234.4][173.6,333.6] bw=false read=')' -> null",
+    "code: crop=[111.59999,234.4][210.8,333.6] bw=false read='' -> null",
+    "code: crop=[148.79999,234.4][248.0,333.6] bw=false read='4)' -> 4",
+    "region: zone/top crop=[1650,136][1835,284] bw=false read='' -> null",
+    "region: zone/top crop=[1650,136][1835,284] bw=true read='' -> null",
+    "region: zone/bottom crop=[1650,284][1835,432] bw=false read='' -> null",
+    "region: zone/bottom crop=[1650,284][1835,432] bw=true read='' -> null",
+    "region: lastDigit/top crop=[1566,136][1650,284] bw=false read='' -> null",
+    "region: lastDigit/top crop=[1566,136][1650,284] bw=true read='' -> null",
+    "region: lastDigit/bottom crop=[1566,284][1650,432] bw=false read='' -> null",
+    "region: lastDigit/bottom crop=[1566,284][1650,432] bw=true read='' -> null"
+   ]
+  }
+ ]
+}

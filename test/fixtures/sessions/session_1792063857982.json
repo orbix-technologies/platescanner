@@ -1,0 +1,285 @@
+{
+ "session": "1792063857982",
+ "expectedNumber": "0123456",
+ "events": [
+  {
+   "t_ms": 18092,
+   "event": "areaOcr",
+   "elements": [
+    {
+     "text": "00123456|",
+     "confidence": 0.6861979365348816,
+     "box": {
+      "left": 0.0822,
+      "top": 0.1379,
+      "right": 0.9168,
+      "bottom": 0.8808
+     },
+     "symbols": [
+      {
+       "text": "0",
+       "box": {
+        "left": 0.0822,
+        "top": 0.1402,
+        "right": 0.2669,
+        "bottom": 0.8014
+       }
+      },
+      {
+       "text": "0",
+       "box": {
+        "left": 0.3604,
+        "top": 0.1729,
+        "right": 0.4554,
+        "bottom": 0.8224
+       }
+      },
+      {
+       "text": "1",
+       "box": {
+        "left": 0.4502,
+        "top": 0.1846,
+        "right": 0.4962,
+        "bottom": 0.8294
+       }
+      },
+      {
+       "text": "2",
+       "box": {
+        "left": 0.5066,
+        "top": 0.1916,
+        "right": 0.571,
+        "bottom": 0.8388
+       }
+      },
+      {
+       "text": "3",
+       "box": {
+        "left": 0.5959,
+        "top": 0.2033,
+        "right": 0.6565,
+        "bottom": 0.8505
+       }
+      },
+      {
+       "text": "4",
+       "box": {
+        "left": 0.6617,
+        "top": 0.2103,
+        "right": 0.7232,
+        "bottom": 0.8575
+       }
+      },
+      {
+       "text": "5",
+       "box": {
+        "left": 0.7491,
+        "top": 0.222,
+        "right": 0.8106,
+        "bottom": 0.8692
+       }
+      },
+      {
+       "text": "6",
+       "box": {
+        "left": 0.8191,
+        "top": 0.2313,
+        "right": 0.8717,
+        "bottom": 0.8762
+       }
+      },
+      {
+       "text": "|",
+       "box": {
+        "left": 0.8872,
+        "top": 0.2383,
+        "right": 0.9164,
+        "bottom": 0.8808
+       }
+      }
+     ]
+    },
+    {
+     "text": ":wwZMetaenpatd",
+     "confidence": 0.3978794515132904,
+     "box": {
+      "left": 0.047,
+      "top": 0.6495,
+      "right": 0.8496,
+      "bottom": 0.9603
+     },
+     "symbols": [
+      {
+       "text": ":",
+       "box": {
+        "left": 0.047,
+        "top": 0.6519,
+        "right": 0.1076,
+        "bottom": 0.8598
+       }
+      },
+      {
+       "text": "w",
+       "box": {
+        "left": 0.1382,
+        "top": 0.6636,
+        "right": 0.1715,
+        "bottom": 0.8668
+       }
+      },
+      {
+       "text": "w",
+       "box": {
+        "left": 0.1711,
+        "top": 0.6682,
+        "right": 0.1922,
+        "bottom": 0.8715
+       }
+      },
+      {
+       "text": "Z",
+       "box": {
+        "left": 0.2007,
+        "top": 0.6706,
+        "right": 0.2298,
+        "bottom": 0.8738
+       }
+      },
+      {
+       "text": "M",
+       "box": {
+        "left": 0.2444,
+        "top": 0.6776,
+        "right": 0.2664,
+        "bottom": 0.8808
+       }
+      },
+      {
+       "text": "e",
+       "box": {
+        "left": 0.2664,
+        "top": 0.6799,
+        "right": 0.2848,
+        "bottom": 0.8832
+       }
+      },
+      {
+       "text": "t",
+       "box": {
+        "left": 0.2932,
+        "top": 0.6846,
+        "right": 0.3125,
+        "bottom": 0.8879
+       }
+      },
+      {
+       "text": "a",
+       "box": {
+        "left": 0.2561,
+        "top": 0.6799,
+        "right": 0.3905,
+        "bottom": 0.8972
+       }
+      },
+      {
+       "text": "e",
+       "box": {
+        "left": 0.5836,
+        "top": 0.7243,
+        "right": 0.695,
+        "bottom": 0.9393
+       }
+      },
+      {
+       "text": "n",
+       "box": {
+        "left": 0.6386,
+        "top": 0.7313,
+        "right": 0.6809,
+        "bottom": 0.9369
+       }
+      },
+      {
+       "text": "p",
+       "box": {
+        "left": 0.726,
+        "top": 0.743,
+        "right": 0.7805,
+        "bottom": 0.9509
+       }
+      },
+      {
+       "text": "a",
+       "box": {
+        "left": 0.7961,
+        "top": 0.7523,
+        "right": 0.8186,
+        "bottom": 0.9556
+       }
+      },
+      {
+       "text": "t",
+       "box": {
+        "left": 0.8195,
+        "top": 0.757,
+        "right": 0.8351,
+        "bottom": 0.9579
+       }
+      },
+      {
+       "text": "d",
+       "box": {
+        "left": 0.8402,
+        "top": 0.7593,
+        "right": 0.8492,
+        "bottom": 0.9603
+       }
+      }
+     ]
+    },
+    {
+     "text": "M",
+     "confidence": 0.7578125,
+     "box": {
+      "left": 0.8778,
+      "top": 0.6308,
+      "right": 0.9102,
+      "bottom": 0.8832
+     },
+     "symbols": [
+      {
+       "text": "M",
+       "box": {
+        "left": 0.8778,
+        "top": 0.6308,
+        "right": 0.9102,
+        "bottom": 0.8832
+       }
+      }
+     ]
+    }
+   ],
+   "codeHint": null,
+   "regionColumns": [],
+   "nativePasses": [
+    "area: src=[135,636][667,743] image=886x1920 scale=4.0 page=2256x556 pad=64",
+    "code: anchor digit=Rect(239, 124 - 632, 407) numberHeight=315.0 image=2256x556",
+    "code: crop=[0.0,218.5][126.0,344.5] bw=false read='' -> null",
+    "code: crop=[47.25,218.5][173.25,344.5] bw=false read='' -> null",
+    "code: crop=[0.0,218.5][126.0,344.5] bw=true read='' -> null",
+    "code: crop=[47.25,218.5][173.25,344.5] bw=true read='' -> null",
+    "region: trailing/top crop=[1937,94][2029,281] bw=false read='' -> null",
+    "region: trailing/top crop=[1937,94][2029,281] bw=true read='' -> null",
+    "region: trailing/bottom crop=[1937,281][2029,469] bw=false read='H' -> H",
+    "region: zone/top crop=[1934,94][2256,281] bw=false read='' -> null",
+    "region: zone/top crop=[1934,94][2256,281] bw=true read='' -> null",
+    "region: zone/bottom crop=[1934,281][2256,469] bw=false read='' -> null",
+    "region: zone/bottom crop=[1934,281][2256,469] bw=true read='' -> null",
+    "region: lastDigit/top crop=[1792,94][1934,281] bw=false read='' -> null",
+    "region: lastDigit/top crop=[1792,94][1934,281] bw=true read='' -> null",
+    "region: lastDigit/bottom crop=[1792,281][1934,469] bw=false read='Se' -> null",
+    "region: lastDigit/bottom crop=[1792,281][1934,469] bw=true read='' -> null"
+   ]
+  }
+ ]
+}
