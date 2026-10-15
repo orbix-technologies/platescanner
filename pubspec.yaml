@@ -1,0 +1,50 @@
+name: et_plate_reader
+description: Embeddable Ethiopian licence plate reader for Flutter (on-device camera + OCR).
+version: 0.1.0
+publish_to: none
+
+topics:
+  - ocr
+  - license-plate
+  - ethiopia
+  - camera
+  - flutter-plugin
+
+environment:
+  # Flutter 3.24+ / Dart 3.5+, matching ar_measurement — see doc/SUPPORTED_TOOLCHAIN.md.
+  sdk: '>=3.5.0 <4.0.0'
+  flutter: '>=3.24.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  # Ranges allow older hosts to resolve pre-3.9 / pre-3.12 package versions.
+  json_annotation: '>=4.9.0 <5.0.0'
+  logger: ^2.0.0
+  path: '>=1.9.0 <2.0.0'
+  permission_handler: '>=12.0.0 <14.0.0'
+  sqflite: '>=2.3.3 <3.0.0'
+  uuid: ^4.5.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: '>=5.0.0 <7.0.0'
+  build_runner: '>=2.4.0 <3.0.0'
+  json_serializable: '>=6.8.0 <7.0.0'
+  sqflite_common_ffi: ^2.3.3
+
+# Mobile only — native camera PlatformView on Android and iOS.
+platforms:
+  android:
+  ios:
+
+flutter:
+  uses-material-design: true
+  plugin:
+    platforms:
+      android:
+        package: com.et_plate_reader
+        pluginClass: EtPlateReaderPlugin
+      ios:
+        pluginClass: EtPlateReaderPlugin

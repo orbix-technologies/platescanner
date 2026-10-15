@@ -1,0 +1,13 @@
+include: package:flutter_lints/flutter.yaml
+
+analyzer:
+  exclude:
+    - build/**
+    # Example is its own package — analyze from example/ so its deps resolve
+    - example/**
+    - android/**
+    - lib/src/models/*.g.dart
+
+linter:
+  rules:
+    - public_member_api_docs

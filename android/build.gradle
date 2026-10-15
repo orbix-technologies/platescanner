@@ -1,0 +1,50 @@
+group = "com.et_plate_reader"
+version = "1.0-SNAPSHOT"
+
+// Host Flutter app supplies AGP. Kotlin is applied without a plugin-local
+// buildscript classpath, as in ar_measurement. AGP 9 compiles Kotlin itself
+// unless the host sets android.builtInKotlin=false.
+apply plugin: "com.android.library"
+if (project.findProperty("android.builtInKotlin")?.toString() == "false") {
+    apply plugin: "kotlin-android"
+}
+
+android {
+    namespace = "com.et_plate_reader"
+    // Keep modest so hosts on Flutter 3.24-era SDKs can compile.
+    compileSdk = 35
+
+    defaultConfig {
+        minSdk = 24
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    sourceSets {
+        main.java.srcDirs += "src/main/kotlin"
+    }
+}
+
+tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+    }
+}
+
+dependencies {
+    implementation("org.jetbrains.kotlin:kotlin-stdlib:2.1.0")
+    implementation("androidx.appcompat:appcompat:1.6.1")
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
+
+    def camerax = "1.4.1"
+    implementation("androidx.camera:camera-core:$camerax")
+    implementation("androidx.camera:camera-camera2:$camerax")
+    implementation("androidx.camera:camera-lifecycle:$camerax")
+    implementation("androidx.camera:camera-view:$camerax")
+
+    // Latin OCR (prototype recogniser — see doc/MODEL_DECISION.md).
+    implementation("com.google.mlkit:text-recognition:16.0.1")
+}
