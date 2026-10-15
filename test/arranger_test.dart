@@ -154,8 +154,8 @@ void main() {
       codeHint: '3',
       elements: [
         word('654321', left: 0.3, top: 0.2, bottom: 0.8),
-        word('0', left: 0.92, top: 0.15, bottom: 0.45, charWidth: 0.05),
-        word('M', left: 0.92, top: 0.55, bottom: 0.85, charWidth: 0.05),
+        word('0', left: 0.85, top: 0.15, bottom: 0.45, charWidth: 0.05),
+        word('M', left: 0.85, top: 0.55, bottom: 0.85, charWidth: 0.05),
       ],
     ));
     expect(r.arrangement.latinRegion.value, 'OM');

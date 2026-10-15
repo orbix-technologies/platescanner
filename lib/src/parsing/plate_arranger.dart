@@ -79,7 +79,7 @@ class PlateArranger {
     if (number == null) {
       final arrangement = PlateArrangement(
         code: _codeSection(const [], ocr.codeHint, null),
-        geezRegion: _geezSection(const [], null, null),
+        geezRegion: _geezSection(const [], null),
         number: const PlateSection(
           kind: PlateSectionKind.number,
           value: '',
@@ -105,57 +105,58 @@ class PlateArranger {
 
     final nBox = number.box;
     final glyph = number.glyph;
-    final left = <_Char>[];
+
+    // The other sections sit at fixed distances from the number, measured in
+    // digit pitch p (measured on real plates: circle centre ≈ 2.8p left of
+    // the number, Ge'ez stack ≈ 1.6p, security chip ≈ 0.6p, Latin stack
+    // 0.1–1.0p right). Characters are assigned by the zone they fall in.
+    final p = nBox.width / number.chars.length;
+    double cx(double v) => v.clamp(0.0, 1.0);
+    final codeZone = NormalizedRect(cx(nBox.left - 3.6 * p), nBox.top,
+        cx(nBox.left - 2.0 * p), nBox.bottom);
+    final geezZone = NormalizedRect(cx(nBox.left - 2.0 * p), nBox.top,
+        cx(nBox.left - 1.05 * p), nBox.bottom);
+    final latinZone = NormalizedRect(cx(nBox.right + 0.05 * p), nBox.top,
+        cx(nBox.right + 1.6 * p), nBox.bottom);
+    bool inZone(_Char c, NormalizedRect z) =>
+        c.box.centerX >= z.left && c.box.centerX <= z.right;
+
+    final codeChars = <_Char>[];
+    final geezChars = <_Char>[];
     final right = <_Char>[];
     for (final c in chars) {
       if (number.chars.contains(c)) continue;
       if (c.box.height < glyph * _minGlyph) {
         ignored.add(PlateChar(c.text, c.box));
-      } else if (c.box.centerX >= nBox.right - glyph * 0.1) {
+      } else if (_isGeez(c.text) && c.box.centerX < nBox.left) {
+        geezChars.add(c); // Ge'ez script is section 2 wherever it lands
+      } else if (inZone(c, codeZone)) {
+        codeChars.add(c);
+      } else if (inZone(c, geezZone)) {
+        geezChars.add(c);
+      } else if (c.box.centerX >= nBox.right - glyph * 0.1 &&
+          c.box.centerX <= latinZone.right) {
         right.add(c);
-      } else if (c.box.centerX <= nBox.left + glyph * 0.1) {
-        left.add(c);
       } else {
         ignored.add(PlateChar(c.text, c.box));
       }
     }
 
-    // Left of the number: code (leftmost group) then Ge'ez. Ge'ez script
-    // always belongs to the Ge'ez section, wherever it is.
-    final geezScript = left.where((c) => _isGeez(c.text)).toList();
-    final clusters = _clusters(
-      left.where((c) => !_isGeez(c.text)).toList(),
-      gap: glyph * 0.15,
-    );
-    List<_Char> codeChars = const [];
-    final geezChars = <_Char>[...geezScript];
-    if (clusters.isNotEmpty) {
-      final first = clusters.first;
-      // One group only: the circle sits in the outer half of the space
-      // left of the number, the Ge'ez next to the number.
-      final firstX = _union(first)!.centerX;
-      final geezX = geezScript.isEmpty ? null : _union(geezScript)!.left;
-      final looksLikeCode = first.any((c) => _codeDigit(c.text) != null) ||
-          clusters.length > 1 ||
-          (geezX != null && firstX < geezX) ||
-          firstX < nBox.left * 0.5;
-      if (looksLikeCode) {
-        codeChars = first;
-        for (final c in clusters.skip(1)) {
-          geezChars.addAll(c);
-        }
-      } else {
-        for (final c in clusters) {
-          geezChars.addAll(c);
-        }
-      }
-    }
-
+    final latin = useColumn ? _columnSection(column) : _latinSection(right);
     final arrangement = PlateArrangement(
-      code: _codeSection(codeChars, ocr.codeHint, nBox),
-      geezRegion: _geezSection(geezChars, codeChars, nBox),
+      code: _codeSection(codeChars, ocr.codeHint, codeZone),
+      geezRegion: _geezSection(geezChars, geezZone),
       number: number.section,
-      latinRegion: useColumn ? _columnSection(column) : _latinSection(right),
+      // Show where section 4 is expected even when nothing was read there.
+      latinRegion: latin.box != null
+          ? latin
+          : PlateSection(
+              kind: latin.kind,
+              value: latin.value,
+              chars: latin.chars,
+              box: latinZone.width > 0.01 ? latinZone : null,
+              detected: latin.detected,
+            ),
       ignored: [
         ...ignored,
         if (useColumn)
@@ -273,37 +274,18 @@ class PlateArranger {
     return best;
   }
 
-  /// Splits characters (sorted by x) where the horizontal gap exceeds [gap].
-  List<List<_Char>> _clusters(List<_Char> chars, {required double gap}) {
-    final sorted = [...chars]..sort((a, b) => a.box.left.compareTo(b.box.left));
-    final out = <List<_Char>>[];
-    for (final c in sorted) {
-      if (out.isEmpty) {
-        out.add([c]);
-        continue;
-      }
-      final right =
-          out.last.map((x) => x.box.right).reduce((a, b) => a > b ? a : b);
-      if (c.box.left - right > gap) {
-        out.add([c]);
-      } else {
-        out.last.add(c);
-      }
-    }
-    return out;
-  }
-
   String? _codeDigit(String t) {
     final d = _isDigit(t) ? t : _toDigit[t];
     return PlateServiceType.isKnown(d) ? d : null;
   }
 
   /// Section 1: the circled-code pass wins; else a code digit read in the
-  /// leftmost cluster (a ring read as a letter is not a code).
+  /// code zone (a ring read as a letter is not a code). [zone] is where the
+  /// circle sits.
   PlateSection _codeSection(
     List<_Char> chars,
     String? hint,
-    NormalizedRect? number,
+    NormalizedRect? zone,
   ) {
     String? value;
     if (PlateServiceType.isKnown(hint) && int.tryParse(hint!) != null) {
@@ -314,16 +296,7 @@ class PlateArranger {
         if (value != null) break;
       }
     }
-    var box = _union(chars);
-    if (box == null && number != null && value != null) {
-      // Located by the circle pass only: the area left of the number.
-      box = NormalizedRect(
-        0,
-        number.top,
-        (number.left * 0.45).clamp(0.02, 1.0),
-        number.bottom,
-      );
-    }
+    final box = zone != null && zone.width > 0.01 ? zone : _union(chars);
     return PlateSection(
       kind: PlateSectionKind.code,
       value: value ?? '',
@@ -334,21 +307,11 @@ class PlateArranger {
   }
 
   /// Section 2: Ge'ez characters if the recogniser produced any, else `XX`.
-  PlateSection _geezSection(
-    List<_Char> chars,
-    List<_Char>? code,
-    NormalizedRect? number,
-  ) {
+  /// [zone] is where the stack sits.
+  PlateSection _geezSection(List<_Char> chars, NormalizedRect? zone) {
     final geez = chars.where((c) => _isGeez(c.text)).toList()
       ..sort((a, b) => a.box.top.compareTo(b.box.top));
-    var box = _union(chars);
-    if (box == null && number != null) {
-      // Not read at all: the gap between the code and the number.
-      final from = _union(code ?? const [])?.right ?? number.left * 0.45;
-      if (number.left - from > 0.02) {
-        box = NormalizedRect(from, number.top, number.left, number.bottom);
-      }
-    }
+    final box = zone != null && zone.width > 0.01 ? zone : _union(chars);
     if (geez.isEmpty) {
       return PlateSection(
         kind: PlateSectionKind.geezRegion,
