@@ -129,6 +129,7 @@ class AreaOcr {
     required this.elements,
     this.codeHint,
     this.regionColumns = const [],
+    this.inkColor,
     this.debug = const [],
   });
 
@@ -141,6 +142,10 @@ class AreaOcr {
   /// Columns the stacked-letter pass read, in the order it tried them; the
   /// arranger uses the first whose letters name a region.
   final List<RegionColumn> regionColumns;
+
+  /// Average colour of the number's characters as `[r, g, b]` (0–255), if
+  /// measured. The colour identifies the category (code 1 red … 5 orange).
+  final List<int>? inkColor;
 
   /// What the native section passes tried and read (diagnostics).
   final List<String> debug;
@@ -158,6 +163,10 @@ class AreaOcr {
         regionColumns: (map['regionColumns'] as List<Object?>? ?? const [])
             .whereType<Map<Object?, Object?>>()
             .map(RegionColumn.fromMap)
+            .toList(growable: false),
+        inkColor: (map['inkColor'] as List<Object?>?)
+            ?.whereType<num>()
+            .map((v) => v.toInt())
             .toList(growable: false),
         debug: (map['debug'] as List<Object?>? ?? const [])
             .whereType<String>()
@@ -204,6 +213,7 @@ class PlateSection {
     this.chars = const [],
     this.box,
     this.detected = true,
+    this.note,
   });
 
   /// Which section this is.
@@ -221,6 +231,9 @@ class PlateSection {
 
   /// False when the value is a placeholder (Ge'ez `XX`) or empty.
   final bool detected;
+
+  /// How the value was obtained when not read directly (e.g. `by colour`).
+  final String? note;
 
   /// Placeholder shown for Ge'ez that could not be read.
   static const geezPlaceholder = 'XX';

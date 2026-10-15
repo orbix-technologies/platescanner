@@ -31,7 +31,7 @@ export 'src/models/plate_record.dart'
     show PlateCandidate, PlateIssue, PlateLayout, PlateLocation, PlateRecord;
 export 'src/parsing/ethiopian_plate_parser.dart' show EthiopianPlateParser;
 export 'src/parsing/ethiopian_region.dart' show EthiopianRegion;
-export 'src/parsing/plate_service_type.dart' show PlateServiceType;
+export 'src/parsing/plate_service_type.dart' show InkColor, PlateServiceType;
 export 'src/parsing/plate_area_detector.dart'
     show PlateAreaDetector, PlateAreaTracker;
 export 'src/parsing/plate_arranger.dart' show PlateArranger;

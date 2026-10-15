@@ -1,9 +1,9 @@
 /// Regions (and the federal series) printed on Ethiopian plates.
 ///
 /// Plates are read by their Latin letters only; [amharicLabel] is a display
-/// mapping, never recognised. Codes are provisional — verify against the
-/// Ministry of Transport and Logistics plate specification before release
-/// (see doc/PLATE_FORMAT.md).
+/// mapping, never recognised. ET, AA, AF, AM, BG, DR, GM, HR, OR and SM are
+/// from https://www.metaappz.com/References/Ethiopian_licence_plates; the
+/// others are unverified (see doc/PLATE_FORMAT.md).
 enum EthiopianRegion {
   /// Addis Ababa city administration.
   addisAbaba('AA', 'Addis Ababa', 'አአ'),

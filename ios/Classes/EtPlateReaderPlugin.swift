@@ -164,6 +164,17 @@ public class EtPlateReaderPlugin: NSObject, FlutterPlugin {
         column["bottomHalf"] = normPx(col.bottom)
         return column
       }
+      // Section 1 fallback: the number's ink colour gives the code.
+      if let a = CropOcr.numberAnchor(
+        observations, width: CGFloat(page.width), height: CGFloat(page.height))
+      {
+        let numberBox = CGRect(
+          x: a.first.minX, y: a.top, width: a.last.maxX - a.first.minX, height: a.height)
+        if let rgb = CropOcr.inkColor(page, area: numberBox) {
+          payload["inkColor"] = rgb
+          log.add("ink: number=\(numberBox) rgb=\(rgb)")
+        }
+      }
       payload["debug"] = log.lines
       DispatchQueue.main.async { result(payload) }
     }

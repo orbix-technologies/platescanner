@@ -864,6 +864,11 @@ class _SectionCard extends StatelessWidget {
                   )
                 : Text(chars.join(), style: style),
           ),
+          if (section.note != null)
+            Text(
+              section.note!,
+              style: const TextStyle(color: Colors.white54, fontSize: 9),
+            ),
         ],
       ),
     );

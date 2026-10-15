@@ -181,6 +181,14 @@ class EtPlateReaderPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                         "bottomHalf" to norm(col.bottom),
                     )
                 }
+                // Section 1 fallback: the number's ink colour gives the code.
+                CropOcr.numberAnchor(text)?.let { a ->
+                    val numberBox = Rect(a.first.left, a.top, a.last.right, a.bottom)
+                    CropOcr.inkColor(page, numberBox)?.let { rgb ->
+                        payload["inkColor"] = rgb.toList()
+                        log.add("ink: number=${numberBox.toShortString()} rgb=${rgb.toList()}")
+                    }
+                }
                 payload["debug"] = log
                 main.post { result.success(payload) }
             } catch (e: Exception) {

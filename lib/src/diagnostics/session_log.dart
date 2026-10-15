@@ -116,6 +116,7 @@ class SessionLog {
               'box': rect(c.box),
             },
         ],
+        'inkColor': ocr.inkColor,
         'nativePasses': ocr.debug,
       };
 
@@ -127,6 +128,7 @@ class SessionLog {
             {
               'kind': s.kind.name,
               'value': s.value,
+              'note': s.note,
               'detected': s.detected,
               'box': rect(s.box),
               'chars': [

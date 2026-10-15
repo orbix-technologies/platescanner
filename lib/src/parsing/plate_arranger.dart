@@ -78,7 +78,7 @@ class PlateArranger {
 
     if (number == null) {
       final arrangement = PlateArrangement(
-        code: _codeSection(const [], ocr.codeHint, null),
+        code: _codeSection(const [], ocr.codeHint, null, null),
         geezRegion: _geezSection(const [], null),
         number: const PlateSection(
           kind: PlateSectionKind.number,
@@ -144,7 +144,7 @@ class PlateArranger {
 
     final latin = useColumn ? _columnSection(column) : _latinSection(right);
     final arrangement = PlateArrangement(
-      code: _codeSection(codeChars, ocr.codeHint, codeZone),
+      code: _codeSection(codeChars, ocr.codeHint, codeZone, ocr.inkColor),
       geezRegion: _geezSection(geezChars, geezZone),
       number: number.section,
       // Show where section 4 is expected even when nothing was read there.
@@ -282,12 +282,17 @@ class PlateArranger {
   /// Section 1: the circled-code pass wins; else a code digit read in the
   /// code zone (a ring read as a letter is not a code). [zone] is where the
   /// circle sits.
+  ///
+  /// Last resort: the number's ink colour, which encodes the same category
+  /// (1 red, 2 blue, 3 green, 4 black, 5 orange).
   PlateSection _codeSection(
     List<_Char> chars,
     String? hint,
     NormalizedRect? zone,
+    List<int>? ink,
   ) {
     String? value;
+    String? note;
     if (PlateServiceType.isKnown(hint) && int.tryParse(hint!) != null) {
       value = hint;
     } else {
@@ -296,6 +301,11 @@ class PlateArranger {
         if (value != null) break;
       }
     }
+    if (value == null && ink != null && ink.length == 3) {
+      final colour = InkColor.classify(ink[0], ink[1], ink[2]);
+      value = PlateServiceType.fromInk(colour)?.code;
+      if (value != null) note = 'by colour';
+    }
     final box = zone != null && zone.width > 0.01 ? zone : _union(chars);
     return PlateSection(
       kind: PlateSectionKind.code,
@@ -303,6 +313,7 @@ class PlateArranger {
       chars: value == null || box == null ? const [] : [PlateChar(value, box)],
       box: box,
       detected: value != null,
+      note: note,
     );
   }
 

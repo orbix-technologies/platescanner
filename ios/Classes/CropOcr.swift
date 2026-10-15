@@ -98,6 +98,69 @@ enum CropOcr {
     return ctx.makeImage()
   }
 
+  /// Average colour of the ink (pixels darker than the Otsu threshold) in
+  /// `area` (pixels, top-left origin), as [r, g, b], or nil. The number's
+  /// colour identifies the category (code 1 red … 5 orange).
+  static func inkColor(_ image: CGImage, area: CGRect) -> [Int]? {
+    let bounds = CGRect(x: 0, y: 0, width: image.width, height: image.height)
+    let r = area.integral.intersection(bounds)
+    guard r.width >= 4, r.height >= 4, let crop = image.cropping(to: r) else { return nil }
+    let w = crop.width
+    let h = crop.height
+    guard
+      let ctx = CGContext(
+        data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4,
+        space: CGColorSpaceCreateDeviceRGB(),
+        bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)
+    else { return nil }
+    ctx.draw(crop, in: CGRect(x: 0, y: 0, width: w, height: h))
+    guard let data = ctx.data else { return nil }
+    let px = data.bindMemory(to: UInt8.self, capacity: w * h * 4)
+    var lum = [Int](repeating: 0, count: w * h)
+    for i in 0..<(w * h) {
+      lum[i] = (299 * Int(px[i * 4]) + 587 * Int(px[i * 4 + 1]) + 114 * Int(px[i * 4 + 2])) / 1000
+    }
+    let t = otsu(lum)
+    var n = 0
+    var sr = 0
+    var sg = 0
+    var sb = 0
+    for i in 0..<(w * h) where lum[i] <= t {
+      sr += Int(px[i * 4])
+      sg += Int(px[i * 4 + 1])
+      sb += Int(px[i * 4 + 2])
+      n += 1
+    }
+    return n == 0 ? nil : [sr / n, sg / n, sb / n]
+  }
+
+  static func otsu(_ lum: [Int]) -> Int {
+    var hist = [Int](repeating: 0, count: 256)
+    for l in lum { hist[l] += 1 }
+    let total = lum.count
+    var sum = 0.0
+    for t in 0..<256 { sum += Double(t * hist[t]) }
+    var sumB = 0.0
+    var wB = 0
+    var best = 0.0
+    var threshold = 128
+    for t in 0..<256 {
+      wB += hist[t]
+      if wB == 0 { continue }
+      let wF = total - wB
+      if wF == 0 { break }
+      sumB += Double(t * hist[t])
+      let mB = sumB / Double(wB)
+      let mF = (sum - sumB) / Double(wF)
+      let between = Double(wB) * Double(wF) * (mB - mF) * (mB - mF)
+      if between > best {
+        best = between
+        threshold = t
+      }
+    }
+    return threshold
+  }
+
   /// Grayscale + Otsu threshold: dark ink on white.
   static func binarize(_ image: CGImage) -> CGImage? {
     let w = image.width

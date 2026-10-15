@@ -86,24 +86,40 @@ object CropOcr {
     }
 
     /**
-     * Grayscale + Otsu threshold: dark ink on white. Removes plate colours
-     * and the moiré of a photographed screen.
+     * Average colour of the ink (pixels darker than the Otsu threshold)
+     * inside [area] of [bitmap], as [r, g, b], or null. The plate number's
+     * colour identifies the category (code 1 red … 5 orange).
      */
-    fun binarize(src: Bitmap): Bitmap {
-        val w = src.width
-        val h = src.height
-        val px = IntArray(w * h)
-        src.getPixels(px, 0, w, 0, 0, w, h)
-        val lum = IntArray(px.size)
-        val hist = IntArray(256)
-        for (i in px.indices) {
+    fun inkColor(bitmap: Bitmap, area: Rect): IntArray? {
+        val r = Rect(area).apply { intersect(0, 0, bitmap.width, bitmap.height) }
+        if (r.width() < 4 || r.height() < 4) return null
+        val px = IntArray(r.width() * r.height())
+        bitmap.getPixels(px, 0, r.width(), r.left, r.top, r.width(), r.height())
+        val lum = IntArray(px.size) { i ->
             val c = px[i]
-            val l = (299 * Color.red(c) + 587 * Color.green(c) + 114 * Color.blue(c)) / 1000
-            lum[i] = l
-            hist[l]++
+            (299 * Color.red(c) + 587 * Color.green(c) + 114 * Color.blue(c)) / 1000
         }
-        // Otsu: threshold maximising between-class variance.
-        val total = px.size
+        val t = otsu(lum)
+        var n = 0L
+        var sr = 0L
+        var sg = 0L
+        var sb = 0L
+        for (i in px.indices) {
+            if (lum[i] > t) continue
+            val c = px[i]
+            sr += Color.red(c)
+            sg += Color.green(c)
+            sb += Color.blue(c)
+            n++
+        }
+        if (n == 0L) return null
+        return intArrayOf((sr / n).toInt(), (sg / n).toInt(), (sb / n).toInt())
+    }
+
+    private fun otsu(lum: IntArray): Int {
+        val hist = IntArray(256)
+        for (l in lum) hist[l]++
+        val total = lum.size
         var sum = 0.0
         for (t in 0 until 256) sum += t * hist[t].toDouble()
         var sumB = 0.0
@@ -124,6 +140,23 @@ object CropOcr {
                 threshold = t
             }
         }
+        return threshold
+    }
+
+    /**
+     * Grayscale + Otsu threshold: dark ink on white. Removes plate colours
+     * and the moiré of a photographed screen.
+     */
+    fun binarize(src: Bitmap): Bitmap {
+        val w = src.width
+        val h = src.height
+        val px = IntArray(w * h)
+        src.getPixels(px, 0, w, 0, 0, w, h)
+        val lum = IntArray(px.size) { i ->
+            val c = px[i]
+            (299 * Color.red(c) + 587 * Color.green(c) + 114 * Color.blue(c)) / 1000
+        }
+        val threshold = otsu(lum)
         for (i in px.indices) px[i] = if (lum[i] <= threshold) Color.BLACK else Color.WHITE
         val out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
         out.setPixels(px, 0, w, 0, 0, w, h)
