@@ -160,6 +160,40 @@ class ChannelPlateRecognitionService extends PlateRecognitionService {
       PlateReader.recognizeArea(path, area);
 
   @override
+  Future<List<List<String?>>> readCrops(
+    String path,
+    List<NormalizedRect> crops, {
+    double size = 160,
+  }) async {
+    try {
+      final result = await PlateReader.availabilityChannel
+          .invokeListMethod<Object?>('readCrops', {
+        'path': path,
+        'size': size,
+        'crops': [
+          for (final c in crops)
+            {
+              'left': c.left,
+              'top': c.top,
+              'right': c.right,
+              'bottom': c.bottom,
+            },
+        ],
+      });
+      return [
+        for (final r in result ?? const [])
+          [for (final t in (r as List<Object?>)) t as String?],
+      ];
+    } on PlatformException catch (e) {
+      throw PlateReaderException(
+        PlateReaderErrorCode.channelError,
+        e.message ?? 'Crops could not be read',
+        cause: e,
+      );
+    }
+  }
+
+  @override
   Future<bool> setTorch(bool on) async {
     return await _invoke<bool>('setTorch', {'on': on}) ?? false;
   }

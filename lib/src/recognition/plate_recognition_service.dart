@@ -35,6 +35,14 @@ abstract class PlateRecognitionService {
   /// Read every character inside [area] (normalized) of a captured still.
   Future<AreaOcr> recognizeArea(String path, NormalizedRect area);
 
+  /// Reads each of [crops] (normalized to the image at [path]) alone; one
+  /// `[colour, black-and-white, border-erased]` text triple per crop.
+  Future<List<List<String?>>> readCrops(
+    String path,
+    List<NormalizedRect> crops, {
+    double size = 160,
+  });
+
   /// Turn the torch on or off. Returns the resulting state.
   Future<bool> setTorch(bool on);
 

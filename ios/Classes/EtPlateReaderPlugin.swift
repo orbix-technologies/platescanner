@@ -31,6 +31,37 @@ public class EtPlateReaderPlugin: NSObject, FlutterPlugin {
         return
       }
       recognizeImage(URL(fileURLWithPath: path), result: result)
+    case "readCrops":
+      guard let args = call.arguments as? [String: Any],
+        let path = args["path"] as? String,
+        let crops = args["crops"] as? [[String: Double]]
+      else {
+        result(FlutterError(code: "bad_args", message: "path and crops are required", details: nil))
+        return
+      }
+      let size = CGFloat(args["size"] as? Double ?? 160)
+      let url = URL(fileURLWithPath: path)
+      DispatchQueue.global(qos: .userInitiated).async {
+        guard let image = Self.loadUpright(url) else {
+          DispatchQueue.main.async {
+            result(FlutterError(code: "ocr_failed", message: "Unsupported image", details: nil))
+          }
+          return
+        }
+        let w = CGFloat(image.width)
+        let h = CGFloat(image.height)
+        // One [colour, bw, clean] text triple per crop.
+        let reads: [[Any]] = crops.map { c in
+          let area = CGRect(
+            x: (c["left"] ?? 0) * w, y: (c["top"] ?? 0) * h,
+            width: ((c["right"] ?? 0) - (c["left"] ?? 0)) * w,
+            height: ((c["bottom"] ?? 0) - (c["top"] ?? 0)) * h)
+          return CropOcr.Mode.allCases.map { mode -> Any in
+            CropOcr.read(image, area: area, size: size, mode: mode) ?? NSNull()
+          }
+        }
+        DispatchQueue.main.async { result(reads) }
+      }
     case "recognizeArea":
       guard let args = call.arguments as? [String: Any],
         let path = args["path"] as? String,

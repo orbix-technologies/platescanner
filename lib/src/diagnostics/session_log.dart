@@ -4,6 +4,8 @@ import 'dart:io';
 import '../models/ocr_frame.dart';
 import '../models/plate_area.dart';
 import '../models/plate_record.dart';
+import '../parsing/plate_section_reader.dart';
+import '../segmentation/plate_segmenter.dart';
 
 /// Records one scan session to a JSON file for later diagnosis.
 ///
@@ -121,6 +123,39 @@ class SessionLog {
         'codeVotes': ocr.codeVotes,
         'nativePasses': ocr.debug,
       };
+
+  /// JSON for an image segmentation (boxes normalized to the plate area).
+  static Map<String, Object?> segmentation(PlateSegmentation s) => {
+        'found': s.found,
+        'number': rect(s.number),
+        'numberChars': [for (final r in s.numberChars) rect(r)],
+        'code': rect(s.code),
+        'codeInner': rect(s.codeInner),
+        'geezStack': [for (final r in s.geezStack) rect(r)],
+        'latinStack': [for (final r in s.latinStack) rect(r)],
+        'leftDigits': [for (final r in s.leftDigits) rect(r)],
+        'columns': [
+          for (final c in s.columns)
+            '${c.kind.name}${c.strictStack ? '*' : ''} ${c.box.left},${c.box.top} '
+                '${c.box.width}x${c.box.height} (${c.blobs.length})',
+        ],
+        'notes': s.notes,
+      };
+
+  /// JSON for the section crops and what each read gave.
+  static List<Map<String, Object?>> crops(
+    List<SectionCrop> crops,
+    List<List<String?>> reads,
+  ) =>
+      [
+        for (var i = 0; i < crops.length; i++)
+          {
+            'role': crops[i].role,
+            'index': crops[i].index,
+            'box': rect(crops[i].inArea),
+            'reads': i < reads.length ? reads[i] : null,
+          },
+      ];
 
   /// JSON for the four sections.
   static Map<String, Object?> arrangement(PlateArrangement a) => {

@@ -13,6 +13,9 @@ import '../models/plate_record.dart';
 import '../parsing/ethiopian_plate_parser.dart';
 import '../parsing/plate_area_detector.dart';
 import '../parsing/plate_arranger.dart';
+import '../parsing/plate_section_reader.dart';
+import '../segmentation/plate_segmenter.dart';
+import '../segmentation/segment_capture.dart';
 import '../recognition/plate_recognition_service.dart';
 
 const _uuid = Uuid();
@@ -78,6 +81,7 @@ class PlateReaderController extends ChangeNotifier {
             requestCameraPermission ?? _defaultRequestCameraPermission,
         _parser = parser,
         _arranger = PlateArranger(parser: parser),
+        _sectionReader = PlateSectionReader(parser: parser),
         _detector = detector,
         _tracker = PlateAreaTracker(stableFrames: stableFrames);
 
@@ -86,6 +90,7 @@ class PlateReaderController extends ChangeNotifier {
   final Future<bool> Function() _requestCameraPermission;
   final EthiopianPlateParser _parser;
   final PlateArranger _arranger;
+  final PlateSectionReader _sectionReader;
   final PlateAreaDetector _detector;
   final PlateAreaTracker _tracker;
 
@@ -365,7 +370,30 @@ class PlateReaderController extends ChangeNotifier {
       _log?.event('areaOcr', SessionLog.areaOcr(ocr));
       if (_phase != ScanPhase.reading) return;
       _areaOcr = ocr;
-      final result = _arranger.arrange(ocr);
+
+      // Sections from the image itself: each one cut out and read alone,
+      // so a vertical stack can't be read into the number. The whole-area
+      // OCR is the fallback when no number is found in the image.
+      PlateSegmentation? seg;
+      try {
+        seg = await segmentCapture(frame.path, area);
+      } catch (e) {
+        _log?.event('segmentationError', {'error': '$e'});
+      }
+      if (seg != null) {
+        _log?.event('segmentation', SessionLog.segmentation(seg));
+      }
+      ({PlateArrangement arrangement, PlateCandidate candidate}) result;
+      if (seg != null && seg.found) {
+        final crops = _sectionReader.cropsFor(seg, area);
+        final reads = await _service
+            .readCrops(frame.path, [for (final c in crops) c.box]);
+        _log?.event('crops', {'crops': SessionLog.crops(crops, reads)});
+        if (_phase != ScanPhase.reading) return;
+        result = _sectionReader.read(seg, crops, reads, ocr);
+      } else {
+        result = _arranger.arrange(ocr);
+      }
       _arrangement = result.arrangement;
       _candidate = result.candidate;
       _draftCode = result.candidate.code;

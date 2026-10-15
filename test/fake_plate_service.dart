@@ -78,6 +78,21 @@ class FakePlateService extends PlateRecognitionService {
     return areaOcr;
   }
 
+  /// What [readCrops] returns per crop (by index); empty reads by default.
+  List<List<String?>> Function(List<NormalizedRect> crops)? cropReads;
+  final List<List<NormalizedRect>> cropRequests = [];
+
+  @override
+  Future<List<List<String?>>> readCrops(
+    String path,
+    List<NormalizedRect> crops, {
+    double size = 160,
+  }) async {
+    cropRequests.add(crops);
+    return cropReads?.call(crops) ??
+        [for (final _ in crops) const <String?>[null, null, null]];
+  }
+
   @override
   Future<bool> setTorch(bool on) async => torch = on;
 

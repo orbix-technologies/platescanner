@@ -378,6 +378,26 @@ class PlateArranger {
     return PlateServiceType.isKnown(d) ? d : null;
   }
 
+  /// Section 1 from already-read inputs (the image-segmentation path):
+  /// same rules as [arrange] uses.
+  PlateSection codeSection({
+    String? hint,
+    int? votes,
+    NormalizedRect? box,
+    List<int>? ink,
+    String? special,
+    String? embassy,
+  }) =>
+      _codeSection(
+        const [],
+        hint,
+        box,
+        ink: ink,
+        votes: votes,
+        special: special,
+        embassy: embassy,
+      );
+
   /// Section 1, in order of trust:
   ///
   /// 1. a special plate (UN / AU / CD stack, yellow police plate);

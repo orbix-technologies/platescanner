@@ -9,6 +9,7 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Rect
+import android.graphics.RectF
 import android.graphics.Matrix
 import android.net.Uri
 import android.os.Handler
@@ -47,6 +48,7 @@ class EtPlateReaderPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
             "checkAvailability" -> result.success(mapOf("status" to availability()))
             "recognizeImage" -> recognizeImage(call.argument<String>("path"), result)
             "recognizeArea" -> recognizeArea(call, result)
+            "readCrops" -> readCrops(call, result)
             else -> result.notImplemented()
         }
     }
@@ -198,6 +200,44 @@ class EtPlateReaderPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                 }
                 payload["debug"] = log
                 main.post { result.success(payload) }
+            } catch (e: Exception) {
+                main.post { result.error("ocr_failed", e.message, null) }
+            } finally {
+                recognizer.close()
+            }
+        }.start()
+    }
+
+    /**
+     * Reads each crop of a still alone, as photographed, in black and white
+     * and with border lines erased: returns one [colour, bw, clean] text
+     * triple per crop. Crops are normalized `{left, top, right, bottom}` of
+     * the image; each is scaled to `size` px tall (default 160).
+     */
+    private fun readCrops(call: MethodCall, result: MethodChannel.Result) {
+        val path = call.argument<String>("path")
+        val crops = call.argument<List<Map<String, Double>>>("crops")
+        val size = (call.argument<Double>("size") ?: 160.0).toFloat()
+        if (path == null || crops == null) {
+            result.error("bad_args", "path and crops are required", null)
+            return
+        }
+        val main = Handler(Looper.getMainLooper())
+        Thread {
+            val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+            try {
+                val image = BitmapFactory.decodeFile(path)
+                    ?: throw IllegalArgumentException("Unsupported image")
+                val reads = crops.map { c ->
+                    val area = RectF(
+                        (c["left"]!! * image.width).toFloat(),
+                        (c["top"]!! * image.height).toFloat(),
+                        (c["right"]!! * image.width).toFloat(),
+                        (c["bottom"]!! * image.height).toFloat(),
+                    )
+                    CropOcr.Mode.values().map { mode -> CropOcr.read(recognizer, image, area, size, mode) }
+                }
+                main.post { result.success(reads) }
             } catch (e: Exception) {
                 main.post { result.error("ocr_failed", e.message, null) }
             } finally {
