@@ -90,6 +90,92 @@ void main() {
     });
   });
 
+  group("new Ge'ez-format plates", () {
+    // Real ML Kit output for the EBR sample plate (circled 1, Ge'ez region,
+    // 0123456, stacked A/A): the ring is read as "D-" and the digit is lost.
+    const plateLine = OcrLine(
+      text: 'D-0123456',
+      box: NormalizedRect(0.048, 0.311, 0.930, 0.470),
+      confidence: 0.67,
+    );
+    const stackedTop = OcrLine(
+      text: 'A',
+      box: NormalizedRect(0.955, 0.33, 0.99, 0.38),
+      confidence: 0.9,
+    );
+    const stackedBottom = OcrLine(
+      text: 'A',
+      box: NormalizedRect(0.955, 0.42, 0.99, 0.47),
+      confidence: 0.9,
+    );
+
+    test('seven-digit serial, code from the circled-code pass', () {
+      final c = parser.parse(
+        [plateLine, stackedTop, stackedBottom],
+        codeHint: '1',
+      );
+      expect([c.code, c.regionCode, c.serial], ['1', 'AA', '0123456']);
+      expect(c.isValid, isTrue);
+    });
+
+    test('the ring read as D is not taken as a serial letter', () {
+      final c = parser.parse([plateLine]);
+      expect(c.serial, '0123456');
+      expect(c.code, isNull);
+      expect(c.issues, contains(PlateIssue.missingCode));
+    });
+
+    test('a watermark letter read as a digit loses to the code pass', () {
+      final c = parser.parse([
+        plateLine,
+        stackedTop,
+        stackedBottom,
+        const OcrLine(
+          text: 'z.com/Licence_Plates',
+          box: NormalizedRect(0.1, 0.44, 0.9, 0.47),
+        ),
+      ], codeHint: '1');
+      expect(c.code, '1');
+    });
+
+    test('circled digit from OCR', () {
+      final c = parser.parse(lines(['① 0123456 AA']));
+      expect([c.code, c.regionCode, c.serial], ['1', 'AA', '0123456']);
+    });
+
+    test('parenthesised code', () {
+      final c = parser.parse(lines(['(3) 654321 OR']));
+      expect([c.code, c.regionCode, c.serial], ['3', 'OR', '654321']);
+    });
+
+    test('stacked letters on one line', () {
+      final c = parser.parse(lines(['1 0123456 A A']), codeHint: null);
+      expect(c.regionCode, 'AA');
+    });
+
+    test('stacked Ge\'ez region', () {
+      final c = parser.parse([
+        const OcrLine(text: 'አ', box: NormalizedRect(0.1, 0.3, 0.15, 0.35)),
+        const OcrLine(text: 'አ', box: NormalizedRect(0.1, 0.4, 0.15, 0.45)),
+        const OcrLine(
+          text: '0123456',
+          box: NormalizedRect(0.2, 0.3, 0.9, 0.45),
+        ),
+      ], codeHint: '2');
+      expect([c.code, c.regionCode, c.serial], ['2', 'AA', '0123456']);
+    });
+
+    test('an unknown code hint is ignored', () {
+      final c = parser.parse([plateLine], codeHint: '9');
+      expect(c.code, isNull);
+    });
+  });
+
+  test('old merged code box still splits when no code is found', () {
+    final c = parser.parse(lines(['AA 212345']));
+    expect([c.code, c.serial], ['2', '12345']);
+  });
+
   group('special plates', () {
     test('diplomatic plate needs no region', () {
       final c = parser.parse(lines(['CD 12345']));
@@ -129,6 +215,8 @@ void main() {
     test('normalizeSerial', () {
       expect(parser.normalizeSerial('a 12345'), 'A12345');
       expect(parser.normalizeSerial('1234'), isNull);
+      expect(parser.normalizeSerial('012 3456'), '0123456');
+      expect(parser.normalizeSerial('A123456'), isNull);
     });
 
     test('every region code round-trips', () {

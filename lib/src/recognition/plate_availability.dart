@@ -3,6 +3,11 @@ import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 
+import '../exceptions/plate_reader_exception.dart';
+import '../models/ocr_frame.dart';
+import '../models/plate_record.dart';
+import '../parsing/ethiopian_plate_parser.dart';
+
 /// Result of a camera / recogniser preflight check.
 enum PlateReaderAvailabilityStatus {
   /// Device can attempt plate reading.
@@ -95,6 +100,37 @@ class PlateReader {
   /// Convenience: `true` when [checkAvailability] reports supported.
   static Future<bool> isSupported() async =>
       (await checkAvailability()).isSupported;
+
+  /// Raw OCR of a still image file (JPEG / PNG) — no camera needed.
+  static Future<OcrFrame> recognizeImage(String path) async {
+    try {
+      final result = await availabilityChannel
+          .invokeMapMethod<String, Object?>('recognizeImage', {'path': path});
+      return OcrFrame.fromMap(result ?? const {});
+    } on PlatformException catch (e) {
+      throw PlateReaderException(
+        PlateReaderErrorCode.channelError,
+        e.message ?? 'Image could not be read',
+        cause: e,
+      );
+    }
+  }
+
+  /// Reads a plate from a still image (e.g. a gallery photo).
+  ///
+  /// When [region] is given, only lines entirely inside it (normalized image
+  /// coordinates) are parsed.
+  static Future<PlateCandidate> readImage(
+    String path, {
+    EthiopianPlateParser parser = const EthiopianPlateParser(),
+    NormalizedRect? region,
+  }) async {
+    final frame = await recognizeImage(path);
+    final lines = region == null
+        ? frame.lines
+        : frame.lines.where((l) => region.contains(l.box)).toList();
+    return parser.parse(lines, codeHint: frame.codeHint);
+  }
 
   /// Maps the native `{status}` payload (exposed for tests).
   static PlateReaderAvailability fromNative(Map<String, Object?>? result) {

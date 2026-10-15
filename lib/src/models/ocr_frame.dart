@@ -98,10 +98,18 @@ class OcrLine {
 /// Recognition output for one analysed camera frame.
 class OcrFrame {
   /// Creates a frame result.
-  const OcrFrame({required this.lines, required this.timestamp});
+  const OcrFrame({
+    required this.lines,
+    required this.timestamp,
+    this.codeHint,
+  });
 
   /// Recognised lines, any order.
   final List<OcrLine> lines;
+
+  /// Service code read by the native second pass on a circled code
+  /// (new-format plates), when the main OCR missed it.
+  final String? codeHint;
 
   /// When the frame was analysed.
   final DateTime timestamp;
@@ -115,6 +123,7 @@ class OcrFrame {
           .map(OcrLine.fromMap)
           .toList(growable: false),
       timestamp: DateTime.now(),
+      codeHint: map['codeHint'] as String?,
     );
   }
 }

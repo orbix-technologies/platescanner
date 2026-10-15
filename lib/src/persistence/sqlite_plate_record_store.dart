@@ -108,9 +108,8 @@ class SqlitePlateRecordStore implements PlateRecordStore {
   }) async {
     final rows = await _database.query(
       _table,
-      where: regionCode == null
-          ? 'serial = ?'
-          : 'serial = ? AND region_code = ?',
+      where:
+          regionCode == null ? 'serial = ?' : 'serial = ? AND region_code = ?',
       whereArgs: regionCode == null ? [serial] : [serial, regionCode],
       orderBy: 'captured_at DESC',
     );

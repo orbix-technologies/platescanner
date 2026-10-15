@@ -1,4 +1,5 @@
 import AVFoundation
+import CoreImage
 import Flutter
 import UIKit
 import Vision
@@ -146,7 +147,12 @@ class PlateScannerView: UIView, AVCaptureVideoDataOutputSampleBufferDelegate {
     let visible = Self.visibleRect(imageAspect: uprightWidth / uprightHeight, viewAspect: aspect)
 
     let request = VNRecognizeTextRequest { [weak self] request, _ in
-      self?.deliver(request.results as? [VNRecognizedTextObservation] ?? [], visible: visible)
+      let observations = request.results as? [VNRecognizedTextObservation] ?? []
+      let codeHint = CodeDiscReader.read(observations) {
+        let upright = CIImage(cvPixelBuffer: pixels).oriented(.right)
+        return Self.ciContext.createCGImage(upright, from: upright.extent)
+      }
+      self?.deliver(observations, visible: visible, codeHint: codeHint)
     }
     request.recognitionLevel = .accurate
     request.usesLanguageCorrection = false
@@ -160,7 +166,13 @@ class PlateScannerView: UIView, AVCaptureVideoDataOutputSampleBufferDelegate {
     }
   }
 
-  private func deliver(_ observations: [VNRecognizedTextObservation], visible: CGRect) {
+  private static let ciContext = CIContext()
+
+  private func deliver(
+    _ observations: [VNRecognizedTextObservation],
+    visible: CGRect,
+    codeHint: String?
+  ) {
     var lines: [[String: Any]] = []
     for obs in observations {
       guard let best = obs.topCandidates(1).first else { continue }
@@ -180,7 +192,9 @@ class PlateScannerView: UIView, AVCaptureVideoDataOutputSampleBufferDelegate {
     finishFrame()
     DispatchQueue.main.async { [weak self] in
       guard let self = self, !self.isStopped else { return }
-      self.channel.invokeMethod("onFrame", arguments: ["lines": lines])
+      var payload: [String: Any] = ["lines": lines]
+      if let codeHint = codeHint { payload["codeHint"] = codeHint }
+      self.channel.invokeMethod("onFrame", arguments: payload)
     }
   }
 

@@ -1,6 +1,8 @@
 package com.et_plate_reader
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.Matrix
 import android.graphics.Rect
 import android.os.Handler
 import android.os.Looper
@@ -21,6 +23,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
+import com.google.android.gms.tasks.Tasks
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
@@ -122,41 +125,52 @@ class PlateScannerView(
         }, ContextCompat.getMainExecutor(context))
     }
 
+    // Runs on analysisExecutor, so blocking on ML Kit is fine here.
     @androidx.annotation.OptIn(androidx.camera.core.ExperimentalGetImage::class)
     private fun analyze(proxy: ImageProxy) {
-        val media = proxy.image
-        if (!analyzing.get() || disposed || media == null) {
-            proxy.close()
-            return
-        }
-        val rotation = proxy.imageInfo.rotationDegrees
-        val crop = uprightRect(proxy.cropRect, proxy.width, proxy.height, rotation)
-        val input = InputImage.fromMediaImage(media, rotation)
-        recognizer.process(input)
-            .addOnSuccessListener { text ->
-                if (!analyzing.get() || disposed) return@addOnSuccessListener
-                val lines = ArrayList<Map<String, Any>>()
-                for (block in text.textBlocks) {
-                    for (line in block.lines) {
-                        val box = line.boundingBox ?: continue
-                        lines.add(
-                            mapOf(
-                                "text" to line.text,
-                                "confidence" to line.confidence.toDouble(),
-                                "left" to (box.left - crop.left).toDouble() / crop.width(),
-                                "top" to (box.top - crop.top).toDouble() / crop.height(),
-                                "right" to (box.right - crop.left).toDouble() / crop.width(),
-                                "bottom" to (box.bottom - crop.top).toDouble() / crop.height(),
-                            ),
-                        )
-                    }
-                }
-                main.post {
-                    if (!disposed) channel.invokeMethod("onFrame", mapOf("lines" to lines))
+        try {
+            val media = proxy.image
+            if (!analyzing.get() || disposed || media == null) return
+            val rotation = proxy.imageInfo.rotationDegrees
+            val crop = uprightRect(proxy.cropRect, proxy.width, proxy.height, rotation)
+            val text = Tasks.await(recognizer.process(InputImage.fromMediaImage(media, rotation)))
+            if (!analyzing.get() || disposed) return
+
+            val codeHint = CodeDiscReader.read(recognizer, text) { uprightBitmap(proxy, rotation) }
+            val lines = ArrayList<Map<String, Any>>()
+            for (block in text.textBlocks) {
+                for (line in block.lines) {
+                    val box = line.boundingBox ?: continue
+                    lines.add(
+                        mapOf(
+                            "text" to line.text,
+                            "confidence" to line.confidence.toDouble(),
+                            "left" to (box.left - crop.left).toDouble() / crop.width(),
+                            "top" to (box.top - crop.top).toDouble() / crop.height(),
+                            "right" to (box.right - crop.left).toDouble() / crop.width(),
+                            "bottom" to (box.bottom - crop.top).toDouble() / crop.height(),
+                        ),
+                    )
                 }
             }
-            .addOnFailureListener { e -> Log.w(TAG, "OCR failed", e) }
-            .addOnCompleteListener { proxy.close() }
+            val payload = HashMap<String, Any>()
+            payload["lines"] = lines
+            if (codeHint != null) payload["codeHint"] = codeHint
+            main.post {
+                if (!disposed) channel.invokeMethod("onFrame", payload)
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "OCR failed", e)
+        } finally {
+            proxy.close()
+        }
+    }
+
+    private fun uprightBitmap(proxy: ImageProxy, rotation: Int): Bitmap {
+        val raw = proxy.toBitmap()
+        if (rotation == 0) return raw
+        val m = Matrix().apply { postRotate(rotation.toFloat()) }
+        return Bitmap.createBitmap(raw, 0, 0, raw.width, raw.height, m, true)
     }
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {

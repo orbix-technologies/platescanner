@@ -55,7 +55,8 @@ class PlateReaderController extends ChangeNotifier {
     int stableFrames = 4,
     double minConfidence = 0.7,
     this.autoLock = true,
-    NormalizedRect regionOfInterest = const NormalizedRect(0.07, 0.25, 0.93, 0.6),
+    NormalizedRect regionOfInterest =
+        const NormalizedRect(0.07, 0.25, 0.93, 0.6),
   })  : _roi = regionOfInterest,
         _service = service ?? PlateRecognitionServiceFactory.create(),
         _logger = logger ?? Logger(level: Level.off),
@@ -241,7 +242,7 @@ class PlateReaderController extends ChangeNotifier {
       }
       return;
     }
-    final candidate = _parser.parse(lines);
+    final candidate = _parser.parse(lines, codeHint: frame.codeHint);
     _live = candidate;
     final stable = _voter.add(candidate);
     if (stable != null && autoLock) {

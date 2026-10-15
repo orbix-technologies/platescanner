@@ -18,12 +18,14 @@ class EthiopianPlateParser {
   /// Whether numeric-code plates must carry a region.
   final bool requireRegion;
 
-  /// Serial: optional Latin letter + five digits.
-  static final serialPattern = RegExp(r'^[A-Z]?\d{5}$');
+  /// Serial: five digits with an optional Latin letter prefix (older plates),
+  /// or six / seven digits (new Ge'ez-format plates).
+  static final serialPattern = RegExp(r'^([A-Z]?\d{5}|\d{6,7})$');
 
   static final _splitter = RegExp(r'[^A-Za-z0-9ሀ-፿]+');
   static final _latinLetter = RegExp(r'^[A-Z]$');
-  static const _ignored = {'ETHIOPIA', 'ETH', 'ET-', 'ኢትዮጵያ'};
+  static const _ignored = {'ETHIOPIA', 'ETH', 'ኢትዮጵያ'};
+  static final _circled = RegExp('[\u2460-\u2464]');
 
   // Common OCR confusions on plate fonts.
   static const _toDigit = {
@@ -32,11 +34,20 @@ class EthiopianPlateParser {
     'Z': '2', 'S': '5', 'B': '8', 'G': '6',
   };
   static const _toLetter = {
-    '0': 'O', '1': 'I', '2': 'Z', '5': 'S', '8': 'B', '6': 'G', '4': 'A',
+    '0': 'O',
+    '1': 'I',
+    '2': 'Z',
+    '5': 'S',
+    '8': 'B',
+    '6': 'G',
+    '4': 'A',
   };
 
   /// Parses [lines] (any order) into a candidate.
-  PlateCandidate parse(List<OcrLine> lines) {
+  ///
+  /// [codeHint] is a service code read by a separate pass (the circled code
+  /// on new-format plates); it is used when no code is read from [lines].
+  PlateCandidate parse(List<OcrLine> lines, {String? codeHint}) {
     final sorted = [...lines]..sort((a, b) {
         final dy = a.box.centerY - b.box.centerY;
         if (dy.abs() > 0.02) return dy.sign.toInt();
@@ -45,7 +56,12 @@ class EthiopianPlateParser {
 
     final tokens = <_Token>[];
     for (var i = 0; i < sorted.length; i++) {
-      for (final part in sorted[i].text.split(_splitter)) {
+      // Circled digits (①–⑤) are the code on new-format plates.
+      final text = sorted[i].text.replaceAllMapped(
+            _circled,
+            (m) => ' ${m[0]!.codeUnitAt(0) - 0x245F} ',
+          );
+      for (final part in text.split(_splitter)) {
         if (part.isEmpty) continue;
         final upper = part.toUpperCase();
         if (_ignored.contains(upper)) continue;
@@ -57,19 +73,31 @@ class EthiopianPlateParser {
     final serialHit = _findSerial(tokens);
     final used = <int>{...?serialHit?.tokenIndexes};
 
-    var code = serialHit?.mergedCode;
+    final hint = PlateServiceType.isKnown(codeHint) ? codeHint : null;
     var corrections = serialHit?.corrections ?? 0;
+    String? code = serialHit?.mergedCode;
     if (code == null) {
       final codeHit = _findCode(tokens, used, serialHit);
-      if (codeHit != null) {
+      // A letter read as a digit loses to the dedicated code pass.
+      if (codeHit != null && (codeHit.corrections == 0 || hint == null)) {
         code = codeHit.value;
         corrections += codeHit.corrections;
         used.add(codeHit.tokenIndex);
+      } else if (hint != null) {
+        code = hint;
       }
+    }
+    // Old plates sometimes merge the code box into the serial ("212345").
+    var serial = serialHit?.value;
+    final alt = serialHit?.mergedAlternative;
+    if (code == null && alt != null) {
+      code = alt.$1;
+      serial = alt.$2;
     }
 
     String? regionCode;
-    final regionHit = _findRegion(tokens, used);
+    final regionHit =
+        _findRegion(tokens, used) ?? _findStackedRegion(tokens, used, sorted);
     if (regionHit != null) {
       regionCode = regionHit.region.code;
       corrections += regionHit.corrections;
@@ -77,7 +105,6 @@ class EthiopianPlateParser {
       regionCode = EthiopianRegion.findAmharic(rawText)?.code;
     }
 
-    final serial = serialHit?.value;
     final issues = validate(code: code, regionCode: regionCode, serial: serial);
 
     final confidences =
@@ -163,7 +190,7 @@ class EthiopianPlateParser {
   }
 
   _SerialHit? _serialFrom(String s, List<int> indexes) {
-    if (s.length < 5 || s.length > 7) return null;
+    if (s.length < 5 || s.length > 8) return null;
 
     (String, int)? digits(String part) {
       final buf = StringBuffer();
@@ -178,40 +205,46 @@ class EthiopianPlateParser {
           return null;
         }
       }
-      return (buf.toString(), fixes);
+      // Too many guessed digits — more likely a word than a serial.
+      return fixes > 2 ? null : (buf.toString(), fixes);
     }
 
-    final tail = digits(s.substring(s.length - 5));
-    if (tail == null) return null;
-    // Too many guessed digits — more likely a word than a serial.
-    if (tail.$2 > 2) return null;
-    final head = s.substring(0, s.length - 5);
     final joined = indexes.length > 1 ? 1 : 0;
+    final first = s[0];
+    final firstIsCode = _isDigit(first) && PlateServiceType.isKnown(first);
 
-    if (head.isEmpty) {
-      return _SerialHit(tail.$1, indexes, tail.$2, null, 10 - tail.$2 - joined);
-    }
-    if (head.length == 1) {
-      if (_latinLetter.hasMatch(head)) {
+    // Letter + 5 digits (older plates).
+    if (s.length == 6 && _latinLetter.hasMatch(first)) {
+      final tail = digits(s.substring(1));
+      if (tail != null && _isDigit(s[1])) {
         return _SerialHit(
-            '$head${tail.$1}', indexes, tail.$2, null, 12 - tail.$2 - joined);
-      }
-      // Single-row plate where the code box merged into the serial.
-      if (PlateServiceType.isKnown(head) && int.tryParse(head) != null) {
-        return _SerialHit(tail.$1, indexes, tail.$2, head, 9 - tail.$2);
-      }
-      return null;
-    }
-    if (head.length == 2) {
-      final c = head[0];
-      final letter = head[1];
-      if (PlateServiceType.isKnown(c) &&
-          int.tryParse(c) != null &&
-          _latinLetter.hasMatch(letter)) {
-        return _SerialHit('$letter${tail.$1}', indexes, tail.$2, c, 9 - tail.$2);
+            '$first${tail.$1}', indexes, tail.$2, null, 12 - tail.$2 - joined);
       }
     }
-    return null;
+    // Code digit + letter + 5 digits merged ("2A12345").
+    if (s.length == 7 && firstIsCode && _latinLetter.hasMatch(s[1])) {
+      final tail = digits(s.substring(2));
+      if (tail != null) {
+        return _SerialHit(
+            '${s[1]}${tail.$1}', indexes, tail.$2, first, 9 - tail.$2);
+      }
+    }
+    // 5–7 digits; the leading digit may be a merged code ("212345").
+    if (!_isDigit(first) && !_isDigit(s[s.length - 1])) return null;
+    final all = digits(s);
+    if (all == null) return null;
+    final n = all.$1.length;
+    (String, String)? alt;
+    if (firstIsCode && n >= 6) {
+      alt = (first, all.$1.substring(1));
+    }
+    if (n > 7) {
+      return alt == null
+          ? null
+          : _SerialHit(alt.$2, indexes, all.$2, alt.$1, 9 - all.$2);
+    }
+    return _SerialHit(all.$1, indexes, all.$2, null, 10 - all.$2 - joined,
+        mergedAlternative: alt);
   }
 
   _CodeHit? _findCode(List<_Token> tokens, Set<int> used, _SerialHit? serial) {
@@ -260,6 +293,36 @@ class EthiopianPlateParser {
     return null;
   }
 
+  /// Region printed as letters stacked vertically (new plates: `A` over `A`,
+  /// `አ` over `አ`), which OCR returns as separate one-letter lines.
+  _RegionHit? _findStackedRegion(
+    List<_Token> tokens,
+    Set<int> used,
+    List<OcrLine> lines,
+  ) {
+    final singles = tokens
+        .where((t) => !used.contains(t.index) && t.text.runes.length == 1)
+        .toList();
+    for (var i = 0; i < singles.length; i++) {
+      for (var j = i + 1; j < singles.length; j++) {
+        final a = singles[i];
+        final b = singles[j];
+        final boxA = lines[a.line].box;
+        final boxB = lines[b.line].box;
+        final sameLine = a.line == b.line && b.index == a.index + 1;
+        final stacked = a.line != b.line &&
+            (boxA.centerX - boxB.centerX).abs() <
+                (boxA.width > boxB.width ? boxA.width : boxB.width);
+        if (!sameLine && !stacked) continue;
+        final pair = a.text + b.text;
+        final region = EthiopianRegion.fromLatin(pair) ??
+            EthiopianRegion.findAmharic(pair);
+        if (region != null) return _RegionHit(region, 0);
+      }
+    }
+    return null;
+  }
+
   PlateLayout _layout(List<OcrLine> sorted, _SerialHit? serial) {
     if (serial == null || sorted.isEmpty) return PlateLayout.unknown;
     final rows = <double>[];
@@ -291,8 +354,13 @@ class _SerialHit {
     this.tokenIndexes,
     this.corrections,
     this.mergedCode,
-    this.score,
-  );
+    this.score, {
+    this.mergedAlternative,
+  });
+
+  /// (code, serial) if the first digit is really a merged code box; used only
+  /// when no code is found elsewhere.
+  final (String, String)? mergedAlternative;
   final String value;
   final List<int> tokenIndexes;
   final int corrections;

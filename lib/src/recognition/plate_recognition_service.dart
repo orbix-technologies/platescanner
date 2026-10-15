@@ -48,6 +48,7 @@ class PlateRecognitionServiceFactory {
     if (Platform.isAndroid || Platform.isIOS) {
       return ChannelPlateRecognitionService();
     }
-    throw UnsupportedError('Plate reading is only supported on Android and iOS');
+    throw UnsupportedError(
+        'Plate reading is only supported on Android and iOS');
   }
 }
