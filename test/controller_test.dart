@@ -76,6 +76,31 @@ void main() {
     ]);
     await tick();
     expect(controller.liveCandidate, isNull);
+
+    // Straddling the box edge: the centre is inside, the line is not.
+    fake.emitFrame([
+      const OcrLine(
+        text: '2 AA 88888',
+        box: NormalizedRect(0.5, 0.4, 0.99, 0.48),
+        confidence: 0.95,
+      ),
+    ]);
+    await tick();
+    expect(controller.liveCandidate, isNull);
+  });
+
+  test('confirmCurrent confirms a valid live reading', () async {
+    await scanning();
+    await emit(['2 AA A12345']);
+    expect(controller.phase, ScanPhase.scanning);
+    final record = await controller.confirmCurrent();
+    expect(record.canonical, '2-AA-A12345');
+  });
+
+  test('confirmCurrent refuses an incomplete live reading', () async {
+    await scanning();
+    await emit(['2 12345']);
+    expect(controller.confirmCurrent, throwsA(isA<PlateReaderException>()));
   });
 
   test('manual lock + edit fixes an incomplete reading', () async {

@@ -44,8 +44,9 @@ class PlateReaderController extends ChangeNotifier {
   ///
   /// A reading auto-locks after [stableFrames] consecutive identical valid
   /// frames whose mean confidence is at least [minConfidence]. Only OCR lines
-  /// whose centre lies in [regionOfInterest] (normalized image coordinates)
-  /// are parsed.
+  /// that lie entirely inside [regionOfInterest] (normalized coordinates of
+  /// the visible preview) are parsed. [PlateScannerView] sets it to the guide
+  /// box it draws.
   PlateReaderController({
     PlateRecognitionService? service,
     Logger? logger,
@@ -54,8 +55,9 @@ class PlateReaderController extends ChangeNotifier {
     int stableFrames = 4,
     double minConfidence = 0.7,
     this.autoLock = true,
-    this.regionOfInterest = const NormalizedRect(0.05, 0.2, 0.95, 0.8),
-  })  : _service = service ?? PlateRecognitionServiceFactory.create(),
+    NormalizedRect regionOfInterest = const NormalizedRect(0.07, 0.25, 0.93, 0.6),
+  })  : _roi = regionOfInterest,
+        _service = service ?? PlateRecognitionServiceFactory.create(),
         _logger = logger ?? Logger(level: Level.off),
         _requestCameraPermission =
             requestCameraPermission ?? _defaultRequestCameraPermission,
@@ -74,8 +76,22 @@ class PlateReaderController extends ChangeNotifier {
   /// Whether a stable reading locks automatically (else only [lockCurrent]).
   final bool autoLock;
 
-  /// Area of the frame that is parsed, in normalized image coordinates.
-  final NormalizedRect regionOfInterest;
+  NormalizedRect _roi;
+
+  /// Area of the visible preview that is read (normalized `0.0`–`1.0`).
+  ///
+  /// OCR lines that are not entirely inside it are ignored, so text outside
+  /// the guide box is never read. Changing it restarts the stability vote.
+  NormalizedRect get regionOfInterest => _roi;
+
+  set regionOfInterest(NormalizedRect value) {
+    if (value == _roi) return;
+    _roi = value;
+    _voter.reset();
+  }
+
+  /// Slack for a line touching the box edge (normalized units).
+  static const _roiTolerance = 0.01;
 
   static Future<bool> _defaultRequestCameraPermission() async {
     final status = await Permission.camera.request();
@@ -216,7 +232,7 @@ class PlateReaderController extends ChangeNotifier {
   void _onFrame(OcrFrame frame) {
     if (_disposed || _phase != ScanPhase.scanning) return;
     final lines = frame.lines
-        .where((l) => regionOfInterest.containsCenterOf(l.box))
+        .where((l) => _roi.contains(l.box, tolerance: _roiTolerance))
         .toList(growable: false);
     if (lines.isEmpty) {
       if (_live != null) {
@@ -262,6 +278,22 @@ class PlateReaderController extends ChangeNotifier {
     _live = null;
     _notify();
     await _service.pause();
+  }
+
+  /// Confirm whatever is readable now: the locked draft, or — while
+  /// scanning — the current live reading if it validates.
+  Future<PlateRecord> confirmCurrent() async {
+    if (_phase == ScanPhase.scanning) {
+      final live = _live;
+      if (live == null || !live.isValid) {
+        throw PlateReaderException(
+          PlateReaderErrorCode.invalidState,
+          'No complete plate in the box yet.',
+        );
+      }
+      await _lock(live);
+    }
+    return confirm();
   }
 
   /// Replace draft fields while locked. Pass only the fields being changed.

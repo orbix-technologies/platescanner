@@ -70,8 +70,15 @@ class PlateScannerView(
 
     override fun getView(): View = previewView
 
-    private fun bindCamera() {
+    private fun bindCamera(attempt: Int = 0) {
         if (disposed) return
+        // Coordinates sent to Dart are relative to the visible preview only
+        // when the analysis shares the preview's ViewPort, which exists once
+        // the view is laid out. Wait for it (up to ~1 s) before binding.
+        if (previewView.viewPort == null && attempt < 20) {
+            previewView.postDelayed({ bindCamera(attempt + 1) }, 50)
+            return
+        }
         val future = ProcessCameraProvider.getInstance(context)
         future.addListener({
             if (disposed) return@addListener

@@ -34,6 +34,25 @@ class NormalizedRect {
       other.centerY >= top &&
       other.centerY <= bottom;
 
+  /// Whether [other] lies entirely inside this box, allowing it to poke out
+  /// by up to [tolerance] (normalized units) on any side.
+  bool contains(NormalizedRect other, {double tolerance = 0}) =>
+      other.left >= left - tolerance &&
+      other.top >= top - tolerance &&
+      other.right <= right + tolerance &&
+      other.bottom <= bottom + tolerance;
+
+  @override
+  bool operator ==(Object other) =>
+      other is NormalizedRect &&
+      other.left == left &&
+      other.top == top &&
+      other.right == right &&
+      other.bottom == bottom;
+
+  @override
+  int get hashCode => Object.hash(left, top, right, bottom);
+
   /// Smallest box containing this and [other].
   NormalizedRect union(NormalizedRect other) => NormalizedRect(
         left < other.left ? left : other.left,

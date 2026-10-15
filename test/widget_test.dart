@@ -36,7 +36,7 @@ void main() {
     await tester.pump();
   }
 
-  testWidgets('shows coaching, then the locked panel, then confirms',
+  testWidgets('Done sits beside the reading and confirms after lock',
       (tester) async {
     PlateRecord? confirmed;
     await pumpView(tester, onConfirmed: (r) => confirmed = r);
@@ -47,16 +47,76 @@ void main() {
     await tester.pump();
     await tester.pump();
     expect(find.text('2  ·  AA  ·  A12345'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Done'), findsOneWidget);
 
     fake.emitLines(['2 AA A12345']);
     await tester.pump();
     await tester.pump();
     expect(controller.phase, ScanPhase.locked);
-    expect(find.text('Done'), findsOneWidget);
+    expect(find.text('Plate detected'), findsOneWidget);
 
     await tester.tap(find.text('Done'));
     await tester.pump();
     expect(confirmed?.canonical, '2-AA-A12345');
+  });
+
+  testWidgets('Done while scanning confirms the live reading', (tester) async {
+    PlateRecord? confirmed;
+    await pumpView(tester, onConfirmed: (r) => confirmed = r);
+    fake.emitLines(['3 OR 54321']);
+    await tester.pump();
+    await tester.pump();
+    expect(controller.phase, ScanPhase.scanning);
+
+    await tester.tap(find.text('Done'));
+    await tester.pump();
+    expect(confirmed?.canonical, '3-OR-54321');
+  });
+
+  testWidgets('Done is disabled for an incomplete reading', (tester) async {
+    await pumpView(tester);
+    fake.emitLines(['2 12345']);
+    await tester.pump();
+    await tester.pump();
+    final done = tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, 'Done'),
+    );
+    expect(done.onPressed, isNull);
+    expect(find.text('Region not read'), findsOneWidget);
+  });
+
+  testWidgets('region of interest follows the drawn guide box',
+      (tester) async {
+    await pumpView(tester);
+    final size = tester.getSize(find.byType(PlateScannerView));
+    final guide = PlateScannerView.guideRect(size);
+    final roi = controller.regionOfInterest;
+    expect(roi.left, closeTo(guide.left / size.width, 1e-9));
+    expect(roi.bottom, closeTo(guide.bottom / size.height, 1e-9));
+
+    // A plate above the box is ignored.
+    fake.emitFrame([
+      OcrLine(
+        text: '2 AA 99999',
+        box: NormalizedRect(0.2, roi.top - 0.12, 0.8, roi.top - 0.04),
+        confidence: 0.95,
+      ),
+    ]);
+    await tester.pump();
+    await tester.pump();
+    expect(controller.liveCandidate, isNull);
+  });
+
+  testWidgets('Edit opens the field editor after lock', (tester) async {
+    await pumpView(tester);
+    fake.emitLines(['2 AA 12345']);
+    fake.emitLines(['2 AA 12345']);
+    await tester.pump();
+    await tester.pump();
+    expect(controller.phase, ScanPhase.locked);
+    await tester.tap(find.text('Edit'));
+    await tester.pump();
+    expect(find.text('Serial'), findsOneWidget);
   });
 
   testWidgets('custom overlay replaces the default HUD', (tester) async {
