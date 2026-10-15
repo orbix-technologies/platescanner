@@ -10,6 +10,7 @@ preflight → controller → view → record, with optional SQLite persistence.
 - **[Supported toolchain](doc/SUPPORTED_TOOLCHAIN.md)** — pinned versions
 - **[Recognition model decision](doc/MODEL_DECISION.md)** — why ML Kit / Vision now, custom model next
 - **[Plate format](doc/PLATE_FORMAT.md)** — fields, regions, open questions
+- **[Pipeline](doc/PIPELINE.md)** — every step from camera to reading, faults and ideas per step
 
 ## Capture flow
 
