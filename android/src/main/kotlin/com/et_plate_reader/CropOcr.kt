@@ -44,10 +44,21 @@ object CropOcr {
         return best
     }
 
+    /** How a crop is prepared before OCR. */
+    enum class Mode {
+        /** As photographed. */
+        COLOUR,
+
+        /** Grayscale + Otsu threshold. */
+        BW,
+
+        /** Black and white with long straight lines (plate border) erased. */
+        CLEAN,
+    }
+
     /**
      * OCR of [area] of [bitmap] alone: scaled so its height is [size] px,
-     * centred on a white page with a margin of its own size on every side,
-     * optionally reduced to black and white first.
+     * centred on a white page with a margin of its own size on every side.
      */
     fun read(
         recognizer: TextRecognizer,
@@ -55,7 +66,15 @@ object CropOcr {
         area: RectF,
         size: Float,
         blackAndWhite: Boolean,
-    ): String? {
+    ): String? = read(recognizer, bitmap, area, size, if (blackAndWhite) Mode.BW else Mode.COLOUR)
+
+    fun read(recognizer: TextRecognizer, bitmap: Bitmap, area: RectF, size: Float, mode: Mode): String? {
+        val crop = prepare(bitmap, area, size, mode) ?: return null
+        return ocr(recognizer, listOf(crop))
+    }
+
+    /** [area] of [bitmap] scaled to [size] px tall and prepared per [mode]. */
+    fun prepare(bitmap: Bitmap, area: RectF, size: Float, mode: Mode): Bitmap? {
         val src = Rect(
             area.left.toInt().coerceAtLeast(0),
             area.top.toInt().coerceAtLeast(0),
@@ -68,21 +87,60 @@ object CropOcr {
         val h = (src.height() * scale).toInt().coerceAtLeast(1)
         var crop = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
         Canvas(crop).drawBitmap(bitmap, src, Rect(0, 0, w, h), null)
-        if (blackAndWhite) crop = binarize(crop)
-        val m = maxOf(w, h)
-        val page = Bitmap.createBitmap(w + 2 * m, h + 2 * m, Bitmap.Config.ARGB_8888)
+        if (mode != Mode.COLOUR) crop = binarize(crop)
+        if (mode == Mode.CLEAN) stripLines(crop)
+        return crop
+    }
+
+    /**
+     * OCR of [crops] laid side by side on one white page (a margin of the
+     * tallest crop's height around and between them), so several single
+     * letters read as one word. Recycles [crops].
+     */
+    fun ocr(recognizer: TextRecognizer, crops: List<Bitmap>): String? {
+        if (crops.isEmpty()) return null
+        val m = crops.maxOf { maxOf(it.width, it.height) }
+        val width = crops.sumOf { it.width } + m * (crops.size + 1)
+        val height = crops.maxOf { it.height } + 2 * m
+        val page = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         Canvas(page).apply {
             drawColor(Color.WHITE)
-            drawBitmap(crop, m.toFloat(), m.toFloat(), null)
+            var x = m
+            for (c in crops) {
+                drawBitmap(c, x.toFloat(), m.toFloat(), null)
+                x += c.width + m
+            }
         }
         return try {
             Tasks.await(recognizer.process(InputImage.fromBitmap(page, 0))).text
         } catch (e: Exception) {
             null
         } finally {
-            crop.recycle()
+            crops.forEach { it.recycle() }
             page.recycle()
         }
+    }
+
+    /**
+     * Erases rows / columns that are mostly ink: the plate border running
+     * past a letter. A border boxing in a single letter stops OCR reading it.
+     */
+    fun stripLines(bw: Bitmap) {
+        val w = bw.width
+        val h = bw.height
+        val px = IntArray(w * h)
+        bw.getPixels(px, 0, w, 0, 0, w, h)
+        for (y in 0 until h) {
+            var ink = 0
+            for (x in 0 until w) if (px[y * w + x] == Color.BLACK) ink++
+            if (ink > w * 0.6) for (x in 0 until w) px[y * w + x] = Color.WHITE
+        }
+        for (x in 0 until w) {
+            var ink = 0
+            for (y in 0 until h) if (px[y * w + x] == Color.BLACK) ink++
+            if (ink > h * 0.6) for (y in 0 until h) px[y * w + x] = Color.WHITE
+        }
+        bw.setPixels(px, 0, w, 0, 0, w, h)
     }
 
     /**
@@ -106,6 +164,37 @@ object CropOcr {
         var sb = 0L
         for (i in px.indices) {
             if (lum[i] > t) continue
+            val c = px[i]
+            sr += Color.red(c)
+            sg += Color.green(c)
+            sb += Color.blue(c)
+            n++
+        }
+        if (n == 0L) return null
+        return intArrayOf((sr / n).toInt(), (sg / n).toInt(), (sb / n).toInt())
+    }
+
+    /**
+     * Average colour of the plate background (pixels lighter than the Otsu
+     * threshold) inside [area], as [r, g, b], or null. A yellow background
+     * marks a police plate.
+     */
+    fun paperColor(bitmap: Bitmap, area: Rect): IntArray? {
+        val r = Rect(area).apply { intersect(0, 0, bitmap.width, bitmap.height) }
+        if (r.width() < 4 || r.height() < 4) return null
+        val px = IntArray(r.width() * r.height())
+        bitmap.getPixels(px, 0, r.width(), r.left, r.top, r.width(), r.height())
+        val lum = IntArray(px.size) { i ->
+            val c = px[i]
+            (299 * Color.red(c) + 587 * Color.green(c) + 114 * Color.blue(c)) / 1000
+        }
+        val t = otsu(lum)
+        var n = 0L
+        var sr = 0L
+        var sg = 0L
+        var sb = 0L
+        for (i in px.indices) {
+            if (lum[i] <= t) continue
             val c = px[i]
             sr += Color.red(c)
             sg += Color.green(c)

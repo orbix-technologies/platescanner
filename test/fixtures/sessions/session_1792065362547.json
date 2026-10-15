@@ -1,0 +1,170 @@
+{
+ "session": "1792065362547",
+ "expectedNumber": "0123456",
+ "events": [
+  {
+   "t_ms": 7372,
+   "event": "areaOcr",
+   "elements": [
+    {
+     "text": "O-0123456",
+     "confidence": 0.7183159589767456,
+     "box": {
+      "left": 0.0606,
+      "top": 0.2271,
+      "right": 0.8943,
+      "bottom": 0.8292
+     },
+     "symbols": [
+      {
+       "text": "O",
+       "box": {
+        "left": 0.0606,
+        "top": 0.2563,
+        "right": 0.1703,
+        "bottom": 0.8292
+       }
+      },
+      {
+       "text": "-",
+       "box": {
+        "left": 0.204,
+        "top": 0.2521,
+        "right": 0.2863,
+        "bottom": 0.8229
+       }
+      },
+      {
+       "text": "0",
+       "box": {
+        "left": 0.316,
+        "top": 0.2479,
+        "right": 0.3829,
+        "bottom": 0.8188
+       }
+      },
+      {
+       "text": "1",
+       "box": {
+        "left": 0.3914,
+        "top": 0.2438,
+        "right": 0.4617,
+        "bottom": 0.8146
+       }
+      },
+      {
+       "text": "2",
+       "box": {
+        "left": 0.496,
+        "top": 0.2396,
+        "right": 0.5657,
+        "bottom": 0.8104
+       }
+      },
+      {
+       "text": "3",
+       "box": {
+        "left": 0.5794,
+        "top": 0.2375,
+        "right": 0.6389,
+        "bottom": 0.8083
+       }
+      },
+      {
+       "text": "4",
+       "box": {
+        "left": 0.6509,
+        "top": 0.2333,
+        "right": 0.7229,
+        "bottom": 0.8042
+       }
+      },
+      {
+       "text": "5",
+       "box": {
+        "left": 0.756,
+        "top": 0.2292,
+        "right": 0.8251,
+        "bottom": 0.8
+       }
+      },
+      {
+       "text": "6",
+       "box": {
+        "left": 0.8434,
+        "top": 0.2292,
+        "right": 0.8943,
+        "bottom": 0.7979
+       }
+      }
+     ]
+    },
+    {
+     "text": "R",
+     "confidence": 0.80859375,
+     "box": {
+      "left": 0.9046,
+      "top": 0.5688,
+      "right": 0.932,
+      "bottom": 0.775
+     },
+     "symbols": [
+      {
+       "text": "R",
+       "box": {
+        "left": 0.9046,
+        "top": 0.5688,
+        "right": 0.932,
+        "bottom": 0.775
+       }
+      }
+     ]
+    }
+   ],
+   "codeHint": "2",
+   "regionColumns": [
+    {
+     "letters": "OR",
+     "source": "zone",
+     "box": {
+      "left": 0.9023,
+      "top": 0.2292,
+      "right": 0.9851,
+      "bottom": 0.8188
+     }
+    }
+   ],
+   "inkColor": [
+    89,
+    94,
+    163
+   ],
+   "nativePasses": [
+    "area: src=[364,675][849,808] image=886x1920 scale=3.6090226 page=1894x624 pad=72",
+    "code: anchor digit=Rect(625, 191 - 742, 465) numberHeight=283.0 pitch=144.57143 image=1894x624",
+    "code: crop=[47.942905,266.9][161.14291,380.1] bw=false read='' -> null",
+    "code: crop=[47.942905,266.9][161.14291,380.1] bw=true read='' -> null",
+    "code: crop=[90.3929,266.9][203.59291,380.1] bw=false read='(2' -> 2",
+    "code: crop=[90.3929,266.9][203.59291,380.1] bw=true read='2' -> 2",
+    "code: crop=[132.8429,266.9][246.04291,380.1] bw=false read='2)' -> 2",
+    "code: crop=[132.8429,266.9][246.04291,380.1] bw=true read='2)' -> 2",
+    "code: crop=[175.2929,266.9][288.4929,380.1] bw=false read='' -> null",
+    "code: crop=[175.2929,266.9][288.4929,380.1] bw=true read='' -> null",
+    "code: crop=[217.74289,266.9][330.9429,380.1] bw=false read='' -> null",
+    "code: crop=[217.74289,266.9][330.9429,380.1] bw=true read='' -> null",
+    "code: crop=[260.1929,266.9][373.3929,380.1] bw=false read='' -> null",
+    "code: crop=[260.1929,266.9][373.3929,380.1] bw=true read='' -> null",
+    "code: votes={2=4} -> 2",
+    "region: zone/top crop=[1651,154][1796,323] bw=false read='o' -> O",
+    "region: zone/top crop=[1651,154][1796,323] bw=true read='' -> null",
+    "region: zone/bottom crop=[1651,323][1796,493] bw=false read='R' -> R",
+    "region: zone/bottom crop=[1651,323][1796,493] bw=true read='R' -> R",
+    "region: lastDigit/top crop=[1534,154][1651,323] bw=false read='' -> null",
+    "region: lastDigit/top crop=[1534,154][1651,323] bw=true read='' -> null",
+    "region: lastDigit/bottom crop=[1534,323][1651,493] bw=false read='' -> null",
+    "region: lastDigit/bottom crop=[1534,323][1651,493] bw=true read='' -> null",
+    "ink: number=[625,182][1637,465] rgb=[89, 94, 163]"
+   ]
+  }
+ ]
+}

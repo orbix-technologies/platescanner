@@ -1,0 +1,356 @@
+{
+ "session": "1792065442298",
+ "expectedNumber": "0123456",
+ "events": [
+  {
+   "t_ms": 12652,
+   "event": "areaOcr",
+   "elements": [
+    {
+     "text": "@-0123456",
+     "confidence": 0.6892361044883728,
+     "box": {
+      "left": 0.0352,
+      "top": 0.2021,
+      "right": 0.9189,
+      "bottom": 0.8104
+     },
+     "symbols": [
+      {
+       "text": "@",
+       "box": {
+        "left": 0.0352,
+        "top": 0.3,
+        "right": 0.2219,
+        "bottom": 0.8104
+       }
+      },
+      {
+       "text": "-",
+       "box": {
+        "left": 0.2596,
+        "top": 0.2813,
+        "right": 0.3463,
+        "bottom": 0.7771
+       }
+      },
+      {
+       "text": "0",
+       "box": {
+        "left": 0.3608,
+        "top": 0.2708,
+        "right": 0.4362,
+        "bottom": 0.7646
+       }
+      },
+      {
+       "text": "1",
+       "box": {
+        "left": 0.4613,
+        "top": 0.2563,
+        "right": 0.5292,
+        "bottom": 0.75
+       }
+      },
+      {
+       "text": "2",
+       "box": {
+        "left": 0.5324,
+        "top": 0.2458,
+        "right": 0.6015,
+        "bottom": 0.7396
+       }
+      },
+      {
+       "text": "3",
+       "box": {
+        "left": 0.6292,
+        "top": 0.2333,
+        "right": 0.6983,
+        "bottom": 0.7271
+       }
+      },
+      {
+       "text": "4",
+       "box": {
+        "left": 0.7014,
+        "top": 0.2229,
+        "right": 0.7706,
+        "bottom": 0.7167
+       }
+      },
+      {
+       "text": "5",
+       "box": {
+        "left": 0.7976,
+        "top": 0.2083,
+        "right": 0.8668,
+        "bottom": 0.7021
+       }
+      },
+      {
+       "text": "6",
+       "box": {
+        "left": 0.8787,
+        "top": 0.2021,
+        "right": 0.9189,
+        "bottom": 0.6917
+       }
+      }
+     ]
+    },
+    {
+     "text": "R",
+     "confidence": 0.68359375,
+     "box": {
+      "left": 0.9648,
+      "top": 0.5083,
+      "right": 0.9931,
+      "bottom": 0.7708
+     },
+     "symbols": [
+      {
+       "text": "R",
+       "box": {
+        "left": 0.9648,
+        "top": 0.5083,
+        "right": 0.9931,
+        "bottom": 0.7708
+       }
+      }
+     ]
+    },
+    {
+     "text": "//woetabri",
+     "confidence": 0.32929688692092896,
+     "box": {
+      "left": 0.0962,
+      "top": 0.6521,
+      "right": 0.5475,
+      "bottom": 0.8354
+     },
+     "symbols": [
+      {
+       "text": "/",
+       "box": {
+        "left": 0.0962,
+        "top": 0.6917,
+        "right": 0.1144,
+        "bottom": 0.8354
+       }
+      },
+      {
+       "text": "/",
+       "box": {
+        "left": 0.1131,
+        "top": 0.6875,
+        "right": 0.1402,
+        "bottom": 0.8333
+       }
+      },
+      {
+       "text": "w",
+       "box": {
+        "left": 0.1559,
+        "top": 0.6833,
+        "right": 0.1955,
+        "bottom": 0.8292
+       }
+      },
+      {
+       "text": "o",
+       "box": {
+        "left": 0.2143,
+        "top": 0.6792,
+        "right": 0.2514,
+        "bottom": 0.825
+       }
+      },
+      {
+       "text": "e",
+       "box": {
+        "left": 0.269,
+        "top": 0.675,
+        "right": 0.2954,
+        "bottom": 0.8208
+       }
+      },
+      {
+       "text": "t",
+       "box": {
+        "left": 0.2998,
+        "top": 0.6729,
+        "right": 0.3199,
+        "bottom": 0.8167
+       }
+      },
+      {
+       "text": "a",
+       "box": {
+        "left": 0.2986,
+        "top": 0.6667,
+        "right": 0.3796,
+        "bottom": 0.8167
+       }
+      },
+      {
+       "text": "b",
+       "box": {
+        "left": 0.4846,
+        "top": 0.6542,
+        "right": 0.5475,
+        "bottom": 0.8021
+       }
+      },
+      {
+       "text": "r",
+       "box": {
+        "left": 0.5267,
+        "top": 0.6542,
+        "right": 0.5336,
+        "bottom": 0.7979
+       }
+      },
+      {
+       "text": "i",
+       "box": {
+        "left": 0.5336,
+        "top": 0.6542,
+        "right": 0.5405,
+        "bottom": 0.7979
+       }
+      }
+     ]
+    },
+    {
+     "text": "Lcenatsh",
+     "confidence": 0.37890625,
+     "box": {
+      "left": 0.5713,
+      "top": 0.6167,
+      "right": 0.9874,
+      "bottom": 0.7958
+     },
+     "symbols": [
+      {
+       "text": "L",
+       "box": {
+        "left": 0.5713,
+        "top": 0.65,
+        "right": 0.6179,
+        "bottom": 0.7958
+       }
+      },
+      {
+       "text": "c",
+       "box": {
+        "left": 0.638,
+        "top": 0.6438,
+        "right": 0.665,
+        "bottom": 0.7896
+       }
+      },
+      {
+       "text": "e",
+       "box": {
+        "left": 0.6713,
+        "top": 0.6438,
+        "right": 0.6882,
+        "bottom": 0.7875
+       }
+      },
+      {
+       "text": "n",
+       "box": {
+        "left": 0.6644,
+        "top": 0.6396,
+        "right": 0.7373,
+        "bottom": 0.7875
+       }
+      },
+      {
+       "text": "a",
+       "box": {
+        "left": 0.8316,
+        "top": 0.625,
+        "right": 0.8963,
+        "bottom": 0.7729
+       }
+      },
+      {
+       "text": "t",
+       "box": {
+        "left": 0.8799,
+        "top": 0.625,
+        "right": 0.9038,
+        "bottom": 0.7688
+       }
+      },
+      {
+       "text": "s",
+       "box": {
+        "left": 0.9258,
+        "top": 0.6188,
+        "right": 0.9579,
+        "bottom": 0.7646
+       }
+      },
+      {
+       "text": "h",
+       "box": {
+        "left": 0.9679,
+        "top": 0.6188,
+        "right": 0.9874,
+        "bottom": 0.7625
+       }
+      }
+     ]
+    }
+   ],
+   "codeHint": null,
+   "regionColumns": [
+    {
+     "letters": "AR",
+     "source": "zone",
+     "box": {
+      "left": 0.9271,
+      "top": 0.2021,
+      "right": 1.0063,
+      "bottom": 0.7646
+     }
+    }
+   ],
+   "inkColor": [
+    78,
+    81,
+    149
+   ],
+   "nativePasses": [
+    "area: src=[183,765][604,892] image=886x1920 scale=3.7795277 page=1735x624 pad=72",
+    "code: anchor digit=Rect(646, 202 - 766, 439) numberHeight=270.0 pitch=126.85714 image=1735x624",
+    "code: crop=[135.3143,250.0][243.3143,358.0] bw=false read='' -> null",
+    "code: crop=[135.3143,250.0][243.3143,358.0] bw=true read='' -> null",
+    "code: crop=[175.8143,250.0][283.8143,358.0] bw=false read='' -> null",
+    "code: crop=[175.8143,250.0][283.8143,358.0] bw=true read='' -> null",
+    "code: crop=[216.3143,250.0][324.3143,358.0] bw=false read='' -> null",
+    "code: crop=[216.3143,250.0][324.3143,358.0] bw=true read='' -> null",
+    "code: crop=[256.8143,250.0][364.8143,358.0] bw=false read='' -> null",
+    "code: crop=[256.8143,250.0][364.8143,358.0] bw=true read='' -> null",
+    "code: crop=[297.3143,250.0][405.3143,358.0] bw=false read='' -> null",
+    "code: crop=[297.3143,250.0][405.3143,358.0] bw=true read=')' -> null",
+    "code: crop=[337.8143,250.0][445.8143,358.0] bw=false read='' -> null",
+    "code: crop=[337.8143,250.0][445.8143,358.0] bw=true read='K' -> null",
+    "code: votes={} -> null",
+    "region: zone/top crop=[1547,143][1673,304] bw=false read='A D' -> null",
+    "region: zone/top crop=[1547,143][1673,304] bw=true read='A' -> A",
+    "region: zone/bottom crop=[1547,304][1673,465] bw=false read='R' -> R",
+    "region: zone/bottom crop=[1547,304][1673,465] bw=true read='' -> null",
+    "region: lastDigit/top crop=[1457,143][1547,304] bw=false read='N' -> N",
+    "region: lastDigit/top crop=[1457,143][1547,304] bw=true read='' -> null",
+    "region: lastDigit/bottom crop=[1457,304][1547,465] bw=false read='' -> null",
+    "region: lastDigit/bottom crop=[1457,304][1547,465] bw=true read='' -> null",
+    "ink: number=[646,169][1534,439] rgb=[78, 81, 149]"
+   ]
+  }
+ ]
+}

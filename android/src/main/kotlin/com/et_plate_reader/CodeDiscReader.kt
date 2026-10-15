@@ -29,12 +29,17 @@ object CodeDiscReader {
      * Returns "1".."5", or null. [bitmap] is only called when a pass is
      * needed and must return the upright image matching [text]'s boxes.
      */
+    /** Votes behind the last [read] result (0 when none). */
+    @Volatile var lastVotes = 0
+        private set
+
     fun read(
         recognizer: TextRecognizer,
         text: Text,
         log: MutableList<String>? = null,
         bitmap: () -> Bitmap,
     ): String? {
+        lastVotes = 0
         val anchor = CropOcr.numberAnchor(text)
         if (anchor == null) {
             log?.add("code: no number anchor")
@@ -68,6 +73,7 @@ object CodeDiscReader {
         }
         val best = votes.maxByOrNull { it.value }
         log?.add("code: votes=$votes -> ${best?.key}")
+        lastVotes = best?.value ?: 0
         return best?.key
     }
 

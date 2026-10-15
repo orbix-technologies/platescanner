@@ -1,0 +1,162 @@
+{
+ "session": "1792065508521",
+ "expectedNumber": "012345",
+ "events": [
+  {
+   "t_ms": 10606,
+   "event": "areaOcr",
+   "elements": [
+    {
+     "text": "A",
+     "confidence": 0.74609375,
+     "box": {
+      "left": 0.9169,
+      "top": 0.1554,
+      "right": 0.9501,
+      "bottom": 0.4279
+     },
+     "symbols": [
+      {
+       "text": "A",
+       "box": {
+        "left": 0.9169,
+        "top": 0.1554,
+        "right": 0.9501,
+        "bottom": 0.4279
+       }
+      }
+     ]
+    },
+    {
+     "text": "A012345",
+     "confidence": 0.7488839030265808,
+     "box": {
+      "left": 0.3952,
+      "top": 0.1779,
+      "right": 0.9324,
+      "bottom": 0.8221
+     },
+     "symbols": [
+      {
+       "text": "A",
+       "box": {
+        "left": 0.3952,
+        "top": 0.241,
+        "right": 0.4606,
+        "bottom": 0.8221
+       }
+      },
+      {
+       "text": "0",
+       "box": {
+        "left": 0.4645,
+        "top": 0.232,
+        "right": 0.5316,
+        "bottom": 0.8131
+       }
+      },
+      {
+       "text": "1",
+       "box": {
+        "left": 0.5593,
+        "top": 0.2185,
+        "right": 0.6258,
+        "bottom": 0.7995
+       }
+      },
+      {
+       "text": "2",
+       "box": {
+        "left": 0.6341,
+        "top": 0.2095,
+        "right": 0.6912,
+        "bottom": 0.7905
+       }
+      },
+      {
+       "text": "3",
+       "box": {
+        "left": 0.704,
+        "top": 0.2005,
+        "right": 0.7633,
+        "bottom": 0.7815
+       }
+      },
+      {
+       "text": "4",
+       "box": {
+        "left": 0.77,
+        "top": 0.1914,
+        "right": 0.8381,
+        "bottom": 0.7725
+       }
+      },
+      {
+       "text": "5",
+       "box": {
+        "left": 0.8647,
+        "top": 0.1802,
+        "right": 0.9324,
+        "bottom": 0.7613
+       }
+      }
+     ]
+    },
+    {
+     "text": "A",
+     "confidence": 0.66015625,
+     "box": {
+      "left": 0.9246,
+      "top": 0.4955,
+      "right": 0.9501,
+      "bottom": 0.7748
+     },
+     "symbols": [
+      {
+       "text": "A",
+       "box": {
+        "left": 0.9246,
+        "top": 0.4955,
+        "right": 0.9501,
+        "bottom": 0.7748
+       }
+      }
+     ]
+    }
+   ],
+   "codeHint": null,
+   "regionColumns": [],
+   "inkColor": [
+    76,
+    46,
+    32
+   ],
+   "nativePasses": [
+    "area: src=[203,777][654,888] image=886x1920 scale=4.0 page=1936x576 pad=66",
+    "code: anchor digit=Rect(904, 169 - 1025, 427) numberHeight=281.0 pitch=140.66667 image=1936x576",
+    "code: crop=[341.4,230.3][453.80002,342.7] bw=false read='' -> null",
+    "code: crop=[341.4,230.3][453.80002,342.7] bw=true read='' -> null",
+    "code: crop=[383.55,230.3][495.95,342.7] bw=false read='' -> null",
+    "code: crop=[383.55,230.3][495.95,342.7] bw=true read='' -> null",
+    "code: crop=[425.69998,230.3][538.1,342.7] bw=false read='' -> null",
+    "code: crop=[425.69998,230.3][538.1,342.7] bw=true read='' -> null",
+    "code: crop=[467.84998,230.3][580.25,342.7] bw=false read='' -> null",
+    "code: crop=[467.84998,230.3][580.25,342.7] bw=true read='' -> null",
+    "code: crop=[510.0,230.3][622.4,342.7] bw=false read='' -> null",
+    "code: crop=[510.0,230.3][622.4,342.7] bw=true read='' -> null",
+    "code: crop=[552.15,230.3][664.55005,342.7] bw=false read='' -> null",
+    "code: crop=[552.15,230.3][664.55005,342.7] bw=true read='' -> null",
+    "code: votes={} -> null",
+    "region: zone/top crop=[1762,118][1902,286] bw=false read='' -> null",
+    "region: zone/top crop=[1762,118][1902,286] bw=true read='' -> null",
+    "region: zone/bottom crop=[1762,286][1902,455] bw=false read='' -> null",
+    "region: zone/bottom crop=[1762,286][1902,455] bw=true read='' -> null",
+    "region: lastDigit/top crop=[1612,118][1762,286] bw=false read='' -> null",
+    "region: lastDigit/top crop=[1612,118][1762,286] bw=true read='' -> null",
+    "region: lastDigit/bottom crop=[1612,286][1762,455] bw=false read='' -> null",
+    "region: lastDigit/bottom crop=[1612,286][1762,455] bw=true read='' -> null",
+    "ink: number=[904,146][1748,427] rgb=[76, 46, 32]"
+   ]
+  }
+ ]
+}

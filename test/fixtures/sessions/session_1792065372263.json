@@ -1,0 +1,373 @@
+{
+ "session": "1792065372263",
+ "expectedNumber": "0123456",
+ "events": [
+  {
+   "t_ms": 12586,
+   "event": "areaOcr",
+   "elements": [
+    {
+     "text": "0123456!",
+     "confidence": 0.76123046875,
+     "box": {
+      "left": 0.3029,
+      "top": 0.0854,
+      "right": 1.0,
+      "bottom": 0.5875
+     },
+     "symbols": [
+      {
+       "text": "0",
+       "box": {
+        "left": 0.3029,
+        "top": 0.1188,
+        "right": 0.3801,
+        "bottom": 0.5875
+       }
+      },
+      {
+       "text": "1",
+       "box": {
+        "left": 0.3948,
+        "top": 0.1125,
+        "right": 0.4691,
+        "bottom": 0.5813
+       }
+      },
+      {
+       "text": "2",
+       "box": {
+        "left": 0.4874,
+        "top": 0.1083,
+        "right": 0.5645,
+        "bottom": 0.5771
+       }
+      },
+      {
+       "text": "3",
+       "box": {
+        "left": 0.5827,
+        "top": 0.1042,
+        "right": 0.6627,
+        "bottom": 0.5729
+       }
+      },
+      {
+       "text": "4",
+       "box": {
+        "left": 0.6781,
+        "top": 0.1,
+        "right": 0.7525,
+        "bottom": 0.5688
+       }
+      },
+      {
+       "text": "5",
+       "box": {
+        "left": 0.7707,
+        "top": 0.0938,
+        "right": 0.8534,
+        "bottom": 0.5625
+       }
+      },
+      {
+       "text": "6",
+       "box": {
+        "left": 0.8689,
+        "top": 0.0896,
+        "right": 0.946,
+        "bottom": 0.5583
+       }
+      },
+      {
+       "text": "!",
+       "box": {
+        "left": 0.9734,
+        "top": 0.0875,
+        "right": 1.0,
+        "bottom": 0.5542
+       }
+      }
+     ]
+    },
+    {
+     "text": "/ww.",
+     "confidence": 0.4111328125,
+     "box": {
+      "left": 0.0827,
+      "top": 0.5125,
+      "right": 0.2062,
+      "bottom": 0.6479
+     },
+     "symbols": [
+      {
+       "text": "/",
+       "box": {
+        "left": 0.0827,
+        "top": 0.5188,
+        "right": 0.1066,
+        "bottom": 0.6479
+       }
+      },
+      {
+       "text": "w",
+       "box": {
+        "left": 0.1115,
+        "top": 0.5167,
+        "right": 0.1318,
+        "bottom": 0.6458
+       }
+      },
+      {
+       "text": "w",
+       "box": {
+        "left": 0.1374,
+        "top": 0.5146,
+        "right": 0.1641,
+        "bottom": 0.6438
+       }
+      },
+      {
+       "text": ".",
+       "box": {
+        "left": 0.1795,
+        "top": 0.5125,
+        "right": 0.2062,
+        "bottom": 0.6417
+       }
+      }
+     ]
+    },
+    {
+     "text": "MetappbniLicen2patds",
+     "confidence": 0.4527343809604645,
+     "box": {
+      "left": 0.2167,
+      "top": 0.475,
+      "right": 0.9741,
+      "bottom": 0.6417
+     },
+     "symbols": [
+      {
+       "text": "M",
+       "box": {
+        "left": 0.2167,
+        "top": 0.5104,
+        "right": 0.2405,
+        "bottom": 0.6396
+       }
+      },
+      {
+       "text": "e",
+       "box": {
+        "left": 0.2475,
+        "top": 0.5104,
+        "right": 0.2651,
+        "bottom": 0.6396
+       }
+      },
+      {
+       "text": "t",
+       "box": {
+        "left": 0.2672,
+        "top": 0.5083,
+        "right": 0.2889,
+        "bottom": 0.6375
+       }
+      },
+      {
+       "text": "a",
+       "box": {
+        "left": 0.2973,
+        "top": 0.5063,
+        "right": 0.3296,
+        "bottom": 0.6354
+       }
+      },
+      {
+       "text": "p",
+       "box": {
+        "left": 0.3492,
+        "top": 0.5042,
+        "right": 0.3766,
+        "bottom": 0.6333
+       }
+      },
+      {
+       "text": "p",
+       "box": {
+        "left": 0.3647,
+        "top": 0.5021,
+        "right": 0.4187,
+        "bottom": 0.6333
+       }
+      },
+      {
+       "text": "b",
+       "box": {
+        "left": 0.4825,
+        "top": 0.4958,
+        "right": 0.5281,
+        "bottom": 0.6271
+       }
+      },
+      {
+       "text": "n",
+       "box": {
+        "left": 0.5231,
+        "top": 0.4958,
+        "right": 0.5302,
+        "bottom": 0.625
+       }
+      },
+      {
+       "text": "i",
+       "box": {
+        "left": 0.5203,
+        "top": 0.4958,
+        "right": 0.547,
+        "bottom": 0.625
+       }
+      },
+      {
+       "text": "L",
+       "box": {
+        "left": 0.5729,
+        "top": 0.4938,
+        "right": 0.6073,
+        "bottom": 0.6229
+       }
+      },
+      {
+       "text": "i",
+       "box": {
+        "left": 0.6157,
+        "top": 0.4917,
+        "right": 0.6367,
+        "bottom": 0.6208
+       }
+      },
+      {
+       "text": "c",
+       "box": {
+        "left": 0.6438,
+        "top": 0.4896,
+        "right": 0.6648,
+        "bottom": 0.6188
+       }
+      },
+      {
+       "text": "e",
+       "box": {
+        "left": 0.6739,
+        "top": 0.4875,
+        "right": 0.6921,
+        "bottom": 0.6167
+       }
+      },
+      {
+       "text": "n",
+       "box": {
+        "left": 0.6872,
+        "top": 0.4875,
+        "right": 0.7202,
+        "bottom": 0.6167
+       }
+      },
+      {
+       "text": "2",
+       "box": {
+        "left": 0.7454,
+        "top": 0.4833,
+        "right": 0.7896,
+        "bottom": 0.6146
+       }
+      },
+      {
+       "text": "p",
+       "box": {
+        "left": 0.8065,
+        "top": 0.4813,
+        "right": 0.8429,
+        "bottom": 0.6104
+       }
+      },
+      {
+       "text": "a",
+       "box": {
+        "left": 0.8583,
+        "top": 0.4792,
+        "right": 0.8906,
+        "bottom": 0.6083
+       }
+      },
+      {
+       "text": "t",
+       "box": {
+        "left": 0.9046,
+        "top": 0.4771,
+        "right": 0.9292,
+        "bottom": 0.6063
+       }
+      },
+      {
+       "text": "d",
+       "box": {
+        "left": 0.9362,
+        "top": 0.475,
+        "right": 0.9537,
+        "bottom": 0.6042
+       }
+      },
+      {
+       "text": "s",
+       "box": {
+        "left": 0.9593,
+        "top": 0.475,
+        "right": 0.9741,
+        "bottom": 0.6042
+       }
+      }
+     ]
+    }
+   ],
+   "codeHint": "2",
+   "regionColumns": [],
+   "inkColor": [
+    79,
+    81,
+    144
+   ],
+   "nativePasses": [
+    "area: src=[334,604][771,751] image=886x1920 scale=3.2653062 page=1570x624 pad=72",
+    "code: anchor digit=Rect(504, 129 - 614, 354) numberHeight=239.0 pitch=131.0 image=1570x624",
+    "code: crop=[0.0,186.7][95.6,282.3] bw=false read='' -> null",
+    "code: crop=[0.0,186.7][95.6,282.3] bw=true read='' -> null",
+    "code: crop=[35.850002,186.7][131.45,282.3] bw=false read='' -> null",
+    "code: crop=[35.850002,186.7][131.45,282.3] bw=true read='' -> null",
+    "code: crop=[71.7,186.7][167.3,282.3] bw=false read='' -> null",
+    "code: crop=[71.7,186.7][167.3,282.3] bw=true read='' -> null",
+    "code: crop=[107.55,186.7][203.15001,282.3] bw=false read='' -> null",
+    "code: crop=[107.55,186.7][203.15001,282.3] bw=true read='2' -> 2",
+    "code: crop=[143.40001,186.7][239.00002,282.3] bw=false read='2' -> 2",
+    "code: crop=[143.40001,186.7][239.00002,282.3] bw=true read='' -> null",
+    "code: crop=[179.25002,186.7][274.85,282.3] bw=false read='2' -> 2",
+    "code: crop=[179.25002,186.7][274.85,282.3] bw=true read='2' -> 2",
+    "code: votes={2=4} -> 2",
+    "region: trailing/top crop=[1449,93][1509,234] bw=false read='' -> null",
+    "region: trailing/top crop=[1449,93][1509,234] bw=true read='' -> null",
+    "region: trailing/bottom crop=[1449,234][1509,376] bw=false read='' -> null",
+    "region: trailing/bottom crop=[1449,234][1509,376] bw=true read='' -> null",
+    "region: zone/top crop=[1432,93][1565,234] bw=false read='' -> null",
+    "region: zone/top crop=[1432,93][1565,234] bw=true read='' -> null",
+    "region: zone/bottom crop=[1432,234][1565,376] bw=false read='' -> null",
+    "region: zone/bottom crop=[1432,234][1565,376] bw=true read='' -> null",
+    "region: lastDigit/top crop=[1300,93][1432,234] bw=false read='' -> null",
+    "region: lastDigit/top crop=[1300,93][1432,234] bw=true read='' -> null",
+    "region: lastDigit/bottom crop=[1300,234][1432,376] bw=false read='' -> null",
+    "region: lastDigit/bottom crop=[1300,234][1432,376] bw=true read='' -> null",
+    "ink: number=[504,115][1421,354] rgb=[79, 81, 144]"
+   ]
+  }
+ ]
+}

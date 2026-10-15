@@ -153,7 +153,11 @@ class EthiopianPlateParser {
     if (!hasRegion && requireRegion && (numeric || type == null)) {
       issues.add(PlateIssue.missingRegion);
     }
-    if (serial == null || !serialPattern.hasMatch(serial)) {
+    // Diplomatic plates carry a four-digit number.
+    final diplomatic = type == PlateServiceType.diplomatic &&
+        serial != null &&
+        RegExp(r'^\d{4}$').hasMatch(serial);
+    if (serial == null || (!serialPattern.hasMatch(serial) && !diplomatic)) {
       issues.add(PlateIssue.missingSerial);
     }
     return issues;

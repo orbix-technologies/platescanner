@@ -130,6 +130,8 @@ class AreaOcr {
     this.codeHint,
     this.regionColumns = const [],
     this.inkColor,
+    this.paperColor,
+    this.codeVotes,
     this.debug = const [],
   });
 
@@ -146,6 +148,13 @@ class AreaOcr {
   /// Average colour of the number's characters as `[r, g, b]` (0–255), if
   /// measured. The colour identifies the category (code 1 red … 5 orange).
   final List<int>? inkColor;
+
+  /// Average colour of the plate background around the number (`[r, g, b]`).
+  /// Yellow marks a police plate.
+  final List<int>? paperColor;
+
+  /// How many crops of the circled-code pass agreed on [codeHint].
+  final int? codeVotes;
 
   /// What the native section passes tried and read (diagnostics).
   final List<String> debug;
@@ -168,6 +177,11 @@ class AreaOcr {
             ?.whereType<num>()
             .map((v) => v.toInt())
             .toList(growable: false),
+        paperColor: (map['paperColor'] as List<Object?>?)
+            ?.whereType<num>()
+            .map((v) => v.toInt())
+            .toList(growable: false),
+        codeVotes: (map['codeVotes'] as num?)?.toInt(),
         debug: (map['debug'] as List<Object?>? ?? const [])
             .whereType<String>()
             .toList(growable: false),

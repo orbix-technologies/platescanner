@@ -145,6 +145,7 @@ public class EtPlateReaderPlugin: NSObject, FlutterPlugin {
       log.add("area: src=\(src) image=\(image.width)x\(image.height) scale=\(scale) page=\(pw)x\(ph) pad=\(pad)")
       if let code = CodeDiscReader.read(observations, log: log, image: { page }) {
         payload["codeHint"] = code
+        payload["codeVotes"] = CodeDiscReader.lastVotes
       }
       // Pixel rect on the page (top-left origin) → area.
       func normPx(_ r: CGRect) -> [String: Any] {
@@ -173,6 +174,10 @@ public class EtPlateReaderPlugin: NSObject, FlutterPlugin {
         if let rgb = CropOcr.inkColor(page, area: numberBox) {
           payload["inkColor"] = rgb
           log.add("ink: number=\(numberBox) rgb=\(rgb)")
+        }
+        if let rgb = CropOcr.paperColor(page, area: numberBox) {
+          payload["paperColor"] = rgb
+          log.add("paper: rgb=\(rgb)")
         }
       }
       payload["debug"] = log.lines

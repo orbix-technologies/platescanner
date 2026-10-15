@@ -117,6 +117,8 @@ class SessionLog {
             },
         ],
         'inkColor': ocr.inkColor,
+        'paperColor': ocr.paperColor,
+        'codeVotes': ocr.codeVotes,
         'nativePasses': ocr.debug,
       };
 

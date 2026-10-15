@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import '../models/ocr_frame.dart';
 import '../models/plate_area.dart';
 import '../models/plate_record.dart';
+import 'diplomatic_codes.dart';
 import 'ethiopian_plate_parser.dart';
 import 'plate_service_type.dart';
 
@@ -48,6 +49,12 @@ class PlateArranger {
   /// Section characters are at least this fraction of the number's height.
   static const _minGlyph = 0.25;
 
+  /// Latin stacks that mark a special plate instead of a region.
+  static const _specials = {'UN', 'AU', 'CD'};
+
+  /// A circle read backed by at least this many crops beats the colour.
+  static const _strongVotes = 3;
+
   /// Arranges [ocr] and returns the sections plus the reading they imply.
   ({PlateArrangement arrangement, PlateCandidate candidate}) arrange(
     AreaOcr ocr,
@@ -64,10 +71,14 @@ class PlateArranger {
     final raw = _number(chars);
     RegionColumn? column;
     for (final c in ocr.regionColumns) {
-      if (c.letters.length != 2 || parser.readRegion(c.letters) == null) {
+      final special = _specials.contains(c.letters);
+      if (c.letters.length != 2 ||
+          (parser.readRegion(c.letters) == null && !special)) {
         continue;
       }
-      if (c.source == 'lastDigit' && raw != null) {
+      // UN / AU / CD are distinctive enough to trust even from the last
+      // "digit" (diplomatic numbers are only four digits long).
+      if (c.source == 'lastDigit' && raw != null && !special) {
         final covered = raw.chars.where(
             (x) => x.box.centerX >= c.box.left && x.box.centerX <= c.box.right);
         final stealsDigit = covered.isNotEmpty &&
@@ -89,11 +100,16 @@ class PlateArranger {
       }
       chars = chars.where((c) => !inColumn.contains(c)).toList();
     }
-    final number = _number(chars);
+    // Diplomatic plates carry a four-digit number; others five to seven.
+    final number = _number(chars) ??
+        (column?.letters == 'CD' ||
+                ocr.elements.any((e) => e.text.contains('CD'))
+            ? _number(chars, minLength: 4)
+            : null);
 
     if (number == null) {
       final arrangement = PlateArrangement(
-        code: _codeSection(const [], ocr.codeHint, null, null),
+        code: _codeSection(const [], ocr.codeHint, null),
         geezRegion: _geezSection(const [], null),
         number: const PlateSection(
           kind: PlateSectionKind.number,
@@ -158,8 +174,43 @@ class PlateArranger {
     }
 
     final latin = useColumn ? _columnSection(column) : _latinSection(right);
+
+    // Special plates: UN / AU / CD in the Latin stack, or a yellow plate
+    // (police). Diplomatic plates show the embassy number in big digits at
+    // the left.
+    String? special = _specials.contains(latin.value) ? latin.value : null;
+    final paper = ocr.paperColor;
+    if (special == null &&
+        paper != null &&
+        paper.length == 3 &&
+        PaperColor.isYellow(paper[0], paper[1], paper[2])) {
+      special = PlateServiceType.police.code;
+    }
+    String? embassy;
+    if (special == 'CD') {
+      final left = chars
+          .where((c) =>
+              !number.chars.contains(c) &&
+              _isDigit(c.text) &&
+              c.box.centerX < nBox.left &&
+              c.box.height >= glyph * 0.6)
+          .toList()
+        ..sort((a, b) => a.box.left.compareTo(b.box.left));
+      if (left.isNotEmpty && left.length <= 3) {
+        embassy = left.map((c) => c.text).join();
+      }
+    }
+
     final arrangement = PlateArrangement(
-      code: _codeSection(codeChars, ocr.codeHint, codeZone, ocr.inkColor),
+      code: _codeSection(
+        codeChars,
+        ocr.codeHint,
+        codeZone,
+        ink: ocr.inkColor,
+        votes: ocr.codeVotes,
+        special: special,
+        embassy: embassy,
+      ),
       geezRegion: _geezSection(geezChars, geezZone),
       number: number.section,
       // Show where section 4 is expected even when nothing was read there.
@@ -238,21 +289,24 @@ class PlateArranger {
   /// Section 3: the longest run of number-sized, digit-like characters side
   /// by side on one row (5–7 long, mostly real digits). Anything else on the
   /// row between them (a `-`, a symbol) breaks the run.
-  _Number? _number(List<_Char> chars) {
+  _Number? _number(List<_Char> chars, {int minLength = 5}) {
     // Within each OCR element first: another line crossing the number (a
     // watermark, a frame edge) would otherwise interleave with its digits.
     _Number? best;
     final elements = chars.map((c) => c.element).toSet();
     for (final e in elements) {
-      final n = _numberIn(chars.where((c) => c.element == e).toList());
+      final n = _numberIn(
+        chars.where((c) => c.element == e).toList(),
+        minLength,
+      );
       if (n != null && (best == null || n.realDigits > best.realDigits)) {
         best = n;
       }
     }
-    return best ?? _numberIn(chars);
+    return best ?? _numberIn(chars, minLength);
   }
 
-  _Number? _numberIn(List<_Char> chars) {
+  _Number? _numberIn(List<_Char> chars, int minLength) {
     final digits = chars.where((c) => _isDigit(c.text)).toList();
     if (digits.isEmpty) return null;
     final tallest =
@@ -262,6 +316,11 @@ class PlateArranger {
         (_isDigit(c.text) || (!c.lowercase && _toDigit.containsKey(c.text)));
 
     final sorted = [...chars]..sort((a, b) => a.box.left.compareTo(b.box.left));
+    // Gaps are compared with character width (same axis): the plate's height
+    // and width are normalized separately, so height says nothing about x.
+    final widths = sorted.where(joinable).map((c) => c.box.width).toList()
+      ..sort();
+    final charWidth = widths.isEmpty ? 0.0 : widths[widths.length ~/ 2];
     _Number? best;
     var run = <_Char>[];
     void close() {
@@ -285,7 +344,7 @@ class PlateArranger {
             : kept.sublist(0, kept.length - 1);
       }
       final real = kept.where((c) => _isDigit(c.text)).length;
-      if (kept.length >= 5 && real >= 4) {
+      if (kept.length >= minLength && real >= minLength - 1) {
         final n = _Number(List.of(kept), runLength: run.length);
         if (best == null || n.realDigits > best!.realDigits) best = n;
       }
@@ -303,7 +362,7 @@ class PlateArranger {
           final gap = c.box.left - prev.box.right;
           final sameRow =
               (c.box.centerY - prev.box.centerY).abs() < prev.box.height * 0.4;
-          if (gap > tallest * 0.8 || !sameRow) close();
+          if (gap > charWidth * 1.2 || !sameRow) close();
         } else if (onRow) {
           close();
         }
@@ -319,18 +378,42 @@ class PlateArranger {
     return PlateServiceType.isKnown(d) ? d : null;
   }
 
-  /// Section 1: the circled-code pass wins; else a code digit read in the
-  /// code zone (a ring read as a letter is not a code). [zone] is where the
-  /// circle sits.
+  /// Section 1, in order of trust:
   ///
-  /// The number's ink colour encodes the same category and decides when
-  /// it disagrees with the circle read.
+  /// 1. a special plate (UN / AU / CD stack, yellow police plate);
+  /// 2. the circled-code pass, when backed by [_strongVotes] crops;
+  /// 3. the number's ink colour (1 red, 2 blue, 3 green, 4 black,
+  ///    5 orange) — except red ↔ orange, which a camera can't tell apart;
+  /// 4. a weak circle read, or a code digit read in the code zone.
   PlateSection _codeSection(
     List<_Char> chars,
     String? hint,
-    NormalizedRect? zone,
+    NormalizedRect? zone, {
     List<int>? ink,
-  ) {
+    int? votes,
+    String? special,
+    String? embassy,
+  }) {
+    final box = zone != null && zone.width > 0.01 ? zone : _union(chars);
+    if (special != null) {
+      final mission = embassy == null
+          ? null
+          : diplomaticMissions[int.tryParse(embassy) ?? -1];
+      return PlateSection(
+        kind: PlateSectionKind.code,
+        value: special,
+        chars: box == null ? const [] : [PlateChar(special, box)],
+        box: box,
+        note: special == 'CD'
+            ? (embassy == null
+                ? 'diplomatic'
+                : 'embassy $embassy${mission == null ? '' : ' · $mission'}')
+            : special == PlateServiceType.police.code
+                ? 'yellow plate'
+                : 'special plate',
+      );
+    }
+
     String? value;
     String? note;
     if (PlateServiceType.isKnown(hint) && int.tryParse(hint!) != null) {
@@ -341,19 +424,17 @@ class PlateArranger {
         if (value != null) break;
       }
     }
-    // The number's colour encodes the same category (1 red, 2 blue,
-    // 3 green, 4 black, 5 orange). Real logs showed the circle read
-    // misfiring, so a clear colour wins when the two disagree.
-    if (ink != null && ink.length == 3) {
-      final byColour = PlateServiceType.fromInk(
-        InkColor.classify(ink[0], ink[1], ink[2]),
-      )?.code;
-      if (byColour != null && byColour != value) {
+    final strong = value != null && (votes ?? 0) >= _strongVotes;
+    if (!strong && ink != null && ink.length == 3) {
+      final colour = InkColor.classify(ink[0], ink[1], ink[2]);
+      final byColour = PlateServiceType.fromInk(colour)?.code;
+      const warm = {'1', '5'}; // red and orange look alike on camera
+      final sameFamily = warm.contains(byColour) && warm.contains(value);
+      if (byColour != null && byColour != value && !sameFamily) {
         note = value == null ? 'by colour' : 'by colour (circle read $value)';
         value = byColour;
       }
     }
-    final box = zone != null && zone.width > 0.01 ? zone : _union(chars);
     return PlateSection(
       kind: PlateSectionKind.code,
       value: value ?? '',

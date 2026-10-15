@@ -1,0 +1,211 @@
+{
+ "session": "1792065003439",
+ "expectedNumber": "0123456",
+ "events": [
+  {
+   "t_ms": 13686,
+   "event": "areaOcr",
+   "elements": [
+    {
+     "text": "@-0123456:",
+     "confidence": 0.680468738079071,
+     "box": {
+      "left": 0.1102,
+      "top": 0.2275,
+      "right": 0.9391,
+      "bottom": 0.764
+     },
+     "symbols": [
+      {
+       "text": "@",
+       "box": {
+        "left": 0.1102,
+        "top": 0.264,
+        "right": 0.225,
+        "bottom": 0.764
+       }
+      },
+      {
+       "text": "-",
+       "box": {
+        "left": 0.2664,
+        "top": 0.2584,
+        "right": 0.3445,
+        "bottom": 0.7556
+       }
+      },
+      {
+       "text": "0",
+       "box": {
+        "left": 0.368,
+        "top": 0.2528,
+        "right": 0.4258,
+        "bottom": 0.75
+       }
+      },
+      {
+       "text": "1",
+       "box": {
+        "left": 0.4336,
+        "top": 0.25,
+        "right": 0.4961,
+        "bottom": 0.7472
+       }
+      },
+      {
+       "text": "2",
+       "box": {
+        "left": 0.5211,
+        "top": 0.2444,
+        "right": 0.5914,
+        "bottom": 0.7416
+       }
+      },
+      {
+       "text": "3",
+       "box": {
+        "left": 0.618,
+        "top": 0.2388,
+        "right": 0.6773,
+        "bottom": 0.736
+       }
+      },
+      {
+       "text": "4",
+       "box": {
+        "left": 0.6844,
+        "top": 0.236,
+        "right": 0.7461,
+        "bottom": 0.7331
+       }
+      },
+      {
+       "text": "5",
+       "box": {
+        "left": 0.7773,
+        "top": 0.2331,
+        "right": 0.8391,
+        "bottom": 0.7303
+       }
+      },
+      {
+       "text": "6",
+       "box": {
+        "left": 0.8539,
+        "top": 0.2303,
+        "right": 0.8969,
+        "bottom": 0.7247
+       }
+      },
+      {
+       "text": ":",
+       "box": {
+        "left": 0.9047,
+        "top": 0.2275,
+        "right": 0.9391,
+        "bottom": 0.7219
+       }
+      }
+     ]
+    },
+    {
+     "text": "Her",
+     "confidence": 0.4088541567325592,
+     "box": {
+      "left": 0.2422,
+      "top": 0.6573,
+      "right": 0.3078,
+      "bottom": 0.8315
+     },
+     "symbols": [
+      {
+       "text": "H",
+       "box": {
+        "left": 0.2422,
+        "top": 0.6573,
+        "right": 0.2625,
+        "bottom": 0.8315
+       }
+      },
+      {
+       "text": "e",
+       "box": {
+        "left": 0.2672,
+        "top": 0.6573,
+        "right": 0.2852,
+        "bottom": 0.8315
+       }
+      },
+      {
+       "text": "r",
+       "box": {
+        "left": 0.2914,
+        "top": 0.6573,
+        "right": 0.3078,
+        "bottom": 0.8315
+       }
+      }
+     ]
+    }
+   ],
+   "codeHint": null,
+   "regionColumns": [
+    {
+     "letters": "AF",
+     "source": "trailing",
+     "box": {
+      "left": 0.8977,
+      "top": 0.2303,
+      "right": 0.9461,
+      "bottom": 0.75
+     }
+    },
+    {
+     "letters": "AF",
+     "source": "zone",
+     "box": {
+      "left": 0.9039,
+      "top": 0.2303,
+      "right": 0.9797,
+      "bottom": 0.75
+     }
+    }
+   ],
+   "inkColor": [
+    92,
+    95,
+    158
+   ],
+   "nativePasses": [
+    "area: src=[320,901][640,990] image=886x1920 scale=4.0 page=1386x462 pad=53",
+    "code: anchor digit=Rect(524, 143 - 598, 320) numberHeight=185.0 pitch=96.71429 image=1386x462",
+    "code: crop=[138.82858,190.5][212.82858,264.5] bw=false read='' -> null",
+    "code: crop=[138.82858,190.5][212.82858,264.5] bw=true read='' -> null",
+    "code: crop=[166.57858,190.5][240.57858,264.5] bw=false read='' -> null",
+    "code: crop=[166.57858,190.5][240.57858,264.5] bw=true read='' -> null",
+    "code: crop=[194.32858,190.5][268.32858,264.5] bw=false read='' -> null",
+    "code: crop=[194.32858,190.5][268.32858,264.5] bw=true read='' -> null",
+    "code: crop=[222.07858,190.5][296.07858,264.5] bw=false read='' -> null",
+    "code: crop=[222.07858,190.5][296.07858,264.5] bw=true read='' -> null",
+    "code: crop=[249.82858,190.5][323.82858,264.5] bw=false read='' -> null",
+    "code: crop=[249.82858,190.5][323.82858,264.5] bw=true read='' -> null",
+    "code: crop=[277.57858,190.5][351.57858,264.5] bw=false read='' -> null",
+    "code: crop=[277.57858,190.5][351.57858,264.5] bw=true read='' -> null",
+    "code: votes={} -> null",
+    "region: trailing/top crop=[1202,117][1264,227] bw=false read='A' -> A",
+    "region: trailing/top crop=[1202,117][1264,227] bw=true read='| A' -> A",
+    "region: trailing/bottom crop=[1202,227][1264,338] bw=false read='F' -> F",
+    "region: trailing/bottom crop=[1202,227][1264,338] bw=true read='F' -> F",
+    "region: zone/top crop=[1210,117][1307,227] bw=false read='A' -> A",
+    "region: zone/top crop=[1210,117][1307,227] bw=true read='' -> null",
+    "region: zone/bottom crop=[1210,227][1307,338] bw=false read='F' -> F",
+    "region: zone/bottom crop=[1210,227][1307,338] bw=true read='' -> null",
+    "region: lastDigit/top crop=[1137,117][1210,227] bw=false read='' -> null",
+    "region: lastDigit/top crop=[1137,117][1210,227] bw=true read='' -> null",
+    "region: lastDigit/bottom crop=[1137,227][1210,338] bw=false read='' -> null",
+    "region: lastDigit/bottom crop=[1137,227][1210,338] bw=true read='' -> null",
+    "ink: number=[524,135][1201,320] rgb=[92, 95, 158]"
+   ]
+  }
+ ]
+}

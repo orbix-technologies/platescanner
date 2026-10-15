@@ -110,3 +110,26 @@ enum InkColor {
     return null;
   }
 }
+
+/// Plate background colours.
+class PaperColor {
+  PaperColor._();
+
+  /// Yellow / amber background (police plates), from an average colour.
+  static bool isYellow(int r, int g, int b) {
+    final rf = r / 255, gf = g / 255, bf = b / 255;
+    final max = [rf, gf, bf].reduce((a, b) => a > b ? a : b);
+    final min = [rf, gf, bf].reduce((a, b) => a < b ? a : b);
+    final delta = max - min;
+    if (max < 0.35 || delta / max < 0.35) return false;
+    double hue;
+    if (max == rf) {
+      hue = 60 * (((gf - bf) / delta) % 6);
+    } else if (max == gf) {
+      hue = 60 * ((bf - rf) / delta + 2);
+    } else {
+      return false;
+    }
+    return hue >= 25 && hue <= 70;
+  }
+}

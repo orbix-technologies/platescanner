@@ -11,6 +11,9 @@ import Vision
 enum CodeDiscReader {
   private static let discSize: CGFloat = 180
 
+  /// Votes behind the last `read` result (0 when none).
+  private(set) static var lastVotes = 0
+
   /// Returns "1"..."5", or nil. `image` is only called when a pass is needed
   /// and must return the upright image the observations refer to.
   static func read(
@@ -18,6 +21,7 @@ enum CodeDiscReader {
     log: PassLog? = nil,
     image: () -> CGImage?
   ) -> String? {
+    lastVotes = 0
     guard let cg = image(),
       let anchor = CropOcr.numberAnchor(
         observations, width: CGFloat(cg.width), height: CGFloat(cg.height))
@@ -47,9 +51,10 @@ enum CodeDiscReader {
       }
       cx += h * 0.15
     }
-    let best = votes.max { $0.value < $1.value }?.key
-    log?.add("code: votes=\(votes) -> \(best ?? "nil")")
-    return best
+    let winner = votes.max { $0.value < $1.value }
+    log?.add("code: votes=\(votes) -> \(winner?.key ?? "nil")")
+    lastVotes = winner?.value ?? 0
+    return winner?.key
   }
 
   // Ring fragments read as brackets / O are dropped; glyphs commonly read

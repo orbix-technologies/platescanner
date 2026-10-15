@@ -172,7 +172,10 @@ class EtPlateReaderPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                 // What each section pass tried and read, for the session log.
                 val log = ArrayList<String>()
                 log.add("area: src=${src.toShortString()} image=${image.width}x${image.height} scale=$scale page=${page.width}x${page.height} pad=$pad")
-                CodeDiscReader.read(recognizer, text, log) { page }?.let { payload["codeHint"] = it }
+                CodeDiscReader.read(recognizer, text, log) { page }?.let {
+                    payload["codeHint"] = it
+                    payload["codeVotes"] = CodeDiscReader.lastVotes
+                }
                 payload["regionColumns"] = RegionStackReader.read(recognizer, text, page, log).map { col ->
                     norm(col.box) + mapOf(
                         "letters" to col.letters,
@@ -187,6 +190,10 @@ class EtPlateReaderPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                     CropOcr.inkColor(page, numberBox)?.let { rgb ->
                         payload["inkColor"] = rgb.toList()
                         log.add("ink: number=${numberBox.toShortString()} rgb=${rgb.toList()}")
+                    }
+                    CropOcr.paperColor(page, numberBox)?.let { rgb ->
+                        payload["paperColor"] = rgb.toList()
+                        log.add("paper: rgb=${rgb.toList()}")
                     }
                 }
                 payload["debug"] = log

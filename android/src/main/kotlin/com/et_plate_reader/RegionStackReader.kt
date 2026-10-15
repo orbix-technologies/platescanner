@@ -63,14 +63,31 @@ object RegionStackReader {
         for ((source, xs) in candidates) {
             val top = Rect(xs.first, anchor.top - 2 * pad, xs.last, mid)
             val bottom = Rect(xs.first, mid, xs.last, anchor.bottom + 2 * pad)
-            val a = letter(recognizer, bitmap, top, log, "$source/top")
-            val b = letter(recognizer, bitmap, bottom, log, "$source/bottom")
+            var a = letter(recognizer, bitmap, top, log, "$source/top")
+            var b = letter(recognizer, bitmap, bottom, log, "$source/bottom")
+            if (a == null || b == null) {
+                // Lone letters read poorly; side by side they read as a word.
+                val pair = word(recognizer, bitmap, top, bottom, log, source)
+                if (pair != null) {
+                    a = pair[0]
+                    b = pair[1]
+                }
+            }
             if (a == null || b == null) continue
             found.add(Column("$a$b", source, Rect(xs.first, anchor.top, xs.last, anchor.bottom), top, bottom))
         }
         return found
     }
 
+    private fun lettersOf(text: String?): List<Char> =
+        (text ?: "").filter { !it.isWhitespace() && it !in noise }
+            .map { c -> asLetter[c] ?: c.uppercaseChar() }
+
+    /**
+     * One letter from [area], read as photographed, in black and white, and
+     * with the plate border erased; the majority letter wins, a tie between
+     * different letters gives none.
+     */
     private fun letter(
         recognizer: TextRecognizer,
         bitmap: Bitmap,
@@ -78,19 +95,42 @@ object RegionStackReader {
         log: MutableList<String>?,
         label: String,
     ): Char? {
-        // Read in colour and in black and white; a letter counts when the
-        // two agree, or when only one of them reads a letter at all.
-        val reads = listOf(false, true).map { blackAndWhite ->
-            val text = CropOcr.read(recognizer, bitmap, RectF(area), HALF_SIZE, blackAndWhite)
-            val chars = (text ?: "").filter { !it.isWhitespace() && it !in noise }
-                .map { c -> asLetter[c] ?: c.uppercaseChar() }
+        val reads = CropOcr.Mode.values().map { mode ->
+            val text = CropOcr.read(recognizer, bitmap, RectF(area), HALF_SIZE, mode)
+            val chars = lettersOf(text)
             val letter = if (chars.size == 1 && chars[0] in 'A'..'Z') chars[0] else null
-            log?.add("region: $label crop=${area.toShortString()} bw=$blackAndWhite read='${text?.replace("\n", " ")}' -> $letter")
+            log?.add("region: $label crop=${area.toShortString()} mode=$mode read='${text?.replace("\n", " ")}' -> $letter")
             letter
         }
-        val letters = reads.filterNotNull().distinct()
-        val result = if (letters.size == 1) letters[0] else null
-        if (letters.size > 1) log?.add("region: $label reads disagree $letters -> none")
-        return result
+        val counts = reads.filterNotNull().groupingBy { it }.eachCount()
+        val top = counts.maxOfOrNull { it.value } ?: return null
+        val winners = counts.filterValues { it == top }.keys
+        if (winners.size > 1) {
+            log?.add("region: $label reads disagree $counts -> none")
+            return null
+        }
+        return winners.first()
+    }
+
+    /** Both halves cleaned and read side by side as one two-letter word. */
+    private fun word(
+        recognizer: TextRecognizer,
+        bitmap: Bitmap,
+        top: Rect,
+        bottom: Rect,
+        log: MutableList<String>?,
+        source: String,
+    ): List<Char>? {
+        val a = CropOcr.prepare(bitmap, RectF(top), HALF_SIZE, CropOcr.Mode.CLEAN) ?: return null
+        val b = CropOcr.prepare(bitmap, RectF(bottom), HALF_SIZE, CropOcr.Mode.CLEAN)
+        if (b == null) {
+            a.recycle()
+            return null
+        }
+        val text = CropOcr.ocr(recognizer, listOf(a, b))
+        val chars = lettersOf(text)
+        val ok = chars.size == 2 && chars.all { it in 'A'..'Z' }
+        log?.add("region: $source/word read='${text?.replace("\n", " ")}' -> ${if (ok) chars.joinToString("") else null}")
+        return if (ok) chars else null
     }
 }

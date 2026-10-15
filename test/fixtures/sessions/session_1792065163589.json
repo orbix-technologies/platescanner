@@ -1,0 +1,369 @@
+{
+ "session": "1792065163589",
+ "expectedNumber": "0123456",
+ "events": [
+  {
+   "t_ms": 12367,
+   "event": "areaOcr",
+   "elements": [
+    {
+     "text": "@-0123456%",
+     "confidence": 0.6312500238418579,
+     "box": {
+      "left": 0.1033,
+      "top": 0.1942,
+      "right": 0.9752,
+      "bottom": 0.8103
+     },
+     "symbols": [
+      {
+       "text": "@",
+       "box": {
+        "left": 0.1033,
+        "top": 0.2388,
+        "right": 0.2234,
+        "bottom": 0.8103
+       }
+      },
+      {
+       "text": "-",
+       "box": {
+        "left": 0.265,
+        "top": 0.2299,
+        "right": 0.347,
+        "bottom": 0.7991
+       }
+      },
+      {
+       "text": "0",
+       "box": {
+        "left": 0.3707,
+        "top": 0.2254,
+        "right": 0.4319,
+        "bottom": 0.7924
+       }
+      },
+      {
+       "text": "1",
+       "box": {
+        "left": 0.4405,
+        "top": 0.2232,
+        "right": 0.5058,
+        "bottom": 0.7902
+       }
+      },
+      {
+       "text": "2",
+       "box": {
+        "left": 0.5364,
+        "top": 0.2165,
+        "right": 0.6005,
+        "bottom": 0.7835
+       }
+      },
+      {
+       "text": "3",
+       "box": {
+        "left": 0.6074,
+        "top": 0.2121,
+        "right": 0.6721,
+        "bottom": 0.779
+       }
+      },
+      {
+       "text": "4",
+       "box": {
+        "left": 0.7027,
+        "top": 0.2076,
+        "right": 0.7673,
+        "bottom": 0.7746
+       }
+      },
+      {
+       "text": "5",
+       "box": {
+        "left": 0.7794,
+        "top": 0.2031,
+        "right": 0.8343,
+        "bottom": 0.7701
+       }
+      },
+      {
+       "text": "6",
+       "box": {
+        "left": 0.8499,
+        "top": 0.1987,
+        "right": 0.907,
+        "bottom": 0.7656
+       }
+      },
+      {
+       "text": "%",
+       "box": {
+        "left": 0.9249,
+        "top": 0.1942,
+        "right": 0.9752,
+        "bottom": 0.7612
+       }
+      }
+     ]
+    },
+    {
+     "text": "2",
+     "confidence": 0.55859375,
+     "box": {
+      "left": 0.0883,
+      "top": 0.3817,
+      "right": 0.1507,
+      "bottom": 0.6719
+     },
+     "symbols": [
+      {
+       "text": "2",
+       "box": {
+        "left": 0.0883,
+        "top": 0.3817,
+        "right": 0.1507,
+        "bottom": 0.6719
+       }
+      }
+     ]
+    },
+    {
+     "text": "E/wwMetebm",
+     "confidence": 0.37812501192092896,
+     "box": {
+      "left": 0.0647,
+      "top": 0.6652,
+      "right": 0.5387,
+      "bottom": 0.8527
+     },
+     "symbols": [
+      {
+       "text": "E",
+       "box": {
+        "left": 0.0647,
+        "top": 0.6987,
+        "right": 0.1068,
+        "bottom": 0.8527
+       }
+      },
+      {
+       "text": "/",
+       "box": {
+        "left": 0.1241,
+        "top": 0.6964,
+        "right": 0.149,
+        "bottom": 0.8482
+       }
+      },
+      {
+       "text": "w",
+       "box": {
+        "left": 0.1536,
+        "top": 0.6942,
+        "right": 0.1715,
+        "bottom": 0.846
+       }
+      },
+      {
+       "text": "w",
+       "box": {
+        "left": 0.168,
+        "top": 0.6897,
+        "right": 0.2079,
+        "bottom": 0.8438
+       }
+      },
+      {
+       "text": "M",
+       "box": {
+        "left": 0.2483,
+        "top": 0.6853,
+        "right": 0.2812,
+        "bottom": 0.8393
+       }
+      },
+      {
+       "text": "e",
+       "box": {
+        "left": 0.2766,
+        "top": 0.6853,
+        "right": 0.2904,
+        "bottom": 0.8371
+       }
+      },
+      {
+       "text": "t",
+       "box": {
+        "left": 0.2904,
+        "top": 0.6808,
+        "right": 0.3285,
+        "bottom": 0.8348
+       }
+      },
+      {
+       "text": "e",
+       "box": {
+        "left": 0.3418,
+        "top": 0.6763,
+        "right": 0.4186,
+        "bottom": 0.8326
+       }
+      },
+      {
+       "text": "b",
+       "box": {
+        "left": 0.4902,
+        "top": 0.6674,
+        "right": 0.5387,
+        "bottom": 0.8214
+       }
+      },
+      {
+       "text": "m",
+       "box": {
+        "left": 0.5306,
+        "top": 0.6652,
+        "right": 0.537,
+        "bottom": 0.817
+       }
+      }
+     ]
+    },
+    {
+     "text": "Lcen5atd",
+     "confidence": 0.36767578125,
+     "box": {
+      "left": 0.5612,
+      "top": 0.6406,
+      "right": 0.9001,
+      "bottom": 0.817
+     },
+     "symbols": [
+      {
+       "text": "L",
+       "box": {
+        "left": 0.5612,
+        "top": 0.6607,
+        "right": 0.6085,
+        "bottom": 0.8147
+       }
+      },
+      {
+       "text": "c",
+       "box": {
+        "left": 0.6299,
+        "top": 0.6585,
+        "right": 0.6559,
+        "bottom": 0.8103
+       }
+      },
+      {
+       "text": "e",
+       "box": {
+        "left": 0.6605,
+        "top": 0.6563,
+        "right": 0.6755,
+        "bottom": 0.808
+       }
+      },
+      {
+       "text": "n",
+       "box": {
+        "left": 0.6778,
+        "top": 0.6563,
+        "right": 0.698,
+        "bottom": 0.808
+       }
+      },
+      {
+       "text": "5",
+       "box": {
+        "left": 0.69,
+        "top": 0.6518,
+        "right": 0.7494,
+        "bottom": 0.8058
+       }
+      },
+      {
+       "text": "a",
+       "box": {
+        "left": 0.8152,
+        "top": 0.6429,
+        "right": 0.8672,
+        "bottom": 0.7969
+       }
+      },
+      {
+       "text": "t",
+       "box": {
+        "left": 0.8666,
+        "top": 0.6429,
+        "right": 0.8793,
+        "bottom": 0.7946
+       }
+      },
+      {
+       "text": "d",
+       "box": {
+        "left": 0.8857,
+        "top": 0.6406,
+        "right": 0.9001,
+        "bottom": 0.7924
+       }
+      }
+     ]
+    }
+   ],
+   "codeHint": "2",
+   "regionColumns": [
+    {
+     "letters": "OR",
+     "source": "zone",
+     "box": {
+      "left": 0.9145,
+      "top": 0.1987,
+      "right": 0.9908,
+      "bottom": 0.7924
+     }
+    }
+   ],
+   "inkColor": [
+    84,
+    82,
+    155
+   ],
+   "nativePasses": [
+    "area: src=[290,660][723,772] image=886x1920 scale=4.0 page=1866x582 pad=67",
+    "code: anchor digit=Rect(709, 168 - 815, 422) numberHeight=266.0 pitch=132.71428 image=1866x582",
+    "code: crop=[178.02861,235.8][284.42862,342.2] bw=false read='' -> null",
+    "code: crop=[178.02861,235.8][284.42862,342.2] bw=true read='' -> null",
+    "code: crop=[217.9286,235.8][324.3286,342.2] bw=false read='2' -> 2",
+    "code: crop=[217.9286,235.8][324.3286,342.2] bw=true read='' -> null",
+    "code: crop=[257.82858,235.8][364.2286,342.2] bw=false read='2)' -> 2",
+    "code: crop=[257.82858,235.8][364.2286,342.2] bw=true read='2) 2' -> 2",
+    "code: crop=[297.72858,235.8][404.1286,342.2] bw=false read='' -> null",
+    "code: crop=[297.72858,235.8][404.1286,342.2] bw=true read='' -> null",
+    "code: crop=[337.62857,235.8][444.0286,342.2] bw=false read='' -> null",
+    "code: crop=[337.62857,235.8][444.0286,342.2] bw=true read='' -> null",
+    "code: crop=[377.52856,235.8][483.9286,342.2] bw=false read='' -> null",
+    "code: crop=[377.52856,235.8][483.9286,342.2] bw=true read='' -> null",
+    "code: votes={2=3} -> 2",
+    "region: trailing/top crop=[1656,130][1769,289] bw=false read='lo' -> null",
+    "region: trailing/top crop=[1656,130][1769,289] bw=true read='' -> null",
+    "region: trailing/bottom crop=[1656,289][1769,448] bw=false read='R|' -> R",
+    "region: trailing/bottom crop=[1656,289][1769,448] bw=true read='' -> null",
+    "region: zone/top crop=[1651,130][1783,289] bw=false read='0' -> O",
+    "region: zone/top crop=[1651,130][1783,289] bw=true read='0' -> O",
+    "region: zone/bottom crop=[1651,289][1783,448] bw=false read='R|' -> R",
+    "region: zone/bottom crop=[1651,289][1783,448] bw=true read='R' -> R",
+    "region: lastDigit/top crop=[1526,130][1651,289] bw=false read='' -> null",
+    "region: lastDigit/top crop=[1526,130][1651,289] bw=true read='' -> null",
+    "region: lastDigit/bottom crop=[1526,289][1651,448] bw=false read='|C' -> C",
+    "region: lastDigit/bottom crop=[1526,289][1651,448] bw=true read='' -> null",
+    "ink: number=[709,156][1638,422] rgb=[84, 82, 155]"
+   ]
+  }
+ ]
+}
