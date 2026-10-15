@@ -9,48 +9,42 @@ import Vision
 /// upscaled — returns the digit. Mirrors `CodeDiscReader.kt`.
 enum CodeDiscReader {
   private static let serialRun = try! NSRegularExpression(pattern: "\\d{5,}")
-  private static let visibleCode = try! NSRegularExpression(
-    pattern: "(^|[^0-9])[1-5]([^0-9]|$)|[\\u2460-\\u2464]")
-
-  // Disc centre offsets from the line's left edge, × line height: a fine
-  // scan near the edge, then further left (see CodeDiscReader.kt).
-  private static let centreOffsets: [CGFloat] = [
-    0.1, 0.2, 0.0, 0.3, -0.1, 0.4, -0.2, -1.45, -1.1, -0.8,
-  ]
 
   /// Returns "1"..."5", or nil. `image` is only called when a pass is needed
   /// and must return the upright image the observations refer to.
+  ///
+  /// Anchors on the first digit of the plate number and scans the zone left
+  /// of it, left to right (mirrors `CodeDiscReader.kt`).
   static func read(
     _ observations: [VNRecognizedTextObservation],
     image: () -> CGImage?
   ) -> String? {
-    var best: (VNRecognizedTextObservation, String)?
+    // First digit of the number, in Vision coordinates (bottom-left origin).
+    var anchor: CGRect?
     for obs in observations {
-      guard let text = obs.topCandidates(1).first?.string, matchStart(serialRun, text) != nil else {
-        continue
-      }
-      if best == nil || obs.boundingBox.height > best!.0.boundingBox.height {
-        best = (obs, text)
-      }
+      guard let best = obs.topCandidates(1).first,
+        let start = matchStart(serialRun, best.string)
+      else { continue }
+      let s = best.string
+      let i = s.index(s.startIndex, offsetBy: start)
+      let box =
+        (try? best.boundingBox(for: i..<s.index(after: i)))?.boundingBox ?? obs.boundingBox
+      if anchor == nil || box.height > anchor!.height { anchor = box }
     }
-    guard let pick = best, let start = matchStart(serialRun, pick.1) else { return nil }
-    let line = pick.0
-    let text = pick.1
-    let prefix = String(text.prefix(start))
-    if matchStart(visibleCode, prefix) != nil { return nil }
-    guard let cg = image() else { return nil }
+    guard let digit = anchor, let cg = image() else { return nil }
 
     let w = CGFloat(cg.width)
-    let h = CGFloat(cg.height)
-    let box = line.boundingBox
-    let left = box.minX * w
-    let lineHeight = box.height * h
-    let cy = (1 - box.midY) * h
-    let half = lineHeight * 0.17
-    for offset in centreOffsets {
-      let cx = left + offset * lineHeight
+    let ih = CGFloat(cg.height)
+    let h = digit.height * ih
+    let left = digit.minX * w
+    let cy = (1 - digit.midY) * ih
+    let half = h * 0.2
+    var cx = max(half, left - 3.5 * h)
+    let end = left - 0.4 * h
+    while cx <= end {
       let area = CGRect(x: cx - half, y: cy - half, width: half * 2, height: half * 2)
-      if let digit = readCrop(cg, area: area) { return digit }
+      if let code = readCrop(cg, area: area) { return code }
+      cx += h * 0.15
     }
     return nil
   }

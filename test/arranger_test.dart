@@ -28,108 +28,67 @@ OcrElement word(
   );
 }
 
+/// Section values left to right.
+List<String> values(PlateArrangement a) =>
+    a.sections.map((s) => s.value).toList();
+
 void main() {
   const arranger = PlateArranger();
 
-  test('new-format plate: ring as D, code from the disc pass, stacked A/A', () {
+  test('screenshot plate ① ·Ge\'ez· 01906 A/M: four sections', () {
+    // As ML Kit read it: ring as "O", Ge'ez as Latin garbage, the number,
+    // and the stacked A / M glued to the number's element.
     final r = arranger.arrange(AreaOcr(
       codeHint: '1',
       elements: [
-        word('D', left: 0.02, top: 0.3, bottom: 0.7),
+        word('O', left: 0.03, top: 0.3, bottom: 0.62, charWidth: 0.06),
+        word('H', left: 0.17, top: 0.12, bottom: 0.42, charWidth: 0.04),
+        word('09', left: 0.17, top: 0.5, bottom: 0.82, charWidth: 0.03),
+        OcrElement(
+          text: '01906AM',
+          box: const NormalizedRect(0.37, 0.12, 0.97, 0.88),
+          symbols: [
+            for (var i = 0; i < 5; i++)
+              OcrSymbol(
+                text: '01906'[i],
+                box: NormalizedRect(0.37 + i * 0.1, 0.12, 0.45 + i * 0.1, 0.88),
+              ),
+            const OcrSymbol(
+                text: 'A', box: NormalizedRect(0.9, 0.1, 0.95, 0.45)),
+            const OcrSymbol(
+                text: 'M', box: NormalizedRect(0.9, 0.55, 0.95, 0.88)),
+          ],
+        ),
+      ],
+    ));
+    final a = r.arrangement;
+    expect(values(a), ['1', 'XX', '01906', 'AM']);
+    expect(a.layoutText, '1 XX 01906 AM');
+    expect(a.geezRegion.detected, isFalse);
+    expect(a.latinRegion.chars.map((c) => c.text), ['A', 'M']);
+    expect(a.number.chars.map((c) => c.text).join(), '01906');
+
+    final c = r.candidate;
+    expect([c.code, c.regionCode, c.serial], ['1', 'AM', '01906']);
+    expect(c.region!.englishName, 'Amhara');
+    expect(c.isValid, isTrue);
+  });
+
+  test('EBR sample: ring as D, seven-digit number, A/A', () {
+    final r = arranger.arrange(AreaOcr(
+      codeHint: '1',
+      elements: [
+        word('D', left: 0.02, top: 0.3, bottom: 0.7, charWidth: 0.06),
         word('0123456', left: 0.25, top: 0.2, bottom: 0.8),
         word('A', left: 0.92, top: 0.15, bottom: 0.45, charWidth: 0.05),
         word('A', left: 0.92, top: 0.55, bottom: 0.85, charWidth: 0.05),
       ],
     ));
-    final c = r.candidate;
-    expect([c.code, c.regionCode, c.serial], ['1', 'AA', '0123456']);
-    expect(c.isValid, isTrue);
-    expect(r.arrangement.layoutText, '1 0123456 A/A');
-
-    final cols = r.arrangement.columns;
-    expect(cols, hasLength(3));
-    expect(cols.last.map((s) => s.text), ['A', 'A']);
-    expect(cols.last.map((s) => s.row), [0, 1]);
-    expect(cols.last.every((s) => s.role == PlateSegmentRole.region), isTrue);
-  });
-
-  test("Ge'ez is ignored; region comes from the Latin letters", () {
-    final r = arranger.arrange(AreaOcr(
-      codeHint: '1',
-      elements: [
-        word('አ', left: 0.12, top: 0.15, bottom: 0.45, charWidth: 0.05),
-        word('አ', left: 0.12, top: 0.55, bottom: 0.85, charWidth: 0.05),
-        word('0123456', left: 0.25, top: 0.2, bottom: 0.8),
-        word('T', left: 0.92, top: 0.15, bottom: 0.45, charWidth: 0.05),
-        word('G', left: 0.92, top: 0.55, bottom: 0.85, charWidth: 0.05),
-      ],
-    ));
-    expect(r.candidate.regionCode, 'TG');
-    expect(r.arrangement.segments.any((s) => s.text.contains('አ')), isFalse);
-  });
-
-  test('OM maps to Oromia', () {
-    final r = arranger.arrange(AreaOcr(
-      elements: [
-        word('3', left: 0.02, top: 0.3, bottom: 0.7),
-        word('OM', left: 0.12, top: 0.3, bottom: 0.7),
-        word('654321', left: 0.35, top: 0.2, bottom: 0.8),
-      ],
-    ));
-    expect([r.candidate.code, r.candidate.regionCode], ['3', 'OR']);
-    expect(r.candidate.region!.englishName, 'Oromia');
-  });
-
-  test('older single-row plate: code, region, lettered serial', () {
-    final r = arranger.arrange(AreaOcr(
-      elements: [
-        word('2', left: 0.02, top: 0.3, bottom: 0.7),
-        word('AA', left: 0.12, top: 0.3, bottom: 0.7),
-        word('A', left: 0.35, top: 0.2, bottom: 0.8),
-        word('12345', left: 0.45, top: 0.2, bottom: 0.8),
-      ],
-    ));
-    final c = r.candidate;
-    expect([c.code, c.regionCode, c.serial], ['2', 'AA', 'A12345']);
-    expect(c.layout, PlateLayout.singleRow);
-  });
-
-  test('older two-row plate: code + region above the serial', () {
-    final r = arranger.arrange(AreaOcr(
-      elements: [
-        word('2', left: 0.2, top: 0.05, bottom: 0.4),
-        word('DR', left: 0.5, top: 0.05, bottom: 0.4),
-        word('67890', left: 0.2, top: 0.5, bottom: 0.95),
-      ],
-    ));
-    final c = r.candidate;
-    expect([c.code, c.regionCode, c.serial], ['2', 'DR', '67890']);
-    expect(c.layout, PlateLayout.twoRow);
-  });
-
-  test('characters split by spacing inside one element', () {
-    // ML Kit element "2 AA 12345" with per-char boxes and gaps.
-    const syms = [
-      ('2', 0.02), ('A', 0.15), ('A', 0.21), //
-      ('1', 0.35), ('2', 0.41), ('3', 0.47), ('4', 0.53), ('5', 0.59),
-    ];
-    final r = arranger.arrange(AreaOcr(elements: [
-      OcrElement(
-        text: '2 AA 12345',
-        box: const NormalizedRect(0.02, 0.2, 0.65, 0.8),
-        symbols: [
-          for (final (t, x) in syms)
-            OcrSymbol(text: t, box: NormalizedRect(x, 0.2, x + 0.055, 0.8)),
-        ],
-      ),
-    ]));
-    expect(r.arrangement.layoutText, '2 AA 12345');
+    expect(values(r.arrangement), ['1', 'XX', '0123456', 'AA']);
     expect(r.candidate.isValid, isTrue);
   });
 
-  test('real plate 2·AA·94529: edge security number and ETH marks ignored', () {
-    // Vertical security number on the left edge, read as one element whose
-    // characters are stacked (tall box, small glyphs).
+  test('real plate ②·94529·A/A: security number and ETH marks ignored', () {
     final security = OcrElement(
       text: '0752645',
       box: const NormalizedRect(0.025, 0.25, 0.04, 0.75),
@@ -151,16 +110,18 @@ void main() {
         word('94529', left: 0.37, top: 0.15, bottom: 0.85, charWidth: 0.09),
         word('A', left: 0.89, top: 0.12, bottom: 0.45, charWidth: 0.05),
         word('A', left: 0.89, top: 0.55, bottom: 0.88, charWidth: 0.05),
-        word('ETH', left: 0.93, top: 0.08, bottom: 0.14, charWidth: 0.01),
+        word('ETH', left: 0.93, top: 0.04, bottom: 0.09, charWidth: 0.01),
       ],
     ));
-    final c = r.candidate;
-    expect([c.code, c.regionCode, c.serial], ['2', 'AA', '94529']);
-    expect(c.isValid, isTrue);
-    expect(r.arrangement.layoutText, '2 94529 A/A');
+    final a = r.arrangement;
+    // Ge'ez read here (a recogniser that supports it), so it is shown.
+    expect(values(a), ['2', 'ከከ', '94529', 'AA']);
+    expect(a.geezRegion.detected, isTrue);
+    expect(a.ignored.map((c) => c.text).join(), contains('0752645'));
+    expect(r.candidate.isValid, isTrue);
   });
 
-  test('real plate 1·AA·03189: circled digit read as ①', () {
+  test('circled digit ① read directly, 1·03189·A/A', () {
     final r = arranger.arrange(AreaOcr(
       elements: [
         word('①', left: 0.03, top: 0.35, bottom: 0.6, charWidth: 0.06),
@@ -169,20 +130,45 @@ void main() {
         word('A', left: 0.88, top: 0.55, bottom: 0.88, charWidth: 0.05),
       ],
     ));
-    expect(
-      [r.candidate.code, r.candidate.regionCode, r.candidate.serial],
-      ['1', 'AA', '03189'],
-    );
+    expect(values(r.arrangement), ['1', 'XX', '03189', 'AA']);
   });
 
-  test('missing code is reported, not invented', () {
+  test("a single group next to the number is Ge'ez, not the code", () {
     final r = arranger.arrange(AreaOcr(
       elements: [
-        word('D', left: 0.02, top: 0.3, bottom: 0.7),
-        word('0123456', left: 0.25, top: 0.2, bottom: 0.8),
+        word('H', left: 0.2, top: 0.15, bottom: 0.45, charWidth: 0.04),
+        word('0123456', left: 0.28, top: 0.2, bottom: 0.8),
+        word('T', left: 0.92, top: 0.15, bottom: 0.45, charWidth: 0.05),
+        word('G', left: 0.92, top: 0.55, bottom: 0.85, charWidth: 0.05),
       ],
     ));
-    expect(r.candidate.code, isNull);
-    expect(r.candidate.issues, contains(PlateIssue.missingCode));
+    final a = r.arrangement;
+    expect(a.code.detected, isFalse);
+    expect(a.geezRegion.box, isNotNull);
+    expect(a.latinRegion.value, 'TG');
+    expect(r.candidate.issues, [PlateIssue.missingCode]);
+  });
+
+  test('a digit misread inside the Latin region is mapped to a letter', () {
+    final r = arranger.arrange(AreaOcr(
+      codeHint: '3',
+      elements: [
+        word('654321', left: 0.3, top: 0.2, bottom: 0.8),
+        word('0', left: 0.92, top: 0.15, bottom: 0.45, charWidth: 0.05),
+        word('M', left: 0.92, top: 0.55, bottom: 0.85, charWidth: 0.05),
+      ],
+    ));
+    expect(r.arrangement.latinRegion.value, 'OM');
+    expect(r.candidate.region!.englishName, 'Oromia');
+  });
+
+  test('nothing number-like: every section empty, nothing invented', () {
+    final r = arranger.arrange(AreaOcr(
+      elements: [word('TOYOTA', left: 0.1, top: 0.3, bottom: 0.6)],
+    ));
+    final a = r.arrangement;
+    expect(a.number.value, isEmpty);
+    expect(a.code.detected, isFalse);
+    expect(r.candidate.isValid, isFalse);
   });
 }

@@ -23,38 +23,42 @@ import com.google.mlkit.vision.text.TextRecognizer
  */
 object CodeDiscReader {
     private val serialRun = Regex("\\d{5,}")
-    private val visibleCode = Regex("(^|[^0-9])[1-5]([^0-9]|$)|[\\u2460-\\u2464]")
-
-    // Disc centre offsets from the line's left edge, × line height: a fine
-    // scan near the edge (OCR may start the line anywhere on the ring), then
-    // further left for when the line starts at the serial. Runs once per
-    // confirmed area, so the extra OCR calls are cheap.
-    private val centreOffsets = floatArrayOf(
-        0.1f, 0.2f, 0.0f, 0.3f, -0.1f, 0.4f, -0.2f, -1.45f, -1.1f, -0.8f,
-    )
 
     /**
      * Returns "1".."5", or null. [bitmap] is only called when a pass is
      * needed and must return the upright image matching [text]'s boxes.
+     *
+     * Anchors on the first digit of the plate number: the circle sits left of
+     * it, centred on its row, about as tall as the digit. Crops are scanned
+     * left to right through that zone so the circle is met before the Ge'ez.
      */
     fun read(recognizer: TextRecognizer, text: Text, bitmap: () -> Bitmap): String? {
-        val line = text.textBlocks.flatMap { it.lines }
-            .filter { serialRun.containsMatchIn(it.text) && it.boundingBox != null }
-            .maxByOrNull { it.boundingBox!!.height() } ?: return null
-        val box = line.boundingBox!!
-        val prefix = line.text.substring(0, serialRun.find(line.text)!!.range.first)
-        if (visibleCode.containsMatchIn(prefix)) return null
+        var anchor: Rect? = null
+        for (line in text.textBlocks.flatMap { it.lines }) {
+            val symbols = line.elements.flatMap { it.symbols }.filter { it.boundingBox != null }
+            val joined = symbols.joinToString("") { it.text.take(1).ifEmpty { " " } }
+            val start = serialRun.find(joined)?.range?.first
+            val box = if (start != null) {
+                symbols[start].boundingBox!!
+            } else if (symbols.isEmpty() && serialRun.containsMatchIn(line.text)) {
+                line.boundingBox // no per-character boxes: whole line
+            } else {
+                null
+            } ?: continue
+            if (anchor == null || box.height() > anchor.height()) anchor = box
+        }
+        val digit = anchor ?: return null
 
         val image = bitmap()
-        val h = box.height().toFloat()
-        val half = h * 0.17f
-        for (offset in centreOffsets) {
-            val cx = box.left + offset * h
-            val cy = box.exactCenterY()
+        val h = digit.height().toFloat()
+        val half = h * 0.2f
+        val cy = digit.exactCenterY()
+        var cx = maxOf(half, digit.left - 3.5f * h)
+        val end = digit.left - 0.4f * h
+        while (cx <= end) {
             val crop = RectF(cx - half, cy - half, cx + half, cy + half)
-            val digit = readCrop(recognizer, image, crop)
-            if (digit == null) continue
-            return digit
+            readCrop(recognizer, image, crop)?.let { return it }
+            cx += h * 0.15f
         }
         return null
     }

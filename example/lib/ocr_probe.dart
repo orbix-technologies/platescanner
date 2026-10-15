@@ -40,9 +40,12 @@ Future<void> main() async {
     out.writeln('AREA CODE HINT ${ocr.codeHint}');
     final arranged = const PlateArranger().arrange(ocr);
     out.writeln('ARRANGED ${arranged.arrangement.layoutText}');
-    for (final col in arranged.arrangement.columns) {
-      out.writeln('  column ${col.map((s) => '${s.text}:${s.role.name}').join(' / ')}');
+    for (final section in arranged.arrangement.sections) {
+      out.writeln('  ${section.kind.index + 1} ${section.kind.name}: '
+          '"${section.value}" chars=${section.chars} '
+          '${section.detected ? '' : '(not detected)'}');
     }
+    out.writeln('  ignored: ${arranged.arrangement.ignored}');
     out.writeln('CANDIDATE ${arranged.candidate}');
   }
   debugPrint(out.toString());

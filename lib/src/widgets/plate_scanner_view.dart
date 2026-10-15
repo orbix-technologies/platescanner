@@ -306,9 +306,9 @@ class _AreaLayer extends StatelessWidget {
   Widget build(BuildContext context) {
     final area = _toView(controller.plateArea!, size);
     final editing = controller.phase == ScanPhase.confirmingArea;
-    final segments = controller.phase == ScanPhase.review
-        ? controller.arrangement?.segments ?? const <PlateSegment>[]
-        : const <PlateSegment>[];
+    final sections = controller.phase == ScanPhase.review
+        ? controller.arrangement?.sections ?? const <PlateSection>[]
+        : const <PlateSection>[];
     return Stack(
       fit: StackFit.expand,
       children: [
@@ -317,17 +317,18 @@ class _AreaLayer extends StatelessWidget {
             painter: _AreaPainter(
               area: area,
               color: editing ? _accent : _good,
-              segments: [
-                for (final s in segments)
-                  (
-                    Rect.fromLTRB(
-                      area.left + s.box.left * area.width,
-                      area.top + s.box.top * area.height,
-                      area.left + s.box.right * area.width,
-                      area.top + s.box.bottom * area.height,
+              sections: [
+                for (final s in sections)
+                  if (s.box != null)
+                    (
+                      Rect.fromLTRB(
+                        area.left + s.box!.left * area.width,
+                        area.top + s.box!.top * area.height,
+                        area.left + s.box!.right * area.width,
+                        area.top + s.box!.bottom * area.height,
+                      ),
+                      s.kind,
                     ),
-                    s.role,
-                  ),
               ],
             ),
           ),
@@ -349,23 +350,30 @@ class _AreaLayer extends StatelessWidget {
   }
 }
 
-Color _roleColor(PlateSegmentRole role) => switch (role) {
-      PlateSegmentRole.code => const Color(0xFF64B5F6),
-      PlateSegmentRole.serial => _accent,
-      PlateSegmentRole.region => const Color(0xFF81C784),
-      PlateSegmentRole.ignored => Colors.white38,
+Color _sectionColor(PlateSectionKind kind) => switch (kind) {
+      PlateSectionKind.code => const Color(0xFF64B5F6),
+      PlateSectionKind.geezRegion => const Color(0xFFBA68C8),
+      PlateSectionKind.number => _accent,
+      PlateSectionKind.latinRegion => const Color(0xFF81C784),
+    };
+
+String _sectionLabel(PlateSectionKind kind) => switch (kind) {
+      PlateSectionKind.code => 'Code',
+      PlateSectionKind.geezRegion => "Region (Ge'ez)",
+      PlateSectionKind.number => 'Number',
+      PlateSectionKind.latinRegion => 'Region',
     };
 
 class _AreaPainter extends CustomPainter {
   _AreaPainter({
     required this.area,
     required this.color,
-    required this.segments,
+    required this.sections,
   });
 
   final Rect area;
   final Color color;
-  final List<(Rect, PlateSegmentRole)> segments;
+  final List<(Rect, PlateSectionKind)> sections;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -383,20 +391,35 @@ class _AreaPainter extends CustomPainter {
         ..style = PaintingStyle.stroke
         ..strokeWidth = 3,
     );
-    for (final (rect, role) in segments) {
+    for (final (rect, kind) in sections) {
+      final c = _sectionColor(kind);
       canvas.drawRect(
         rect.inflate(2),
         Paint()
-          ..color = _roleColor(role)
+          ..color = c
           ..style = PaintingStyle.stroke
           ..strokeWidth = 2,
       );
+      // Section number above its box: 1 code, 2 Ge'ez, 3 number, 4 region.
+      final tp = TextPainter(
+        text: TextSpan(
+          text: '${kind.index + 1}',
+          style: TextStyle(
+            color: Colors.black,
+            backgroundColor: c,
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      tp.paint(canvas, Offset(rect.left, rect.top - tp.height - 4));
     }
   }
 
   @override
   bool shouldRepaint(_AreaPainter old) =>
-      old.area != area || old.color != color || old.segments != segments;
+      old.area != area || old.color != color || old.sections != sections;
 }
 
 /// Drag the body to move the area, a corner handle to resize it.
@@ -689,35 +712,27 @@ class _ReviewPanel extends StatelessWidget {
     final c = controller;
     final issues = c.draftIssues;
     final region = EthiopianRegion.fromCode(c.draftRegionCode);
-    final columns = c.arrangement?.columns ?? const <List<PlateSegment>>[];
 
     return _Card(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // The plate as placed: columns left→right, stacked rows top→bottom.
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
+          // The four sections as placed on the plate, with their characters.
+          if (c.arrangement != null)
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                for (final col in columns)
-                  if (col.any((s) => s.role != PlateSegmentRole.ignored))
-                    Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          for (final s in col)
-                            if (s.role != PlateSegmentRole.ignored)
-                              _SegmentChip(segment: s),
-                        ],
-                      ),
+                for (final section in c.arrangement!.sections)
+                  Expanded(
+                    flex: section.kind == PlateSectionKind.number ? 3 : 2,
+                    child: Padding(
+                      padding: const EdgeInsets.only(right: 6),
+                      child: _SectionCard(section: section),
                     ),
+                  ),
               ],
             ),
-          ),
           const SizedBox(height: 10),
           Row(
             children: [
@@ -789,40 +804,54 @@ class _ReviewPanel extends StatelessWidget {
   }
 }
 
-class _SegmentChip extends StatelessWidget {
-  const _SegmentChip({required this.segment});
+/// One plate section: its label and the characters read in it. Stacked
+/// sections (code aside) list their characters top to bottom.
+class _SectionCard extends StatelessWidget {
+  const _SectionCard({required this.section});
 
-  final PlateSegment segment;
+  final PlateSection section;
 
   @override
   Widget build(BuildContext context) {
-    final color = _roleColor(segment.role);
-    final label = switch (segment.role) {
-      PlateSegmentRole.code => 'Code',
-      PlateSegmentRole.serial => 'Serial',
-      PlateSegmentRole.region => 'Region',
-      PlateSegmentRole.ignored => '',
-    };
+    final color = _sectionColor(section.kind);
+    final stacked = section.kind == PlateSectionKind.geezRegion ||
+        section.kind == PlateSectionKind.latinRegion;
+    final chars = section.chars.isEmpty
+        ? [section.value.isEmpty ? '–' : section.value]
+        : section.chars.map((ch) => ch.text).toList();
+    final style = TextStyle(
+      color: section.detected ? color : Colors.white38,
+      fontSize: 18,
+      fontWeight: FontWeight.w700,
+      height: 1.1,
+    );
     return Container(
-      margin: const EdgeInsets.symmetric(vertical: 2),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
       decoration: BoxDecoration(
-        border: Border.all(color: color, width: 1.5),
-        borderRadius: BorderRadius.circular(6),
+        border: Border.all(
+          color: section.detected ? color : Colors.white24,
+          width: 1.5,
+        ),
+        borderRadius: BorderRadius.circular(8),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-            segment.text,
-            style: TextStyle(
-              color: color,
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-            ),
+            '${section.kind.index + 1} · ${_sectionLabel(section.kind)}',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(color: Colors.white54, fontSize: 10),
           ),
-          Text(label,
-              style: const TextStyle(color: Colors.white54, fontSize: 10)),
+          const SizedBox(height: 4),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: stacked
+                ? Column(
+                    children: [for (final t in chars) Text(t, style: style)],
+                  )
+                : Text(chars.join(), style: style),
+          ),
         ],
       ),
     );

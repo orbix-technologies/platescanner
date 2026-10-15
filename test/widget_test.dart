@@ -59,8 +59,14 @@ void main() {
     await tester.pump();
     await tester.pump();
     expect(controller.phase, ScanPhase.review);
-    expect(find.text('0123456'), findsOneWidget); // serial chip
-    expect(find.text('Serial'), findsOneWidget);
+    // The four sections with their characters.
+    expect(find.text('1 · Code'), findsOneWidget);
+    expect(find.text("2 · Region (Ge'ez)"), findsOneWidget);
+    expect(find.text('3 · Number'), findsOneWidget);
+    expect(find.text('4 · Region'), findsOneWidget);
+    expect(find.text('XX'), findsOneWidget);
+    expect(find.text('0123456'), findsOneWidget);
+    expect(find.text('A'), findsNWidgets(2)); // stacked A over A
     expect(find.text('1  ·  AA  ·  0123456'), findsOneWidget);
     expect(find.text('አአ · Addis Ababa'), findsOneWidget);
 

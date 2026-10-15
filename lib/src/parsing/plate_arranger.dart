@@ -2,368 +2,404 @@ import '../models/ocr_frame.dart';
 import '../models/plate_area.dart';
 import '../models/plate_record.dart';
 import 'ethiopian_plate_parser.dart';
-import 'ethiopian_region.dart';
+import 'plate_service_type.dart';
 
-/// Steps 4–5: arranges the characters read inside a confirmed plate area the
-/// way they are placed on the plate, and assigns code / serial / region.
+/// Steps 4–5: splits the characters read inside a confirmed plate area into
+/// the plate's four sections, left to right:
 ///
-/// * Characters are grouped into words by spacing, then into columns left
-///   to right; letters stacked in one column (`A` over `A`) are rows of it.
-/// * Ge'ez is dropped. The region comes from its Latin letters only and is
-///   mapped to [EthiopianRegion] (which carries the Amharic label).
+/// 1. **code** — the circled number;
+/// 2. **Ge'ez region** — letters stacked vertically (`XX` when unreadable);
+/// 3. **number** — the serial;
+/// 4. **Latin region** — letters stacked vertically (`A` over `M` → `AM`).
+///
+/// Works per character and anchors on the number: the longest run of
+/// number-sized digits side by side. Everything right of it is the Latin
+/// region; everything left of it is the code (leftmost) and the Ge'ez region
+/// (between code and number). Characters much smaller than the number
+/// (ETH marks, the vertical security number) belong to no section.
 class PlateArranger {
   /// Creates an arranger.
   const PlateArranger({this.parser = const EthiopianPlateParser()});
 
-  /// Parser used to read and validate fields.
+  /// Parser used to validate fields.
   final EthiopianPlateParser parser;
 
-  static final _latinOrDigit = RegExp(r'[A-Z0-9]');
+  // OCR confusions, per section.
+  static const _toDigit = {
+    'O': '0', 'Q': '0', 'D': '0', 'U': '0', //
+    'I': '1', 'L': '1', 'J': '1', '|': '1',
+    'Z': '2', 'S': '5', 'B': '8', 'G': '6',
+  };
+  static const _toLetter = {
+    '0': 'O',
+    '1': 'I',
+    '2': 'Z',
+    '4': 'A',
+    '5': 'S',
+    '6': 'G',
+    '8': 'B',
+  };
 
-  /// Small printed marks that are never part of the number.
-  static const _marks = {'ETH'};
+  /// Number characters are at least this fraction of the tallest digit.
+  static const _numberGlyph = 0.75;
 
-  /// Code / region text must be at least this fraction of the serial's
-  /// glyph height (filters corner marks and the edge security number).
-  static const _minGlyphRatio = 0.25;
+  /// Section characters are at least this fraction of the number's height.
+  static const _minGlyph = 0.25;
 
-  /// Arranges [ocr] and returns the layout plus the reading it implies.
+  /// Arranges [ocr] and returns the sections plus the reading they imply.
   ({PlateArrangement arrangement, PlateCandidate candidate}) arrange(
     AreaOcr ocr,
   ) {
-    final words = <_Word>[];
-    for (final e in ocr.elements) {
-      words.addAll(_words(e));
-    }
-    final columns = _columns(words);
+    final chars = _chars(ocr);
+    final number = _number(chars);
+    final ignored = <PlateChar>[];
 
-    // Serial: the tallest token that reads as one.
-    _Word? serialWord;
-    ({
-      String serial,
-      String? mergedCode,
-      (String, String)? alternative,
-      int corrections,
-    })? serialRead;
-    for (final w in words) {
-      final r = parser.readSerial(w.text);
-      if (r == null) continue;
-      if (serialWord == null || w.glyph > serialWord.glyph) {
-        serialWord = w;
-        serialRead = r;
-      }
-    }
-    var serial = serialRead?.serial;
-    var corrections = serialRead?.corrections ?? 0;
-    if (serialWord != null) {
-      serialWord.role = PlateSegmentRole.serial;
-      // Too small to be printed plate characters: leave them ignored.
-      final minGlyph = serialWord.glyph * _minGlyphRatio;
-      for (final w in words) {
-        if (w.glyph < minGlyph) w.tooSmall = true;
-      }
+    if (number == null) {
+      final arrangement = PlateArrangement(
+        code: _codeSection(const [], ocr.codeHint, null),
+        geezRegion: _geezSection(const [], null, null),
+        number: const PlateSection(
+          kind: PlateSectionKind.number,
+          value: '',
+          detected: false,
+        ),
+        latinRegion: const PlateSection(
+          kind: PlateSectionKind.latinRegion,
+          value: '',
+          detected: false,
+        ),
+        ignored: [for (final c in chars) PlateChar(c.text, c.box)],
+      );
+      return (
+        arrangement: arrangement,
+        candidate: _candidate(arrangement, ocr, 0),
+      );
     }
 
-    // Older plates: a single letter just left of a five-digit serial.
-    if (serialWord != null && serial != null && serial.length == 5) {
-      final prefix = _leftNeighbour(words, serialWord);
-      if (prefix != null &&
-          prefix.text.length == 1 &&
-          RegExp(r'^[A-Z]$').hasMatch(prefix.text)) {
-        serial = '${prefix.text}$serial';
-        prefix.role = PlateSegmentRole.serial;
-      }
-    }
-
-    // Code: circled-code pass, else a code token (nearest left of serial).
-    String? code = serialRead?.mergedCode;
-    final hint = parser.readCode(ocr.codeHint ?? '');
-    if (code == null) {
-      final token = _codeToken(words, serialWord);
-      if (token != null && (token.$2 == 0 || hint == null)) {
-        code = token.$1;
-        corrections += token.$2;
-        token.$3.role = PlateSegmentRole.code;
-      } else if (hint != null) {
-        code = hint;
-        // The ring read as a letter ("D") stands where the code is.
-        final ring = serialWord == null ? null : _leftmostSingle(words);
-        if (ring != null) {
-          ring
-            ..role = PlateSegmentRole.code
-            ..display = hint;
-        } else {
-          final at = serialWord?.box ?? const NormalizedRect(0, 0.3, 0.1, 0.7);
-          final synthetic = _Word(
-            hint,
-            NormalizedRect(
-                0, at.top, (at.left * 0.5).clamp(0.02, 1.0), at.bottom),
-            null,
-          )..role = PlateSegmentRole.code;
-          words.add(synthetic);
-          columns.insert(0, [synthetic]);
-        }
-      }
-    }
-    final alt = serialRead?.alternative;
-    if (code == null && alt != null) {
-      code = alt.$1;
-      serial = alt.$2;
-    }
-
-    // Region: stacked single letters in one column, else a letter token.
-    EthiopianRegion? region;
-    for (final col in columns) {
-      final singles = col
-          .where(
-              (w) => w.role == PlateSegmentRole.ignored && w.text.length == 1)
-          .toList();
-      if (singles.length < 2) continue;
-      final r = parser.readRegion(singles.map((w) => w.text).join());
-      if (r != null) {
-        region = r;
-        for (final w in singles) {
-          w.role = PlateSegmentRole.region;
-        }
-        break;
-      }
-    }
-    if (region == null) {
-      for (final w in words) {
-        if (!w.free || w.text.length < 2) continue;
-        final r = parser.readRegion(w.text);
-        if (r != null) {
-          region = r;
-          w.role = PlateSegmentRole.region;
-          break;
-        }
+    final nBox = number.box;
+    final glyph = number.glyph;
+    final left = <_Char>[];
+    final right = <_Char>[];
+    for (final c in chars) {
+      if (number.chars.contains(c)) continue;
+      if (c.box.height < glyph * _minGlyph) {
+        ignored.add(PlateChar(c.text, c.box));
+      } else if (c.box.centerX >= nBox.right - glyph * 0.1) {
+        right.add(c);
+      } else if (c.box.centerX <= nBox.left + glyph * 0.1) {
+        left.add(c);
+      } else {
+        ignored.add(PlateChar(c.text, c.box));
       }
     }
 
-    final arrangement = PlateArrangement([
-      for (var c = 0; c < columns.length; c++)
-        [
-          for (var r = 0; r < columns[c].length; r++)
-            PlateSegment(
-              text: columns[c][r].display ?? columns[c][r].text,
-              box: columns[c][r].box,
-              column: c,
-              row: r,
-              role: columns[c][r].role,
-            ),
-        ],
-    ]);
-
-    final confidences =
-        ocr.elements.map((e) => e.confidence).whereType<double>().toList();
-    var confidence = confidences.isEmpty
-        ? 0.8
-        : confidences.reduce((a, b) => a + b) / confidences.length;
-    for (var i = 0; i < corrections; i++) {
-      confidence *= 0.95;
-    }
-    final issues =
-        parser.validate(code: code, regionCode: region?.code, serial: serial);
-
-    final candidate = PlateCandidate(
-      code: code,
-      regionCode: region?.code,
-      serial: serial,
-      layout: _layout(arrangement),
-      rawText: arrangement.layoutText,
-      confidence: confidence.clamp(0.0, 1.0),
-      issues: issues,
+    // Left of the number: code (leftmost group) then Ge'ez. Ge'ez script
+    // always belongs to the Ge'ez section, wherever it is.
+    final geezScript = left.where((c) => _isGeez(c.text)).toList();
+    final clusters = _clusters(
+      left.where((c) => !_isGeez(c.text)).toList(),
+      gap: glyph * 0.15,
     );
-    return (arrangement: arrangement, candidate: candidate);
+    List<_Char> codeChars = const [];
+    final geezChars = <_Char>[...geezScript];
+    if (clusters.isNotEmpty) {
+      final first = clusters.first;
+      // One group only: the circle sits in the outer half of the space
+      // left of the number, the Ge'ez next to the number.
+      final firstX = _union(first)!.centerX;
+      final geezX = geezScript.isEmpty ? null : _union(geezScript)!.left;
+      final looksLikeCode = first.any((c) => _codeDigit(c.text) != null) ||
+          clusters.length > 1 ||
+          (geezX != null && firstX < geezX) ||
+          firstX < nBox.left * 0.5;
+      if (looksLikeCode) {
+        codeChars = first;
+        for (final c in clusters.skip(1)) {
+          geezChars.addAll(c);
+        }
+      } else {
+        for (final c in clusters) {
+          geezChars.addAll(c);
+        }
+      }
+    }
+
+    final arrangement = PlateArrangement(
+      code: _codeSection(codeChars, ocr.codeHint, nBox),
+      geezRegion: _geezSection(geezChars, codeChars, nBox),
+      number: number.section,
+      latinRegion: _latinSection(right),
+      ignored: ignored,
+    );
+    return (
+      arrangement: arrangement,
+      candidate: _candidate(arrangement, ocr, number.corrections),
+    );
   }
 
-  /// Splits an element into words: by spacing between character boxes and
-  /// by anything that is not a Latin letter or digit (Ge'ez included).
-  List<_Word> _words(OcrElement e) {
-    final chars = <(String, NormalizedRect)>[];
-    if (e.symbols.isNotEmpty) {
-      for (final s in e.symbols) {
-        chars.add((_normalize(s.text), s.box));
+  /// All characters with boxes; spread evenly when the backend gave none.
+  List<_Char> _chars(AreaOcr ocr) {
+    final out = <_Char>[];
+    for (final e in ocr.elements) {
+      if (e.symbols.isNotEmpty) {
+        for (final s in e.symbols) {
+          final t = _normalize(s.text);
+          if (t.trim().isNotEmpty) out.add(_Char(t, s.box));
+        }
+        continue;
       }
-    } else {
-      // No per-character boxes: spread the text evenly over the element.
       final text = e.text;
       final step = text.isEmpty ? 0.0 : e.box.width / text.length;
       for (var i = 0; i < text.length; i++) {
-        final left = e.box.left + i * step;
-        chars.add((
-          _normalize(text[i]),
-          NormalizedRect(left, e.box.top, left + step, e.box.bottom),
-        ));
+        final t = _normalize(text[i]);
+        if (t.trim().isEmpty) continue;
+        final l = e.box.left + i * step;
+        out.add(_Char(t, NormalizedRect(l, e.box.top, l + step, e.box.bottom)));
       }
     }
-
-    final widths = chars
-        .where((c) => _latinOrDigit.hasMatch(c.$1))
-        .map((c) => c.$2.width)
-        .toList();
-    final avg =
-        widths.isEmpty ? 0.0 : widths.reduce((a, b) => a + b) / widths.length;
-
-    final words = <_Word>[];
-    var buf = StringBuffer();
-    NormalizedRect? box;
-    var glyph = 0.0;
-    void flush() {
-      final text = buf.toString();
-      if (text.isNotEmpty && box != null && !_marks.contains(text)) {
-        words.add(_Word(text, box!, e.confidence, glyph: glyph));
-      }
-      buf = StringBuffer();
-      box = null;
-      glyph = 0;
-    }
-
-    for (final (ch, b) in chars) {
-      if (!_latinOrDigit.hasMatch(ch)) {
-        flush();
-        continue;
-      }
-      final current = box;
-      if (current != null && b.left - current.right > avg * 0.6) flush();
-      // A character stacked under the previous one starts a new word.
-      if (current != null && b.top >= current.bottom - b.height * 0.2) flush();
-      buf.write(ch);
-      box = box == null ? b : box!.union(b);
-      if (b.height > glyph) glyph = b.height;
-    }
-    flush();
-    return words;
+    return out;
   }
 
   static String _normalize(String ch) {
     if (ch.isEmpty) return ch;
     final c = ch.codeUnitAt(0);
-    // Circled digits ①–⑤ are the code on new-format plates.
+    // Circled digits ①–⑤.
     if (c >= 0x2460 && c <= 0x2464) return '${c - 0x245F}';
     return ch.toUpperCase();
   }
 
-  /// Groups words into columns by horizontal overlap; columns left to right,
-  /// each column top to bottom.
-  List<List<_Word>> _columns(List<_Word> words) {
-    final sorted = [...words]..sort((a, b) => a.box.left.compareTo(b.box.left));
-    final columns = <List<_Word>>[];
-    final bounds = <NormalizedRect>[];
-    for (final w in sorted) {
-      var placed = false;
-      for (var i = 0; i < columns.length; i++) {
-        final c = bounds[i];
-        final overlap = (w.box.right < c.right ? w.box.right : c.right) -
-            (w.box.left > c.left ? w.box.left : c.left);
-        final narrow = w.box.width < c.width ? w.box.width : c.width;
-        final stackedNotSameRow =
-            columns[i].every((o) => !_sameRow(o.box, w.box));
-        if (overlap >= narrow * 0.5 && stackedNotSameRow) {
-          columns[i].add(w);
-          bounds[i] = c.union(w.box);
-          placed = true;
-          break;
-        }
-      }
-      if (!placed) {
-        columns.add([w]);
-        bounds.add(w.box);
-      }
-    }
-    for (final c in columns) {
-      c.sort((a, b) => a.box.top.compareTo(b.box.top));
-    }
-    return columns;
-  }
+  static bool _isDigit(String t) =>
+      t.length == 1 && t.codeUnitAt(0) >= 0x30 && t.codeUnitAt(0) <= 0x39;
 
-  static bool _sameRow(NormalizedRect a, NormalizedRect b) {
-    final overlap = (a.bottom < b.bottom ? a.bottom : b.bottom) -
-        (a.top > b.top ? a.top : b.top);
-    final short = a.height < b.height ? a.height : b.height;
-    return overlap > short * 0.5;
-  }
+  static bool _isGeez(String t) =>
+      t.isNotEmpty && t.codeUnitAt(0) >= 0x1200 && t.codeUnitAt(0) <= 0x137F;
 
-  _Word? _leftNeighbour(List<_Word> words, _Word of) {
-    _Word? best;
-    for (final w in words) {
-      if (identical(w, of) || !w.free) continue;
-      if (w.box.right > of.box.left + of.box.width * 0.05) continue;
-      if (!_sameRow(w.box, of.box)) continue;
-      if (of.box.left - w.box.right > of.box.height) continue;
-      if (best == null || w.box.right > best.box.right) best = w;
+  static bool _isLatin(String t) =>
+      t.length == 1 && t.codeUnitAt(0) >= 0x41 && t.codeUnitAt(0) <= 0x5A;
+
+  /// Section 3: the longest run of number-sized, digit-like characters
+  /// side by side on one row (5–7 long, mostly real digits).
+  _Number? _number(List<_Char> chars) {
+    final digits = chars.where((c) => _isDigit(c.text)).toList();
+    if (digits.isEmpty) return null;
+    final tallest =
+        digits.map((c) => c.box.height).reduce((a, b) => a > b ? a : b);
+    final big = chars
+        .where((c) =>
+            c.box.height >= tallest * _numberGlyph &&
+            (_isDigit(c.text) || _toDigit.containsKey(c.text)))
+        .toList()
+      ..sort((a, b) => a.box.left.compareTo(b.box.left));
+
+    _Number? best;
+    var run = <_Char>[];
+    void close() {
+      final real = run.where((c) => _isDigit(c.text)).length;
+      if (run.length >= 5 && real >= 4) {
+        // Too long: keep the rightmost seven (a stray mark on the left).
+        final kept = run.length > 7 ? run.sublist(run.length - 7) : run;
+        final n = _Number(List.of(kept));
+        if (best == null || n.realDigits > best!.realDigits) best = n;
+      }
+      run = <_Char>[];
     }
+
+    for (final c in big) {
+      if (run.isNotEmpty) {
+        final prev = run.last;
+        final gap = c.box.left - prev.box.right;
+        final sameRow =
+            (c.box.centerY - prev.box.centerY).abs() < prev.box.height * 0.4;
+        if (gap > tallest * 0.8 || !sameRow) close();
+      }
+      run.add(c);
+    }
+    close();
     return best;
   }
 
-  /// (code, corrections, word) for the best code token, preferring the one
-  /// nearest to the left of the serial.
-  (String, int, _Word)? _codeToken(List<_Word> words, _Word? serial) {
-    (String, int, _Word)? best;
-    var bestRank = -1e9;
-    for (final w in words) {
-      if (!w.free) continue;
-      final code = parser.readCode(w.text);
-      if (code == null) continue;
-      final fixes = (w.text == code) ? 0 : 1;
-      var rank = -fixes * 10.0;
-      if (serial != null) {
-        final left = w.box.right <= serial.box.left + serial.box.width * 0.1;
-        rank += left ? 5 - (serial.box.left - w.box.right).abs() : 0;
+  /// Splits characters (sorted by x) where the horizontal gap exceeds [gap].
+  List<List<_Char>> _clusters(List<_Char> chars, {required double gap}) {
+    final sorted = [...chars]..sort((a, b) => a.box.left.compareTo(b.box.left));
+    final out = <List<_Char>>[];
+    for (final c in sorted) {
+      if (out.isEmpty) {
+        out.add([c]);
+        continue;
       }
-      if (rank > bestRank) {
-        bestRank = rank;
-        best = (code, fixes, w);
+      final right =
+          out.last.map((x) => x.box.right).reduce((a, b) => a > b ? a : b);
+      if (c.box.left - right > gap) {
+        out.add([c]);
+      } else {
+        out.last.add(c);
       }
     }
-    return best;
+    return out;
   }
 
-  _Word? _leftmostSingle(List<_Word> words) {
-    _Word? best;
-    for (final w in words) {
-      if (!w.free || w.text.length != 1) continue;
-      if (best == null || w.box.left < best.box.left) best = w;
+  String? _codeDigit(String t) {
+    final d = _isDigit(t) ? t : _toDigit[t];
+    return PlateServiceType.isKnown(d) ? d : null;
+  }
+
+  /// Section 1: the circled-code pass wins; else a code digit read in the
+  /// leftmost cluster (a ring read as a letter is not a code).
+  PlateSection _codeSection(
+    List<_Char> chars,
+    String? hint,
+    NormalizedRect? number,
+  ) {
+    String? value;
+    if (PlateServiceType.isKnown(hint) && int.tryParse(hint!) != null) {
+      value = hint;
+    } else {
+      for (final c in chars) {
+        value = _codeDigit(c.text);
+        if (value != null) break;
+      }
     }
-    final serial = words.where((w) => w.role == PlateSegmentRole.serial);
-    if (best == null || serial.isEmpty) return null;
-    return best.box.right <= serial.first.box.left ? best : null;
+    var box = _union(chars);
+    if (box == null && number != null && value != null) {
+      // Located by the circle pass only: the area left of the number.
+      box = NormalizedRect(
+        0,
+        number.top,
+        (number.left * 0.45).clamp(0.02, 1.0),
+        number.bottom,
+      );
+    }
+    return PlateSection(
+      kind: PlateSectionKind.code,
+      value: value ?? '',
+      chars: value == null || box == null ? const [] : [PlateChar(value, box)],
+      box: box,
+      detected: value != null,
+    );
   }
 
-  PlateLayout _layout(PlateArrangement a) {
-    final serial = a.withRole(PlateSegmentRole.serial);
-    if (serial.isEmpty) return PlateLayout.unknown;
-    final s = serial.first.box;
-    final stackedRows = a.segments
-        .where((x) =>
-            x.role != PlateSegmentRole.ignored &&
-            x.role != PlateSegmentRole.serial &&
-            !_sameRow(x.box, s) &&
-            x.box.right > s.left &&
-            x.box.left < s.right)
-        .isNotEmpty;
-    return stackedRows ? PlateLayout.twoRow : PlateLayout.singleRow;
+  /// Section 2: Ge'ez characters if the recogniser produced any, else `XX`.
+  PlateSection _geezSection(
+    List<_Char> chars,
+    List<_Char>? code,
+    NormalizedRect? number,
+  ) {
+    final geez = chars.where((c) => _isGeez(c.text)).toList()
+      ..sort((a, b) => a.box.top.compareTo(b.box.top));
+    var box = _union(chars);
+    if (box == null && number != null) {
+      // Not read at all: the gap between the code and the number.
+      final from = _union(code ?? const [])?.right ?? number.left * 0.45;
+      if (number.left - from > 0.02) {
+        box = NormalizedRect(from, number.top, number.left, number.bottom);
+      }
+    }
+    if (geez.isEmpty) {
+      return PlateSection(
+        kind: PlateSectionKind.geezRegion,
+        value: PlateSection.geezPlaceholder,
+        box: box,
+        detected: false,
+      );
+    }
+    return PlateSection(
+      kind: PlateSectionKind.geezRegion,
+      value: geez.map((c) => c.text).join(),
+      chars: [for (final c in geez) PlateChar(c.text, c.box)],
+      box: box,
+    );
+  }
+
+  /// Section 4: Latin letters right of the number, stacked top to bottom.
+  PlateSection _latinSection(List<_Char> chars) {
+    final letters = <_Char>[];
+    for (final c in chars) {
+      final t = _isLatin(c.text) ? c.text : _toLetter[c.text];
+      if (t != null) letters.add(_Char(t, c.box));
+    }
+    // Top to bottom; side-by-side letters on one row left to right.
+    letters.sort((a, b) {
+      final sameRow =
+          (a.box.centerY - b.box.centerY).abs() < a.box.height * 0.5;
+      return sameRow
+          ? a.box.left.compareTo(b.box.left)
+          : a.box.top.compareTo(b.box.top);
+    });
+    final value = letters.map((c) => c.text).join();
+    return PlateSection(
+      kind: PlateSectionKind.latinRegion,
+      value: value,
+      chars: [for (final c in letters) PlateChar(c.text, c.box)],
+      box: _union(letters),
+      detected: value.isNotEmpty,
+    );
+  }
+
+  PlateCandidate _candidate(PlateArrangement a, AreaOcr ocr, int corrections) {
+    final code = a.code.value.isEmpty ? null : a.code.value;
+    final serial = a.number.value.isEmpty ? null : a.number.value;
+    final region = parser.readRegion(a.latinRegion.value);
+    final confidences =
+        ocr.elements.map((e) => e.confidence).whereType<double>().toList();
+    var confidence = confidences.isEmpty
+        ? 0.8
+        : confidences.reduce((x, y) => x + y) / confidences.length;
+    for (var i = 0; i < corrections; i++) {
+      confidence *= 0.95;
+    }
+    return PlateCandidate(
+      code: code,
+      regionCode: region?.code,
+      serial: serial,
+      layout: PlateLayout.singleRow,
+      rawText: a.layoutText,
+      confidence: confidence.clamp(0.0, 1.0),
+      issues: parser.validate(
+        code: code,
+        regionCode: region?.code,
+        serial: serial,
+      ),
+    );
+  }
+
+  static NormalizedRect? _union(List<_Char> chars) {
+    NormalizedRect? box;
+    for (final c in chars) {
+      box = box == null ? c.box : box.union(c.box);
+    }
+    return box;
   }
 }
 
-class _Word {
-  _Word(this.text, this.box, this.confidence, {double? glyph})
-      : glyph = glyph ?? box.height;
+class _Char {
+  _Char(this.text, this.box);
   final String text;
   final NormalizedRect box;
-  final double? confidence;
+}
 
-  /// Character height. A vertical column of small digits (the security
-  /// number on the plate's edge) has a tall box but small glyphs.
-  final double glyph;
-  PlateSegmentRole role = PlateSegmentRole.ignored;
+class _Number {
+  _Number(this.chars);
+  final List<_Char> chars;
 
-  /// Text to show instead of [text] (a ring read as "D" shows the code).
-  String? display;
+  int get realDigits =>
+      chars.where((c) => PlateArranger._isDigit(c.text)).length;
 
-  /// Much smaller than the serial; never code or region.
-  bool tooSmall = false;
+  int get corrections => chars.length - realDigits;
 
-  /// Still free to become code or region.
-  bool get free => role == PlateSegmentRole.ignored && !tooSmall;
+  double get glyph =>
+      chars.map((c) => c.box.height).reduce((a, b) => a > b ? a : b);
+
+  NormalizedRect get box => PlateArranger._union(chars)!;
+
+  static String _digit(String t) =>
+      PlateArranger._isDigit(t) ? t : PlateArranger._toDigit[t]!;
+
+  String get value => chars.map((c) => _digit(c.text)).join();
+
+  PlateSection get section => PlateSection(
+        kind: PlateSectionKind.number,
+        value: value,
+        chars: [for (final c in chars) PlateChar(_digit(c.text), c.box)],
+        box: box,
+      );
 }

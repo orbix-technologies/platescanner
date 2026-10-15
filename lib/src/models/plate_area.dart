@@ -102,84 +102,102 @@ class AreaOcr {
       );
 }
 
-/// What a group of characters on the plate stands for.
-enum PlateSegmentRole {
-  /// Service code (circled / boxed number, or CD / AU / UN / POLICE).
+/// The four sections printed on an Ethiopian plate, left to right.
+enum PlateSectionKind {
+  /// 1 — circled service code.
   code,
 
-  /// Latin region letters (AA, TG, …).
-  region,
+  /// 2 — region in Ge'ez, letters stacked vertically.
+  geezRegion,
 
-  /// Serial number.
-  serial,
+  /// 3 — the number (serial).
+  number,
 
-  /// Read but not part of the plate number (ring, "ETH", stray marks).
-  ignored,
+  /// 4 — region in Latin letters, stacked vertically.
+  latinRegion,
 }
 
-/// A run of characters placed together on the plate.
-class PlateSegment {
-  /// Creates a segment.
-  const PlateSegment({
-    required this.text,
-    required this.box,
-    required this.column,
-    required this.row,
-    this.role = PlateSegmentRole.ignored,
-  });
+/// One character read on the plate, with its box in area coordinates.
+class PlateChar {
+  /// Creates a character.
+  const PlateChar(this.text, this.box);
 
-  /// Characters, as read.
+  /// The character as read (after confusion fixes for its section).
   final String text;
 
   /// Bounds inside the plate area (`0.0`–`1.0`).
   final NormalizedRect box;
 
-  /// Column index, left to right.
-  final int column;
-
-  /// Row inside its column, top to bottom (stacked letters).
-  final int row;
-
-  /// Assigned meaning.
-  final PlateSegmentRole role;
-
-  /// Copy with a new [role].
-  PlateSegment withRole(PlateSegmentRole role) => PlateSegment(
-        text: text,
-        box: box,
-        column: column,
-        row: row,
-        role: role,
-      );
-
   @override
-  String toString() => 'PlateSegment($text, c$column r$row, ${role.name})';
+  String toString() => text;
 }
 
-/// Characters of a plate arranged the way they are placed on it.
+/// One section of the plate and the characters found in it.
+class PlateSection {
+  /// Creates a section.
+  const PlateSection({
+    required this.kind,
+    required this.value,
+    this.chars = const [],
+    this.box,
+    this.detected = true,
+  });
+
+  /// Which section this is.
+  final PlateSectionKind kind;
+
+  /// Section value: code `1`, Ge'ez `XX` when unreadable, number `01906`,
+  /// Latin region `AM`. Empty when nothing was found.
+  final String value;
+
+  /// Characters in reading order (stacked sections: top to bottom).
+  final List<PlateChar> chars;
+
+  /// Section bounds inside the plate area, when located.
+  final NormalizedRect? box;
+
+  /// False when the value is a placeholder (Ge'ez `XX`) or empty.
+  final bool detected;
+
+  /// Placeholder shown for Ge'ez that could not be read.
+  static const geezPlaceholder = 'XX';
+
+  @override
+  String toString() => '${kind.name}=$value$chars';
+}
+
+/// A plate split into its four sections, as placed on the plate.
 class PlateArrangement {
   /// Creates an arrangement.
-  const PlateArrangement(this.columns);
+  const PlateArrangement({
+    required this.code,
+    required this.geezRegion,
+    required this.number,
+    required this.latinRegion,
+    this.ignored = const [],
+  });
 
-  /// Columns left to right; each column's segments top to bottom.
-  final List<List<PlateSegment>> columns;
+  /// Section 1 — circled code.
+  final PlateSection code;
 
-  /// All segments in reading order.
-  List<PlateSegment> get segments => [for (final c in columns) ...c];
+  /// Section 2 — Ge'ez region (stacked).
+  final PlateSection geezRegion;
 
-  /// Segments with [role], in reading order.
-  List<PlateSegment> withRole(PlateSegmentRole role) =>
-      segments.where((s) => s.role == role).toList();
+  /// Section 3 — number.
+  final PlateSection number;
 
-  /// Plate as printed: columns separated by spaces, stacked letters by `/`
-  /// (e.g. `1 0123456 A/A`). Ignored segments are left out.
-  String get layoutText => columns
-      .map((c) => c
-          .where((s) => s.role != PlateSegmentRole.ignored)
-          .map((s) => s.text)
-          .join('/'))
-      .where((t) => t.isNotEmpty)
-      .join(' ');
+  /// Section 4 — Latin region (stacked).
+  final PlateSection latinRegion;
+
+  /// Characters read that belong to no section (marks, security number).
+  final List<PlateChar> ignored;
+
+  /// The four sections, left to right.
+  List<PlateSection> get sections => [code, geezRegion, number, latinRegion];
+
+  /// Plate as printed, e.g. `1 XX 01906 AM` (`–` for an empty section).
+  String get layoutText =>
+      sections.map((s) => s.value.isEmpty ? '–' : s.value).join(' ');
 
   @override
   String toString() => 'PlateArrangement($layoutText)';

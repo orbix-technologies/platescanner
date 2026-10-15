@@ -22,8 +22,9 @@ export 'src/models/plate_area.dart'
         OcrElement,
         OcrSymbol,
         PlateArrangement,
-        PlateSegment,
-        PlateSegmentRole;
+        PlateChar,
+        PlateSection,
+        PlateSectionKind;
 export 'src/models/plate_record.dart'
     show PlateCandidate, PlateIssue, PlateLayout, PlateLocation, PlateRecord;
 export 'src/parsing/ethiopian_plate_parser.dart' show EthiopianPlateParser;
