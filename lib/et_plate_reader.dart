@@ -13,6 +13,7 @@ library;
 
 export 'src/controller/plate_reader_controller.dart'
     show PlateReaderController, ScanPhase;
+export 'src/diagnostics/session_log.dart' show SessionLog;
 export 'src/exceptions/plate_reader_exception.dart';
 export 'src/models/ocr_frame.dart' show NormalizedRect, OcrLine, OcrFrame;
 export 'src/models/plate_area.dart'
@@ -24,7 +25,8 @@ export 'src/models/plate_area.dart'
         PlateArrangement,
         PlateChar,
         PlateSection,
-        PlateSectionKind;
+        PlateSectionKind,
+        RegionColumn;
 export 'src/models/plate_record.dart'
     show PlateCandidate, PlateIssue, PlateLayout, PlateLocation, PlateRecord;
 export 'src/parsing/ethiopian_plate_parser.dart' show EthiopianPlateParser;

@@ -50,9 +50,31 @@ class PlateArranger {
   ({PlateArrangement arrangement, PlateCandidate candidate}) arrange(
     AreaOcr ocr,
   ) {
-    final chars = _chars(ocr);
-    final number = _number(chars);
+    var chars = _chars(ocr);
     final ignored = <PlateChar>[];
+
+    // Section 4 from the stacked-letter pass: the first column whose letters
+    // name a region. Its column is taken out before the number is found:
+    // OCR often merges the two letters into one tall "digit" glued to it.
+    RegionColumn? column;
+    for (final c in ocr.regionColumns) {
+      if (c.letters.length == 2 && parser.readRegion(c.letters) != null) {
+        column = c;
+        break;
+      }
+    }
+    final useColumn = column != null;
+    if (column != null) {
+      final box = column.box;
+      final inColumn = chars
+          .where((c) => c.box.centerX >= box.left && c.box.centerX <= box.right)
+          .toList();
+      for (final c in inColumn) {
+        ignored.add(PlateChar(c.text, c.box));
+      }
+      chars = chars.where((c) => !inColumn.contains(c)).toList();
+    }
+    final number = _number(chars);
 
     if (number == null) {
       final arrangement = PlateArrangement(
@@ -63,12 +85,17 @@ class PlateArranger {
           value: '',
           detected: false,
         ),
-        latinRegion: const PlateSection(
-          kind: PlateSectionKind.latinRegion,
-          value: '',
-          detected: false,
-        ),
-        ignored: [for (final c in chars) PlateChar(c.text, c.box)],
+        latinRegion: useColumn
+            ? _columnSection(column)
+            : const PlateSection(
+                kind: PlateSectionKind.latinRegion,
+                value: '',
+                detected: false,
+              ),
+        ignored: [
+          ...ignored,
+          for (final c in chars) PlateChar(c.text, c.box),
+        ],
       );
       return (
         arrangement: arrangement,
@@ -128,8 +155,12 @@ class PlateArranger {
       code: _codeSection(codeChars, ocr.codeHint, nBox),
       geezRegion: _geezSection(geezChars, codeChars, nBox),
       number: number.section,
-      latinRegion: _latinSection(right),
-      ignored: ignored,
+      latinRegion: useColumn ? _columnSection(column) : _latinSection(right),
+      ignored: [
+        ...ignored,
+        if (useColumn)
+          for (final c in right) PlateChar(c.text, c.box),
+      ],
     );
     return (
       arrangement: arrangement,
@@ -144,7 +175,9 @@ class PlateArranger {
       if (e.symbols.isNotEmpty) {
         for (final s in e.symbols) {
           final t = _normalize(s.text);
-          if (t.trim().isNotEmpty) out.add(_Char(t, s.box));
+          if (t.trim().isNotEmpty) {
+            out.add(_Char(t, s.box, lowercase: _isLower(s.text)));
+          }
         }
         continue;
       }
@@ -154,7 +187,11 @@ class PlateArranger {
         final t = _normalize(text[i]);
         if (t.trim().isEmpty) continue;
         final l = e.box.left + i * step;
-        out.add(_Char(t, NormalizedRect(l, e.box.top, l + step, e.box.bottom)));
+        out.add(_Char(
+          t,
+          NormalizedRect(l, e.box.top, l + step, e.box.bottom),
+          lowercase: _isLower(text[i]),
+        ));
       }
     }
     return out;
@@ -168,6 +205,9 @@ class PlateArranger {
     return ch.toUpperCase();
   }
 
+  static bool _isLower(String t) =>
+      t.length == 1 && t.codeUnitAt(0) >= 0x61 && t.codeUnitAt(0) <= 0x7A;
+
   static bool _isDigit(String t) =>
       t.length == 1 && t.codeUnitAt(0) >= 0x30 && t.codeUnitAt(0) <= 0x39;
 
@@ -177,42 +217,57 @@ class PlateArranger {
   static bool _isLatin(String t) =>
       t.length == 1 && t.codeUnitAt(0) >= 0x41 && t.codeUnitAt(0) <= 0x5A;
 
-  /// Section 3: the longest run of number-sized, digit-like characters
-  /// side by side on one row (5–7 long, mostly real digits).
+  /// Section 3: the longest run of number-sized, digit-like characters side
+  /// by side on one row (5–7 long, mostly real digits). Anything else on the
+  /// row between them (a `-`, a symbol) breaks the run.
   _Number? _number(List<_Char> chars) {
     final digits = chars.where((c) => _isDigit(c.text)).toList();
     if (digits.isEmpty) return null;
     final tallest =
         digits.map((c) => c.box.height).reduce((a, b) => a > b ? a : b);
-    final big = chars
-        .where((c) =>
-            c.box.height >= tallest * _numberGlyph &&
-            (_isDigit(c.text) || _toDigit.containsKey(c.text)))
-        .toList()
-      ..sort((a, b) => a.box.left.compareTo(b.box.left));
+    bool joinable(_Char c) =>
+        c.box.height >= tallest * _numberGlyph &&
+        (_isDigit(c.text) || (!c.lowercase && _toDigit.containsKey(c.text)));
 
+    final sorted = [...chars]..sort((a, b) => a.box.left.compareTo(b.box.left));
     _Number? best;
     var run = <_Char>[];
     void close() {
-      final real = run.where((c) => _isDigit(c.text)).length;
-      if (run.length >= 5 && real >= 4) {
-        // Too long: keep the rightmost seven (a stray mark on the left).
-        final kept = run.length > 7 ? run.sublist(run.length - 7) : run;
+      var kept = run;
+      // Too long: drop letter-for-digit guesses at the edges (a ring read as
+      // "D"), then extra characters on the right (merged stacked letters).
+      while (kept.length > 7 && !_isDigit(kept.first.text)) {
+        kept = kept.sublist(1);
+      }
+      while (kept.length > 7 && !_isDigit(kept.last.text)) {
+        kept = kept.sublist(0, kept.length - 1);
+      }
+      if (kept.length > 7) kept = kept.sublist(0, 7);
+      final real = kept.where((c) => _isDigit(c.text)).length;
+      if (kept.length >= 5 && real >= 4) {
         final n = _Number(List.of(kept));
         if (best == null || n.realDigits > best!.realDigits) best = n;
       }
       run = <_Char>[];
     }
 
-    for (final c in big) {
+    for (final c in sorted) {
       if (run.isNotEmpty) {
         final prev = run.last;
-        final gap = c.box.left - prev.box.right;
-        final sameRow =
-            (c.box.centerY - prev.box.centerY).abs() < prev.box.height * 0.4;
-        if (gap > tallest * 0.8 || !sameRow) close();
+        final top = run.map((x) => x.box.top).reduce((a, b) => a < b ? a : b);
+        final bottom =
+            run.map((x) => x.box.bottom).reduce((a, b) => a > b ? a : b);
+        final onRow = c.box.centerY > top && c.box.centerY < bottom;
+        if (joinable(c)) {
+          final gap = c.box.left - prev.box.right;
+          final sameRow =
+              (c.box.centerY - prev.box.centerY).abs() < prev.box.height * 0.4;
+          if (gap > tallest * 0.8 || !sameRow) close();
+        } else if (onRow) {
+          close();
+        }
       }
-      run.add(c);
+      if (joinable(c)) run.add(c);
     }
     close();
     return best;
@@ -310,6 +365,17 @@ class PlateArranger {
     );
   }
 
+  /// Section 4 from the stacked-letter pass.
+  PlateSection _columnSection(RegionColumn column) => PlateSection(
+        kind: PlateSectionKind.latinRegion,
+        value: column.letters,
+        chars: [
+          PlateChar(column.letters[0], column.topHalf),
+          PlateChar(column.letters[1], column.bottomHalf),
+        ],
+        box: column.box,
+      );
+
   /// Section 4: Latin letters right of the number, stacked top to bottom.
   PlateSection _latinSection(List<_Char> chars) {
     final letters = <_Char>[];
@@ -372,9 +438,13 @@ class PlateArranger {
 }
 
 class _Char {
-  _Char(this.text, this.box);
+  _Char(this.text, this.box, {this.lowercase = false});
   final String text;
   final NormalizedRect box;
+
+  /// Read as a lowercase letter: plate characters are uppercase, so this is
+  /// never a digit misread (a ring read as "o").
+  final bool lowercase;
 }
 
 class _Number {

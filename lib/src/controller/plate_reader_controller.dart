@@ -5,6 +5,7 @@ import 'package:logger/logger.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:uuid/uuid.dart';
 
+import '../diagnostics/session_log.dart';
 import '../exceptions/plate_reader_exception.dart';
 import '../models/ocr_frame.dart';
 import '../models/plate_area.dart';
@@ -66,9 +67,11 @@ class PlateReaderController extends ChangeNotifier {
     PlateAreaDetector detector = const PlateAreaDetector(),
     int stableFrames = 3,
     this.autoCapture = true,
+    bool? recordSessions,
     NormalizedRect regionOfInterest =
         const NormalizedRect(0.07, 0.25, 0.93, 0.6),
-  })  : _roi = regionOfInterest,
+  })  : recordSessions = recordSessions ?? kDebugMode,
+        _roi = regionOfInterest,
         _service = service ?? PlateRecognitionServiceFactory.create(),
         _logger = logger ?? Logger(level: Level.off),
         _requestCameraPermission =
@@ -88,6 +91,12 @@ class PlateReaderController extends ChangeNotifier {
 
   /// Whether a steady detected area freezes the frame automatically.
   final bool autoCapture;
+
+  /// Whether each session is written to a diagnostic log (see [SessionLog]).
+  /// On by default in debug builds.
+  final bool recordSessions;
+
+  SessionLog? _log;
 
   NormalizedRect _roi;
 
@@ -119,6 +128,7 @@ class PlateReaderController extends ChangeNotifier {
   CapturedFrame? _frame;
   NormalizedRect? _area;
   PlateArrangement? _arrangement;
+  AreaOcr? _areaOcr;
   PlateCandidate? _candidate;
   String? _draftCode;
   String? _draftRegion;
@@ -151,6 +161,9 @@ class PlateReaderController extends ChangeNotifier {
 
   /// Step 2+: the plate area on [capturedFrame] (normalized), as adjusted.
   NormalizedRect? get plateArea => _area;
+
+  /// Step 3: raw OCR of the confirmed area (diagnostics).
+  AreaOcr? get areaOcr => _areaOcr;
 
   /// Step 4: characters arranged as on the plate.
   PlateArrangement? get arrangement => _arrangement;
@@ -252,6 +265,8 @@ class PlateReaderController extends ChangeNotifier {
     _location = location;
     _description = null;
     _reset();
+    _log = recordSessions ? SessionLog() : null;
+    _log?.event('start', {'roi': SessionLog.rect(_roi)});
     _phase = ScanPhase.detecting;
     _notify();
     try {
@@ -268,6 +283,7 @@ class PlateReaderController extends ChangeNotifier {
         .where((l) => _roi.contains(l.box, tolerance: _roiTolerance))
         .toList(growable: false);
     final area = _detector.detect(lines);
+    _log?.detection(lines, area);
     final stable = _tracker.add(area);
     _detectedArea = area;
     _notify();
@@ -276,6 +292,8 @@ class PlateReaderController extends ChangeNotifier {
 
   void _onPlatformError(String message) {
     if (_disposed) return;
+    _log?.event('error', {'message': message, 'phase': _phase.name});
+    unawaited(_log?.save());
     _error = message;
     _phase = ScanPhase.error;
     _notify();
@@ -293,6 +311,15 @@ class PlateReaderController extends ChangeNotifier {
       if (_phase != ScanPhase.detecting) return false;
       _frame = frame;
       _area = proposed;
+      _log?.frame(frame);
+      _log?.event('capture', {
+        'frame': frame.path,
+        'width': frame.width,
+        'height': frame.height,
+        'detected': SessionLog.rect(_detectedArea),
+        'proposed': SessionLog.rect(proposed),
+        'auto': _tracker.progress >= 1,
+      });
       _phase = ScanPhase.confirmingArea;
       _notify();
       return true;
@@ -331,10 +358,13 @@ class PlateReaderController extends ChangeNotifier {
       return;
     }
     _phase = ScanPhase.reading;
+    _log?.event('confirmArea', {'area': SessionLog.rect(area)});
     _notify();
     try {
       final ocr = await _service.recognizeArea(frame.path, area);
+      _log?.event('areaOcr', SessionLog.areaOcr(ocr));
       if (_phase != ScanPhase.reading) return;
+      _areaOcr = ocr;
       final result = _arranger.arrange(ocr);
       _arrangement = result.arrangement;
       _candidate = result.candidate;
@@ -342,6 +372,11 @@ class PlateReaderController extends ChangeNotifier {
       _draftRegion = result.candidate.regionCode;
       _draftSerial = result.candidate.serial;
       _edited = false;
+      _log?.event('arranged', {
+        ...SessionLog.arrangement(result.arrangement),
+        'reading': SessionLog.candidate(result.candidate),
+      });
+      unawaited(_log?.save());
       _phase = ScanPhase.review;
       _notify();
     } catch (e, st) {
@@ -362,6 +397,10 @@ class PlateReaderController extends ChangeNotifier {
     }.contains(_phase)) {
       return;
     }
+    _log?.event('retake', {'from': _phase.name});
+    await _log?.save();
+    _log = recordSessions ? SessionLog() : null;
+    _log?.event('start', {'roi': SessionLog.rect(_roi), 'after': 'retake'});
     _error = null;
     _reset();
     _phase = ScanPhase.detecting;
@@ -372,6 +411,7 @@ class PlateReaderController extends ChangeNotifier {
   /// Back to step 2 from review: adjust the area on the same frame.
   void adjustAgain() {
     if (_phase != ScanPhase.review) return;
+    _log?.event('adjustAgain');
     _phase = ScanPhase.confirmingArea;
     _notify();
   }
@@ -388,6 +428,12 @@ class PlateReaderController extends ChangeNotifier {
       _draftSerial = _parser.normalizeSerial(serial) ?? serial.toUpperCase();
     }
     _edited = true;
+    _log?.event('edit', {
+      'code': code,
+      'region': regionCode,
+      'serial': serial,
+      'draft': [_draftCode, _draftRegion, _draftSerial],
+    });
     _notify();
   }
 
@@ -433,6 +479,11 @@ class PlateReaderController extends ChangeNotifier {
       location: _location,
       description: _description,
     );
+    _log?.event('done', {
+      'record': record.canonical,
+      'editedByUser': record.editedByUser,
+    });
+    unawaited(_log?.save());
     _phase = ScanPhase.confirmed;
     _notify();
     return record;
@@ -441,6 +492,8 @@ class PlateReaderController extends ChangeNotifier {
   /// End the session without a result.
   Future<void> cancelSession() async {
     if (_phase == ScanPhase.idle) return;
+    _log?.event('cancel', {'phase': _phase.name});
+    unawaited(_log?.save());
     await _service.pause();
     _reset();
     _phase = _initialized ? ScanPhase.idle : _phase;
@@ -459,6 +512,7 @@ class PlateReaderController extends ChangeNotifier {
     _frame = null;
     _area = null;
     _arrangement = null;
+    _areaOcr = null;
     _candidate = null;
     _draftCode = null;
     _draftRegion = null;

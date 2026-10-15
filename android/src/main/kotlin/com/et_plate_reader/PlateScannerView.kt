@@ -12,6 +12,8 @@ import android.view.View
 import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
+import androidx.camera.core.ImageCapture
+import androidx.camera.core.ImageCaptureException
 import androidx.camera.core.ImageProxy
 import androidx.camera.core.Preview
 import androidx.camera.core.UseCaseGroup
@@ -62,6 +64,7 @@ class PlateScannerView(
     }
     private var provider: ProcessCameraProvider? = null
     private var camera: Camera? = null
+    private var imageCapture: ImageCapture? = null
     private var disposed = false
     @Volatile private var pendingCapture: MethodChannel.Result? = null
 
@@ -110,16 +113,41 @@ class PlateScannerView(
                     .build()
                 analysis.setAnalyzer(analysisExecutor, ::analyze)
 
-                val group = UseCaseGroup.Builder().addUseCase(preview).addUseCase(analysis)
-                // Same viewport as the preview → ImageProxy.cropRect = visible area.
-                previewView.viewPort?.let { group.setViewPort(it) }
+                // Stills for area confirmation and reading: far more pixels on
+                // the plate than the 720p analysis stream.
+                val capture = ImageCapture.Builder()
+                    .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
+                    .setResolutionSelector(
+                        ResolutionSelector.Builder()
+                            .setResolutionStrategy(
+                                ResolutionStrategy(
+                                    Size(2560, 1440),
+                                    ResolutionStrategy.FALLBACK_RULE_CLOSEST_LOWER_THEN_HIGHER,
+                                ),
+                            )
+                            .build(),
+                    )
+                    .build()
+
+                fun group(withCapture: Boolean): UseCaseGroup {
+                    val g = UseCaseGroup.Builder().addUseCase(preview).addUseCase(analysis)
+                    if (withCapture) g.addUseCase(capture)
+                    // Same viewport as the preview → every cropRect = visible area.
+                    previewView.viewPort?.let { g.setViewPort(it) }
+                    return g.build()
+                }
 
                 cameraProvider.unbindAll()
-                camera = cameraProvider.bindToLifecycle(
-                    this,
-                    CameraSelector.DEFAULT_BACK_CAMERA,
-                    group.build(),
-                )
+                camera = try {
+                    cameraProvider.bindToLifecycle(this, CameraSelector.DEFAULT_BACK_CAMERA, group(true))
+                        .also { imageCapture = capture }
+                } catch (e: Exception) {
+                    // Device can't run three streams: stills come from analysis.
+                    Log.w(TAG, "ImageCapture unavailable, using analysis frames", e)
+                    cameraProvider.unbindAll()
+                    imageCapture = null
+                    cameraProvider.bindToLifecycle(this, CameraSelector.DEFAULT_BACK_CAMERA, group(false))
+                }
                 channel.invokeMethod("onReady", null)
             } catch (e: Exception) {
                 Log.e(TAG, "Camera bind failed", e)
@@ -169,6 +197,29 @@ class PlateScannerView(
         }
     }
 
+    /** High-resolution still; falls back to the next analysis frame on error. */
+    private fun takeStill(still: ImageCapture, result: MethodChannel.Result) {
+        still.takePicture(
+            analysisExecutor,
+            object : ImageCapture.OnImageCapturedCallback() {
+                override fun onCaptureSuccess(image: ImageProxy) {
+                    try {
+                        val rotation = image.imageInfo.rotationDegrees
+                        val crop = uprightRect(image.cropRect, image.width, image.height, rotation)
+                        capture(image, rotation, crop, result)
+                    } finally {
+                        image.close()
+                    }
+                }
+
+                override fun onError(exception: ImageCaptureException) {
+                    Log.w(TAG, "Still capture failed, using analysis frame", exception)
+                    pendingCapture = result
+                }
+            },
+        )
+    }
+
     /** Saves this frame, cropped to the visible preview, as a JPEG still. */
     private fun capture(proxy: ImageProxy, rotation: Int, crop: Rect, result: MethodChannel.Result) {
         try {
@@ -202,9 +253,11 @@ class PlateScannerView(
                 result.success(null)
             }
             "captureFrame" -> {
+                val still = imageCapture
                 when {
                     camera == null -> result.error("not_ready", "Camera is not ready", null)
                     pendingCapture != null -> result.error("busy", "Capture already in progress", null)
+                    still != null -> takeStill(still, result)
                     else -> pendingCapture = result
                 }
             }

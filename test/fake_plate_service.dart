@@ -64,12 +64,12 @@ class FakePlateService extends PlateRecognitionService {
   AreaOcr areaOcr = const AreaOcr(elements: []);
   NormalizedRect? lastArea;
   int captures = 0;
+  String framePath = '/tmp/frame.jpg';
 
   @override
   Future<CapturedFrame> captureFrame() async {
     captures++;
-    return const CapturedFrame(
-        path: '/tmp/frame.jpg', width: 1080, height: 2340);
+    return CapturedFrame(path: framePath, width: 1080, height: 2340);
   }
 
   @override

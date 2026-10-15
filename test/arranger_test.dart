@@ -162,6 +162,116 @@ void main() {
     expect(r.candidate.region!.englishName, 'Oromia');
   });
 
+  group('stacked region merged into the number (screenshot 3)', () {
+    // OCR read "0123456" plus the stacked A/A as one tall "1" at the end.
+    final merged = word('01234561', left: 0.3, top: 0.15, bottom: 0.85);
+    final lastBox = merged.symbols.last.box;
+
+    test('region pass on the last "digit" recovers A/A and the 0', () {
+      final r = arranger.arrange(AreaOcr(
+        codeHint: '1',
+        elements: [merged],
+        regionColumns: [
+          RegionColumn(
+            letters: 'AA',
+            source: 'lastDigit',
+            box: NormalizedRect(
+                lastBox.left - 0.005, 0.15, lastBox.right + 0.005, 0.85),
+            topHalf: NormalizedRect(lastBox.left, 0.15, lastBox.right, 0.5),
+            bottomHalf: NormalizedRect(lastBox.left, 0.5, lastBox.right, 0.85),
+          ),
+        ],
+      ));
+      expect(values(r.arrangement), ['1', 'XX', '0123456', 'AA']);
+      expect(
+        r.arrangement.latinRegion.chars.map((c) => c.text),
+        ['A', 'A'],
+      );
+      expect(r.candidate.isValid, isTrue);
+    });
+
+    test('without the pass the number keeps its leading digits', () {
+      final r = arranger.arrange(AreaOcr(codeHint: '1', elements: [merged]));
+      expect(r.arrangement.number.value, '0123456');
+    });
+
+    test('letters from a real digit are ignored unless they name a region', () {
+      final r = arranger.arrange(AreaOcr(
+        codeHint: '1',
+        elements: [word('0123458', left: 0.3, top: 0.15, bottom: 0.85)],
+        regionColumns: [
+          RegionColumn(
+            letters: 'OO', // an "8" split into two O-like halves
+            source: 'lastDigit',
+            box: NormalizedRect(0.78, 0.15, 0.86, 0.85),
+            topHalf: NormalizedRect(0.78, 0.15, 0.86, 0.5),
+            bottomHalf: NormalizedRect(0.78, 0.5, 0.86, 0.85),
+          ),
+        ],
+      ));
+      expect(r.arrangement.number.value, '0123458');
+      expect(r.arrangement.latinRegion.value, isEmpty);
+    });
+
+    test('a column whose letters name no region is rejected (GI)', () {
+      final r = arranger.arrange(AreaOcr(
+        codeHint: '1',
+        elements: [word('0123456', left: 0.3, top: 0.15, bottom: 0.85)],
+        regionColumns: const [
+          RegionColumn(
+            letters: 'GI',
+            source: 'zone',
+            box: NormalizedRect(0.9, 0.15, 0.99, 0.85),
+            topHalf: NormalizedRect(0.9, 0.15, 0.99, 0.5),
+            bottomHalf: NormalizedRect(0.9, 0.5, 0.99, 0.85),
+          ),
+        ],
+      ));
+      expect(r.arrangement.number.value, '0123456');
+      expect(r.candidate.regionCode, isNull);
+    });
+
+    test('a column found right of the number is trusted', () {
+      final r = arranger.arrange(AreaOcr(
+        codeHint: '2',
+        elements: [word('94529', left: 0.3, top: 0.15, bottom: 0.85)],
+        regionColumns: const [
+          RegionColumn(
+            letters: 'AM',
+            source: 'zone',
+            box: NormalizedRect(0.8, 0.15, 0.9, 0.85),
+            topHalf: NormalizedRect(0.8, 0.15, 0.9, 0.5),
+            bottomHalf: NormalizedRect(0.8, 0.5, 0.9, 0.85),
+          ),
+        ],
+      ));
+      expect(values(r.arrangement), ['2', 'XX', '94529', 'AM']);
+    });
+  });
+
+  group('real captures (raw ML Kit output from the phone)', () {
+    /// One element whose characters are spread evenly over its box.
+    OcrElement line(String text, double left, double right) =>
+        OcrElement(text: text, box: NormalizedRect(left, 0.2, right, 0.8));
+
+    test('EBR off the screen: "D-01234561"', () {
+      final r = arranger.arrange(AreaOcr(
+        codeHint: '1',
+        elements: [line('D-01234561', 0.05, 0.95)],
+      ));
+      // The '-' keeps the ring out; the merged stacked letters are cut.
+      expect(r.arrangement.number.value, '0123456');
+      expect(r.candidate.code, '1');
+    });
+
+    test('taxi: "o17717A:" — ring read as lowercase o', () {
+      final r = arranger.arrange(AreaOcr(
+        elements: [line('o17717A:', 0.05, 0.95)],
+      ));
+      expect(r.arrangement.number.value, '17717');
+    });
+  });
+
   test('nothing number-like: every section empty, nothing invented', () {
     final r = arranger.arrange(AreaOcr(
       elements: [word('TOYOTA', left: 0.1, top: 0.3, bottom: 0.6)],

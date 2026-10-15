@@ -81,16 +81,72 @@ class OcrElement {
       );
 }
 
+/// Section 4 read by the dedicated pass: a column right of the number cut
+/// into a top and a bottom half, each read alone as one letter.
+class RegionColumn {
+  /// Creates a column.
+  const RegionColumn({
+    required this.letters,
+    required this.source,
+    required this.box,
+    required this.topHalf,
+    required this.bottomHalf,
+  });
+
+  /// Two letters, top then bottom (e.g. `AM`).
+  final String letters;
+
+  /// Where the column was found: `trailing` (characters OCR put after the
+  /// number), `zone` (space right of it) or `lastDigit` (the number's last
+  /// character, which OCR may have merged from the stacked letters).
+  final String source;
+
+  /// Column bounds inside the plate area.
+  final NormalizedRect box;
+
+  /// Top letter bounds.
+  final NormalizedRect topHalf;
+
+  /// Bottom letter bounds.
+  final NormalizedRect bottomHalf;
+
+  /// Parses a platform payload.
+  factory RegionColumn.fromMap(Map<Object?, Object?> map) => RegionColumn(
+        letters: map['letters'] as String,
+        source: map['source'] as String? ?? 'zone',
+        box: NormalizedRect.fromMap(map),
+        topHalf:
+            NormalizedRect.fromMap(map['topHalf'] as Map<Object?, Object?>),
+        bottomHalf:
+            NormalizedRect.fromMap(map['bottomHalf'] as Map<Object?, Object?>),
+      );
+}
+
 /// Character-level OCR of a confirmed plate area.
 class AreaOcr {
   /// Creates a result.
-  const AreaOcr({required this.elements, this.codeHint});
+  const AreaOcr({
+    required this.elements,
+    this.codeHint,
+    this.regionColumns = const [],
+    this.debug = const [],
+  });
 
   /// Recognised elements, any order.
   final List<OcrElement> elements;
 
   /// Service code read from the circled-code disc, when found.
   final String? codeHint;
+
+  /// Columns the stacked-letter pass read, in the order it tried them; the
+  /// arranger uses the first whose letters name a region.
+  final List<RegionColumn> regionColumns;
+
+  /// What the native section passes tried and read (diagnostics).
+  final List<String> debug;
+
+  /// All recognised text, for diagnostics.
+  String get text => elements.map((e) => e.text).join(' ');
 
   /// Parses a platform payload.
   factory AreaOcr.fromMap(Map<Object?, Object?> map) => AreaOcr(
@@ -99,6 +155,13 @@ class AreaOcr {
             .map(OcrElement.fromMap)
             .toList(growable: false),
         codeHint: map['codeHint'] as String?,
+        regionColumns: (map['regionColumns'] as List<Object?>? ?? const [])
+            .whereType<Map<Object?, Object?>>()
+            .map(RegionColumn.fromMap)
+            .toList(growable: false),
+        debug: (map['debug'] as List<Object?>? ?? const [])
+            .whereType<String>()
+            .toList(growable: false),
       );
 }
 

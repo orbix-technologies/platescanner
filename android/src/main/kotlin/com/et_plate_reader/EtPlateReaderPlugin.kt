@@ -169,7 +169,19 @@ class EtPlateReaderPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                 }
                 val payload = HashMap<String, Any>()
                 payload["elements"] = elements
-                CodeDiscReader.read(recognizer, text) { page }?.let { payload["codeHint"] = it }
+                // What each section pass tried and read, for the session log.
+                val log = ArrayList<String>()
+                log.add("area: src=${src.toShortString()} image=${image.width}x${image.height} scale=$scale page=${page.width}x${page.height} pad=$pad")
+                CodeDiscReader.read(recognizer, text, log) { page }?.let { payload["codeHint"] = it }
+                payload["regionColumns"] = RegionStackReader.read(recognizer, text, page, log).map { col ->
+                    norm(col.box) + mapOf(
+                        "letters" to col.letters,
+                        "source" to col.source,
+                        "topHalf" to norm(col.top),
+                        "bottomHalf" to norm(col.bottom),
+                    )
+                }
+                payload["debug"] = log
                 main.post { result.success(payload) }
             } catch (e: Exception) {
                 main.post { result.error("ocr_failed", e.message, null) }

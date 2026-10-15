@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 
 import '../controller/plate_reader_controller.dart';
@@ -787,6 +788,17 @@ class _ReviewPanel extends StatelessWidget {
               ),
             ],
           ),
+          // Debug builds: what OCR actually read, to diagnose sections.
+          if (kDebugMode && c.areaOcr != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text(
+                'OCR: ${c.areaOcr!.text}'
+                '${c.areaOcr!.codeHint == null ? '' : '  · code pass ${c.areaOcr!.codeHint}'}'
+                '${c.areaOcr!.regionColumns.isEmpty ? '' : '  · region pass ${c.areaOcr!.regionColumns.map((r) => '${r.letters}/${r.source}').join(', ')}'}',
+                style: const TextStyle(color: Colors.white38, fontSize: 11),
+              ),
+            ),
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [

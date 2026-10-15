@@ -71,7 +71,8 @@ class PlateScannerView: UIView, AVCaptureVideoDataOutputSampleBufferDelegate {
 
   private func configure() {
     session.beginConfiguration()
-    session.sessionPreset = .hd1280x720
+    // 1080p: stills for reading need pixels on the plate; Vision copes.
+    session.sessionPreset = .hd1920x1080
     guard
       let camera = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back),
       let input = try? AVCaptureDeviceInput(device: camera),

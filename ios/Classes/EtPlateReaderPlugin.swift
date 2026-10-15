@@ -140,9 +140,31 @@ public class EtPlateReaderPlugin: NSObject, FlutterPlugin {
         elements.append(element)
       }
       var payload: [String: Any] = ["elements": elements]
-      if let code = CodeDiscReader.read(observations, image: { page }) {
+      // What each section pass tried and read, for the session log.
+      let log = PassLog()
+      log.add("area: src=\(src) image=\(image.width)x\(image.height) scale=\(scale) page=\(pw)x\(ph) pad=\(pad)")
+      if let code = CodeDiscReader.read(observations, log: log, image: { page }) {
         payload["codeHint"] = code
       }
+      // Pixel rect on the page (top-left origin) → area.
+      func normPx(_ r: CGRect) -> [String: Any] {
+        [
+          "left": Double((r.minX - CGFloat(pad)) / CGFloat(w)),
+          "top": Double((r.minY - CGFloat(pad)) / CGFloat(h)),
+          "right": Double((r.maxX - CGFloat(pad)) / CGFloat(w)),
+          "bottom": Double((r.maxY - CGFloat(pad)) / CGFloat(h)),
+        ]
+      }
+      payload["regionColumns"] = RegionStackReader.read(observations, image: page, log: log).map {
+        col -> [String: Any] in
+        var column = normPx(col.box)
+        column["letters"] = col.letters
+        column["source"] = col.source
+        column["topHalf"] = normPx(col.top)
+        column["bottomHalf"] = normPx(col.bottom)
+        return column
+      }
+      payload["debug"] = log.lines
       DispatchQueue.main.async { result(payload) }
     }
   }
