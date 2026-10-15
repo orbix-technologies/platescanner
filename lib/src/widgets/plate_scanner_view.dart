@@ -145,6 +145,9 @@ class _PlateScannerViewState extends State<PlateScannerView> {
           ScanPhase.review,
           ScanPhase.confirmed,
         }.contains(controller.phase);
+    final focused = frozen &&
+        controller.phase != ScanPhase.confirmingArea &&
+        controller.plateArea != null;
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -170,14 +173,35 @@ class _PlateScannerViewState extends State<PlateScannerView> {
                 key: _previewKey,
                 service: controller.service,
               ),
-            // The captured still covers exactly the visible preview, so
-            // filling the view keeps normalized coordinates aligned.
-            if (frozen)
+            // Adjusting the area: the whole still, which covers exactly the
+            // visible preview, so normalized coordinates stay aligned.
+            if (frozen && !focused)
               Image.file(
                 File(frame.path),
                 fit: BoxFit.fill,
                 gaplessPlayback: true,
               ),
+            // Reading and review: only the plate, enlarged, on black.
+            if (focused) ...[
+              const ColoredBox(color: Colors.black),
+              Align(
+                alignment: const Alignment(0, -0.55),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(maxHeight: size.height * 0.3),
+                    child: _PlateFocus(
+                      frame: frame,
+                      area: controller.plateArea!,
+                      sections: controller.phase == ScanPhase.review
+                          ? controller.arrangement?.sections ??
+                              const <PlateSection>[]
+                          : const <PlateSection>[],
+                    ),
+                  ),
+                ),
+              ),
+            ],
             if (controller.isLoading)
               const Center(
                 child: SizedBox(
@@ -197,7 +221,7 @@ class _PlateScannerViewState extends State<PlateScannerView> {
             else if (controller.isSupported) ...[
               if (controller.phase == ScanPhase.detecting)
                 _DetectionLayer(guide: guide, controller: controller)
-              else if (frozen && controller.plateArea != null)
+              else if (frozen && !focused && controller.plateArea != null)
                 _AreaLayer(controller: controller, size: size),
               if (widget.overlayBuilder != null)
                 widget.overlayBuilder!(context, controller)
@@ -421,6 +445,112 @@ class _AreaPainter extends CustomPainter {
   @override
   bool shouldRepaint(_AreaPainter old) =>
       old.area != area || old.color != color || old.sections != sections;
+}
+
+/// The confirmed plate area alone, cropped from the still and enlarged,
+/// with each section's box drawn on it.
+class _PlateFocus extends StatelessWidget {
+  const _PlateFocus({
+    required this.frame,
+    required this.area,
+    required this.sections,
+  });
+
+  final CapturedFrame frame;
+  final NormalizedRect area;
+  final List<PlateSection> sections;
+
+  @override
+  Widget build(BuildContext context) {
+    final pxW = area.width * frame.width;
+    final pxH = area.height * frame.height;
+    final aspect = pxW > 0 && pxH > 0 ? pxW / pxH : 3.0;
+    return AspectRatio(
+      aspectRatio: aspect,
+      child: LayoutBuilder(
+        builder: (context, c) {
+          final w = c.maxWidth;
+          final h = c.maxHeight;
+          // The whole still scaled so that the area fills this box.
+          final fullW = w / area.width;
+          final fullH = h / area.height;
+          return ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                Positioned(
+                  left: -area.left * fullW,
+                  top: -area.top * fullH,
+                  width: fullW,
+                  height: fullH,
+                  child: Image.file(
+                    File(frame.path),
+                    fit: BoxFit.fill,
+                    gaplessPlayback: true,
+                  ),
+                ),
+                IgnorePointer(
+                  child: CustomPaint(
+                    painter: _SectionPainter([
+                      for (final s in sections)
+                        if (s.box != null)
+                          (
+                            Rect.fromLTRB(
+                              s.box!.left * w,
+                              s.box!.top * h,
+                              s.box!.right * w,
+                              s.box!.bottom * h,
+                            ),
+                            s.kind,
+                          ),
+                    ]),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _SectionPainter extends CustomPainter {
+  _SectionPainter(this.sections);
+
+  final List<(Rect, PlateSectionKind)> sections;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    for (final (rect, kind) in sections) {
+      final c = _sectionColor(kind);
+      final r = rect.intersect(Offset.zero & size).deflate(1);
+      canvas.drawRect(
+        r,
+        Paint()
+          ..color = c
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2,
+      );
+      final tp = TextPainter(
+        text: TextSpan(
+          text: ' ${kind.index + 1} ',
+          style: TextStyle(
+            color: Colors.black,
+            backgroundColor: c,
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      tp.paint(canvas, r.topLeft);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_SectionPainter old) => old.sections != sections;
 }
 
 /// Drag the body to move the area, a corner handle to resize it.
