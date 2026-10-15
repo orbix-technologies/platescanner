@@ -83,13 +83,13 @@ class FakePlateService extends PlateRecognitionService {
   }
 
   /// What [readCrops] returns per crop (by index); empty reads by default.
-  List<List<String?>> Function(List<NormalizedRect> crops)? cropReads;
-  final List<List<NormalizedRect>> cropRequests = [];
+  List<List<String?>> Function(List<CropSpec> crops)? cropReads;
+  final List<List<CropSpec>> cropRequests = [];
 
   @override
   Future<List<List<String?>>> readCrops(
     String path,
-    List<NormalizedRect> crops, {
+    List<CropSpec> crops, {
     double size = 160,
   }) async {
     cropRequests.add(crops);

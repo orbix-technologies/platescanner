@@ -14,7 +14,11 @@ void main() {
   final dir = Platform.environment['LOGS_DIR'];
   test('replay sections', () async {
     const reader = PlateSectionReader();
-    final files = Directory(dir!).listSync().whereType<File>().where((f) => f.path.endsWith('.json')).toList()
+    final files = Directory(dir!)
+        .listSync()
+        .whereType<File>()
+        .where((f) => f.path.endsWith('.json'))
+        .toList()
       ..sort((a, b) => a.path.compareTo(b.path));
     for (final f in files) {
       final log = jsonDecode(f.readAsStringSync()) as Map<String, dynamic>;
@@ -31,8 +35,14 @@ void main() {
         for (final c in (cropsEv['crops'] as List).cast<Map<String, dynamic>>())
           '${c['role']}${c['index']}': (c['reads'] as List).cast<String?>(),
       };
-      final crops = [...reader.cropsFor(seg, area), ...reader.cropsFor(seg, area, digits: true)];
-      final reads = [for (final c in crops) logged['${c.role}${c.index}'] ?? const <String?>[null, null, null]];
+      final crops = [
+        ...reader.cropsFor(seg, area),
+        ...reader.cropsFor(seg, area, digits: true)
+      ];
+      final reads = [
+        for (final c in crops)
+          logged['${c.role}${c.index}'] ?? const <String?>[null, null, null]
+      ];
       final r = reader.read(seg, crops, reads, const AreaOcr(elements: []));
       final id = log['session'] as String;
       // ignore: avoid_print

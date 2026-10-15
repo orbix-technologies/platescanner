@@ -166,9 +166,15 @@ class ChannelPlateRecognitionService extends PlateRecognitionService {
   @override
   Future<List<List<String?>>> readCrops(
     String path,
-    List<NormalizedRect> crops, {
+    List<CropSpec> crops, {
     double size = 160,
   }) async {
+    Map<String, double> rect(NormalizedRect c) => {
+          'left': c.left,
+          'top': c.top,
+          'right': c.right,
+          'bottom': c.bottom,
+        };
     try {
       final result = await PlateReader.availabilityChannel
           .invokeListMethod<Object?>('readCrops', {
@@ -177,10 +183,8 @@ class ChannelPlateRecognitionService extends PlateRecognitionService {
         'crops': [
           for (final c in crops)
             {
-              'left': c.left,
-              'top': c.top,
-              'right': c.right,
-              'bottom': c.bottom,
+              'group': [for (final a in c.areas) rect(a)],
+              'repeat': c.repeat,
             },
         ],
       });

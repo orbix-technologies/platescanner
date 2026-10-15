@@ -213,14 +213,17 @@ class EtPlateReaderPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
     }
 
     /**
-     * Reads each crop of a still alone, as photographed, in black and white
-     * and with border lines erased: returns one [colour, bw, clean] text
-     * triple per crop. Crops are normalized `{left, top, right, bottom}` of
-     * the image; each is scaled to `size` px tall (default 160).
+     * Reads crops of a still, each as photographed, in black and white and
+     * with border lines erased: one [colour, bw, clean] text triple per
+     * request. A request is normalized `{left, top, right, bottom}`, or
+     * `{group: [rect, ...]}` (areas laid side by side and read as one word),
+     * optionally with `repeat: n` (the area drawn n times side by side: a
+     * lone character reads poorly, a short "word" of it reads well). Each
+     * area is scaled to `size` px tall (default 160).
      */
     private fun readCrops(call: MethodCall, result: MethodChannel.Result) {
         val path = call.argument<String>("path")
-        val crops = call.argument<List<Map<String, Double>>>("crops")
+        val crops = call.argument<List<Map<String, Any>>>("crops")
         val size = (call.argument<Double>("size") ?: 160.0).toFloat()
         if (path == null || crops == null) {
             result.error("bad_args", "path and crops are required", null)
@@ -232,14 +235,29 @@ class EtPlateReaderPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
             try {
                 val image = BitmapFactory.decodeFile(path)
                     ?: throw IllegalArgumentException("Unsupported image")
+                fun area(r: Map<*, *>) = RectF(
+                    ((r["left"] as Number).toDouble() * image.width).toFloat(),
+                    ((r["top"] as Number).toDouble() * image.height).toFloat(),
+                    ((r["right"] as Number).toDouble() * image.width).toFloat(),
+                    ((r["bottom"] as Number).toDouble() * image.height).toFloat(),
+                )
                 val reads = crops.map { c ->
-                    val area = RectF(
-                        (c["left"]!! * image.width).toFloat(),
-                        (c["top"]!! * image.height).toFloat(),
-                        (c["right"]!! * image.width).toFloat(),
-                        (c["bottom"]!! * image.height).toFloat(),
-                    )
-                    CropOcr.Mode.values().map { mode -> CropOcr.read(recognizer, image, area, size, mode) }
+                    @Suppress("UNCHECKED_CAST")
+                    val rects = (c["group"] as? List<Map<*, *>>) ?: listOf(c)
+                    val repeat = (c["repeat"] as? Number)?.toInt() ?: 1
+                    CropOcr.Mode.values().map { mode ->
+                        val prepared = rects.mapNotNull { CropOcr.prepare(image, area(it), size, mode) }
+                        if (prepared.size != rects.size) {
+                            prepared.forEach { it.recycle() }
+                            null
+                        } else {
+                            val parts = ArrayList<Bitmap>()
+                            for (k in 0 until repeat) {
+                                for (b in prepared) parts.add(if (k == 0) b else b.copy(b.config ?: Bitmap.Config.ARGB_8888, false))
+                            }
+                            CropOcr.ocr(recognizer, parts)
+                        }
+                    }
                 }
                 main.post { result.success(reads) }
             } catch (e: Exception) {

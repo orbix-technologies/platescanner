@@ -1,6 +1,7 @@
 import '../models/ocr_frame.dart';
 import '../models/plate_area.dart';
 import '../models/plate_record.dart';
+import '../recognition/plate_recognition_service.dart';
 import '../segmentation/plate_segmenter.dart';
 import 'ethiopian_plate_parser.dart';
 import 'plate_arranger.dart';
@@ -9,10 +10,29 @@ import 'plate_service_type.dart';
 /// One crop to read and what it is for.
 class SectionCrop {
   /// Creates a crop request.
-  const SectionCrop(this.role, this.index, this.box, this.inArea);
+  SectionCrop(
+    this.role,
+    this.index,
+    this.box,
+    this.inArea, {
+    List<NormalizedRect>? group,
+    this.repeat = 1,
+  }) : group = group ?? [box];
 
-  /// `number`, `digit`, `latin`, `code` or `embassy`.
+  /// `number`, `digit`, `latin`, `latinWord`, `code`, `codeRepeat` or
+  /// `embassy`.
   final String role;
+
+  /// Areas (frame-normalized) read side by side as one word.
+  final List<NormalizedRect> group;
+
+  /// Times the areas are drawn side by side.
+  final int repeat;
+
+  /// What is sent to the native reader.
+  CropSpec get spec => group.length == 1
+      ? CropSpec(group.first, repeat: repeat)
+      : CropSpec.group(group);
 
   /// Position within its role (digit / letter order).
   final int index;
@@ -118,11 +138,30 @@ class PlateSectionReader {
           crop('digit', i, pad(seg.numberChars[i], 0.15, 0.08)),
       ];
     }
-    for (var i = 0; i < seg.latinStack.length; i++) {
-      out.add(crop('latin', i, pad(seg.latinStack[i], 0.2, 0.15)));
+    final letters = [
+      for (var i = 0; i < seg.latinStack.length; i++)
+        crop('latin', i, pad(seg.latinStack[i], 0.2, 0.15)),
+    ];
+    out.addAll(letters);
+    if (letters.length == 2) {
+      // The stacked letters side by side read as one word ("ET"): OCR reads
+      // a word far more reliably than a lone letter.
+      out.add(SectionCrop(
+        'latinWord',
+        0,
+        letters.first.box,
+        letters.first.inArea,
+        group: [for (final l in letters) l.box],
+      ));
     }
     final inner = seg.codeInner ?? seg.code;
-    if (inner != null) out.add(crop('code', 0, pad(inner, 0.25, 0.15)));
+    if (inner != null) {
+      // Tight around the digit so little of the ring shows.
+      final c = crop('code', 0, pad(inner, 0.1, 0.08));
+      out.add(c);
+      // The digit drawn three times reads as a word ("444").
+      out.add(SectionCrop('codeRepeat', 0, c.box, c.inArea, repeat: 3));
+    }
     for (var i = 0; i < seg.leftDigits.length; i++) {
       out.add(crop('embassy', i, pad(seg.leftDigits[i], 0.15, 0.08)));
     }
@@ -189,6 +228,14 @@ class PlateSectionReader {
       for (var i = 0; i < seg.latinStack.length; i++)
         _letter(readsOf('latin', i)),
     ];
+    // The two letters read side by side as one word fill or confirm them.
+    final word = _majority(readsOf('latinWord', 0).map(_twoLetters));
+    if (word != null && letters.length == 2) {
+      for (var i = 0; i < 2; i++) {
+        letters[i] =
+            letters[i] == null || word.$2 >= 2 ? word.$1[i] : letters[i];
+      }
+    }
     // Strict reading incomplete or no region: try lenient readings (a single
     // digit-for-letter vote, the font's U/N look-alikes) and keep one only
     // if it names a region or a special plate.
@@ -237,8 +284,10 @@ class PlateSectionReader {
     );
 
     // Section 1: the digit inside the circle, then the shared code rules.
-    final circle = _majority(
-        readsOf('code', 0).map((t) => _single(t, _toDigit, digit: true)));
+    final circle = _majority([
+      ...readsOf('code', 0).map((t) => _single(t, _toDigit, digit: true)),
+      ...readsOf('codeRepeat', 0).map(_repeatedDigit),
+    ]);
     final circleDigit =
         PlateServiceType.isKnown(circle?.$1) ? circle!.$1 : null;
     String? special = _specials.contains(latinValue) ? latinValue : null;
@@ -387,6 +436,33 @@ class PlateSectionReader {
     final ok =
         digit ? RegExp(r'^[0-9]$').hasMatch(c) : RegExp(r'^[A-Z]$').hasMatch(c);
     return ok ? c : null;
+  }
+
+  /// Two letters read as one word ("ET", "0R" -> "OR"), or null.
+  static String? _twoLetters(String? text) {
+    if (text == null) return null;
+    final chars = text
+        .split('')
+        .where((c) => c.trim().isNotEmpty && !_noise.contains(c))
+        .map((c) => _toLetter[c] ?? c.toUpperCase())
+        .toList();
+    if (chars.length != 2) return null;
+    return chars.every((c) => RegExp(r'^[A-Z]$').hasMatch(c))
+        ? chars.join()
+        : null;
+  }
+
+  /// The digit read in a crop drawn three times ("444" -> "4"): at least two
+  /// copies read and all the same.
+  static String? _repeatedDigit(String? text) {
+    if (text == null) return null;
+    final chars = text
+        .split('')
+        .where((c) => c.trim().isNotEmpty && !_noise.contains(c))
+        .map((c) => RegExp(r'[0-9]').hasMatch(c) ? c : (_toDigit[c] ?? c))
+        .toList();
+    if (chars.length < 2 || chars.any((c) => c != chars.first)) return null;
+    return RegExp(r'^[0-9]$').hasMatch(chars.first) ? chars.first : null;
   }
 
   /// Digits in [text], letters read for digits mapped, noise dropped. A

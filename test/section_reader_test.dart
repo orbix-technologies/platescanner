@@ -113,4 +113,26 @@ void main() {
     expect(r.arrangement.number.value, 'C06703');
     expect(r.candidate.serial, 'C06703'); // series letter + five digits
   });
+
+  test('lone letters empty (real logs): the side-by-side word fills them', () {
+    final r = reader.read(
+      seg,
+      crops,
+      reads({
+        'number0': ['0123456', '0123456', '23456'],
+        'latin0': ['E', 'E', ''],
+        'latin1': ['', '', ''], // the T, as logged in 19206 / 26303
+        'latinWord0': ['ET', 'ET', 'E T'],
+        'code0': ['', '', ''], // the 4, as logged
+        'codeRepeat0': ['444', '444', '44'],
+      }),
+      const AreaOcr(elements: []),
+    );
+    expect(r.arrangement.layoutText, '4 XX 0123456 ET');
+  });
+
+  test('crops include the word and repeated-digit requests', () {
+    expect(crops.where((c) => c.role == 'latinWord').single.group, hasLength(2));
+    expect(crops.where((c) => c.role == 'codeRepeat').single.repeat, 3);
+  });
 }

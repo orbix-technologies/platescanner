@@ -40,6 +40,7 @@ void main() {
   expectStandard('stencil_one_hr'); // "1" in flag / stem / foot pieces
   expectStandard('tilted_aa'); // plate photographed at an angle
   expectStandard('or_border_sliver'); // border line beside the O/R stack
+  expectStandard('stencil_one_split_stem'); // "1" stem broken in two
 
   // Real cars: series letter + five digits, or five digits; region A/A.
   void expectReal(String name, int chars) {

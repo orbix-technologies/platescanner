@@ -393,13 +393,13 @@ class PlateReaderController extends ChangeNotifier {
       if (segmented) {
         var crops = _sectionReader.cropsFor(seg, area);
         var reads = await _service
-            .readCrops(frame.path, [for (final c in crops) c.box]);
+            .readCrops(frame.path, [for (final c in crops) c.spec]);
         result = _sectionReader.read(seg, crops, reads, ocr);
         if (result.arrangement.number.value.isEmpty) {
           // The whole-number reads disagreed: read each digit alone too.
           final digits = _sectionReader.cropsFor(seg, area, digits: true);
           final more = await _service
-              .readCrops(frame.path, [for (final c in digits) c.box]);
+              .readCrops(frame.path, [for (final c in digits) c.spec]);
           crops = [...crops, ...digits];
           reads = [...reads, ...more];
           result = _sectionReader.read(seg, crops, reads, ocr);

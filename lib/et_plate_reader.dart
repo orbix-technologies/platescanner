@@ -41,6 +41,6 @@ export 'src/parsing/plate_stability_voter.dart' show PlateStabilityVoter;
 export 'src/recognition/plate_availability.dart'
     show PlateReader, PlateReaderAvailability, PlateReaderAvailabilityStatus;
 export 'src/recognition/plate_recognition_service.dart'
-    show PlateRecognitionService, PlateRecognitionServiceFactory;
+    show CropSpec, PlateRecognitionService, PlateRecognitionServiceFactory;
 export 'src/widgets/plate_scanner_view.dart'
     show PlateScannerView, PlateScannerOverlayBuilder;

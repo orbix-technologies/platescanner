@@ -152,6 +152,8 @@ class SessionLog {
           {
             'role': crops[i].role,
             'index': crops[i].index,
+            if (crops[i].group.length > 1) 'parts': crops[i].group.length,
+            if (crops[i].repeat > 1) 'repeat': crops[i].repeat,
             'box': rect(crops[i].inArea),
             'reads': i < reads.length ? reads[i] : null,
           },

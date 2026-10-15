@@ -615,6 +615,8 @@ class PlateSegmenter {
     // Top and bottom halves as groups: a letter broken into pieces (by a
     // watermark stroke) still counts as one letter.
     final box = g.reduce((a, b) => a.union(b));
+    // Too narrow for letters: the stem of a stencil "1" broken in two.
+    if (box.width < hd * 0.18) return false;
     final mid = box.centerY;
     final upper = g.where((b) => b.centerY < mid).toList();
     final lower = g.where((b) => b.centerY >= mid).toList();

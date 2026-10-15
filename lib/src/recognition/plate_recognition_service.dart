@@ -42,11 +42,11 @@ abstract class PlateRecognitionService {
     bool sectionPasses = true,
   });
 
-  /// Reads each of [crops] (normalized to the image at [path]) alone; one
+  /// Reads each of [crops] (areas normalized to the image at [path]); one
   /// `[colour, black-and-white, border-erased]` text triple per crop.
   Future<List<List<String?>>> readCrops(
     String path,
-    List<NormalizedRect> crops, {
+    List<CropSpec> crops, {
     double size = 160,
   });
 
@@ -58,6 +58,22 @@ abstract class PlateRecognitionService {
 
   /// Whether this device can run the backend.
   Future<bool> isSupported();
+}
+
+/// What to read in one crop request.
+class CropSpec {
+  /// One area read alone, or drawn [repeat] times side by side.
+  CropSpec(NormalizedRect area, {this.repeat = 1}) : areas = [area];
+
+  /// Several areas laid side by side and read as one word.
+  CropSpec.group(this.areas) : repeat = 1;
+
+  /// Areas, left to right.
+  final List<NormalizedRect> areas;
+
+  /// How many times the areas are drawn: a lone character reads poorly, a
+  /// short "word" of it reads well.
+  final int repeat;
 }
 
 /// Factory to create the platform [PlateRecognitionService].

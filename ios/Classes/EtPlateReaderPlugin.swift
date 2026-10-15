@@ -34,7 +34,7 @@ public class EtPlateReaderPlugin: NSObject, FlutterPlugin {
     case "readCrops":
       guard let args = call.arguments as? [String: Any],
         let path = args["path"] as? String,
-        let crops = args["crops"] as? [[String: Double]]
+        let crops = args["crops"] as? [[String: Any]]
       else {
         result(FlutterError(code: "bad_args", message: "path and crops are required", details: nil))
         return
@@ -50,14 +50,24 @@ public class EtPlateReaderPlugin: NSObject, FlutterPlugin {
         }
         let w = CGFloat(image.width)
         let h = CGFloat(image.height)
-        // One [colour, bw, clean] text triple per crop.
+        func area(_ r: [String: Any]) -> CGRect {
+          let l = (r["left"] as? Double) ?? 0, t = (r["top"] as? Double) ?? 0
+          let rr = (r["right"] as? Double) ?? 0, b = (r["bottom"] as? Double) ?? 0
+          return CGRect(x: l * w, y: t * h, width: (rr - l) * w, height: (b - t) * h)
+        }
+        // One [colour, bw, clean] text triple per request; `group` areas
+        // side by side, `repeat` draws them n times (see the Android side).
         let reads: [[Any]] = crops.map { c in
-          let area = CGRect(
-            x: (c["left"] ?? 0) * w, y: (c["top"] ?? 0) * h,
-            width: ((c["right"] ?? 0) - (c["left"] ?? 0)) * w,
-            height: ((c["bottom"] ?? 0) - (c["top"] ?? 0)) * h)
+          let rects = (c["group"] as? [[String: Any]]) ?? [c]
+          let repeatCount = (c["repeat"] as? Int) ?? 1
           return CropOcr.Mode.allCases.map { mode -> Any in
-            CropOcr.read(image, area: area, size: size, mode: mode) ?? NSNull()
+            let prepared = rects.compactMap {
+              CropOcr.prepare(image, area: area($0), size: size, mode: mode)
+            }
+            guard prepared.count == rects.count else { return NSNull() }
+            var parts: [CGImage] = []
+            for _ in 0..<max(repeatCount, 1) { parts.append(contentsOf: prepared) }
+            return CropOcr.ocr(parts) ?? NSNull()
           }
         }
         DispatchQueue.main.async { result(reads) }
