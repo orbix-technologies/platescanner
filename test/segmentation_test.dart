@@ -34,6 +34,12 @@ void main() {
   expectStandard('red5');
   expectStandard('real_94529', digits: 5);
   expectStandard('real_71462', digits: 5);
+  // From the logs: cases the segmenter used to get wrong.
+  expectStandard('aa_touching_watermark'); // A/A touching, cut by watermark
+  expectStandard('six_beside_aa'); // round 6 overlapping the narrow A/A
+  expectStandard('stencil_one_hr'); // "1" in flag / stem / foot pieces
+  expectStandard('tilted_aa'); // plate photographed at an angle
+  expectStandard('or_border_sliver'); // border line beside the O/R stack
 
   test('police: Ge\'ez stack · 6 digits · Latin stack, no circle', () {
     final s = seg('police');
