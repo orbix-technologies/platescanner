@@ -62,9 +62,9 @@ void main() {
       ],
     ));
     final a = r.arrangement;
-    expect(values(a), ['1', 'XX', '01906', 'AM']);
-    expect(a.layoutText, '1 XX 01906 AM');
-    expect(a.geezRegion.detected, isFalse);
+    expect(values(a), ['1', 'አማ', '01906', 'AM']);
+    expect(a.layoutText, '1 አማ 01906 AM');
+    expect(a.geezRegion.note, 'from AM');
     expect(a.latinRegion.chars.map((c) => c.text), ['A', 'M']);
     expect(a.number.chars.map((c) => c.text).join(), '01906');
 
@@ -84,7 +84,7 @@ void main() {
         word('A', left: 0.92, top: 0.55, bottom: 0.85, charWidth: 0.05),
       ],
     ));
-    expect(values(r.arrangement), ['1', 'XX', '0123456', 'AA']);
+    expect(values(r.arrangement), ['1', 'አአ', '0123456', 'AA']);
     expect(r.candidate.isValid, isTrue);
   });
 
@@ -130,7 +130,7 @@ void main() {
         word('A', left: 0.88, top: 0.55, bottom: 0.88, charWidth: 0.05),
       ],
     ));
-    expect(values(r.arrangement), ['1', 'XX', '03189', 'AA']);
+    expect(values(r.arrangement), ['1', 'አአ', '03189', 'AA']);
   });
 
   test("a single group next to the number is Ge'ez, not the code", () {
@@ -182,7 +182,7 @@ void main() {
           ),
         ],
       ));
-      expect(values(r.arrangement), ['1', 'XX', '0123456', 'AA']);
+      expect(values(r.arrangement), ['1', 'አአ', '0123456', 'AA']);
       expect(
         r.arrangement.latinRegion.chars.map((c) => c.text),
         ['A', 'A'],
@@ -245,7 +245,7 @@ void main() {
           ),
         ],
       ));
-      expect(values(r.arrangement), ['2', 'XX', '94529', 'AM']);
+      expect(values(r.arrangement), ['2', 'አማ', '94529', 'AM']);
     });
   });
 
@@ -280,5 +280,37 @@ void main() {
     expect(a.number.value, isEmpty);
     expect(a.code.detected, isFalse);
     expect(r.candidate.isValid, isFalse);
+  });
+
+  test("Ge'ez spelled from the Latin region, every region", () {
+    const unread = PlateSection(
+      kind: PlateSectionKind.geezRegion,
+      value: PlateSection.geezPlaceholder,
+      box: NormalizedRect(0.1, 0.2, 0.2, 0.8),
+      detected: false,
+    );
+    const expected = {
+      'ET': 'ኢት',
+      'AA': 'አአ',
+      'AF': 'አፋ',
+      'AM': 'አማ',
+      'BG': 'ቤጉ',
+      'DR': 'ድሬ',
+      'GM': 'ጋም',
+      'HR': 'ሐረ',
+      'OR': 'ኦሮ',
+      'SM': 'ሶማ',
+    };
+    expected.forEach((latin, geez) {
+      final s = arranger.geezFromLatin(unread, latin);
+      expect(s.value, geez, reason: latin);
+      expect(s.chars.length, 2);
+      // Top letter in the top half of the stack.
+      expect(s.chars.first.box.bottom, closeTo(0.5, 1e-9));
+      expect(s.note, 'from $latin');
+    });
+    // Not a region (diplomatic) or nothing read: stays unread.
+    expect(arranger.geezFromLatin(unread, 'CD').value, 'XX');
+    expect(arranger.geezFromLatin(unread, '').value, 'XX');
   });
 }

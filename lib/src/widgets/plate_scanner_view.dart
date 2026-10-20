@@ -1,15 +1,19 @@
+import 'dart:async';
 import 'dart:io';
 
-import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import '../controller/plate_reader_controller.dart';
+import '../exceptions/plate_reader_exception.dart';
 import '../models/ocr_frame.dart';
 import '../models/plate_area.dart';
 import '../models/plate_record.dart';
 import '../parsing/ethiopian_region.dart';
 import '../parsing/plate_service_type.dart';
 import '../recognition/plate_camera_preview.dart';
+import 'plate_scanner_options.dart';
+import 'plate_scanner_strings.dart';
 
 /// Overlay builder for host chrome above the camera preview.
 typedef PlateScannerOverlayBuilder = Widget Function(
@@ -33,6 +37,9 @@ class PlateScannerView extends StatefulWidget {
     this.onError,
     this.autoStartSession = true,
     this.initialLocation,
+    this.strings,
+    this.theme,
+    this.options = const PlateScannerOptions(),
   });
 
   /// Session controller shared with the host.
@@ -55,6 +62,15 @@ class PlateScannerView extends StatefulWidget {
 
   /// Optional GPS passed into [PlateReaderController.startSession].
   final PlateLocation? initialLocation;
+
+  /// Texts; built-in English or Amharic (by locale) when null.
+  final PlateScannerStrings? strings;
+
+  /// Colour overrides; the host app's theme otherwise.
+  final PlateScannerTheme? theme;
+
+  /// Which steps and controls to show.
+  final PlateScannerOptions options;
 
   /// Guide box drawn over a preview of [size]: 86% wide, 2.2:1 (a single-row
   /// plate), slightly above centre. Only text inside it is read.
@@ -112,7 +128,38 @@ class _PlateScannerViewState extends State<PlateScannerView> {
       // Init failures are reported once by _bootstrap.
       if (widget.controller.isSupported) widget.onError?.call(err);
     }
+    _autoSteps();
     if (mounted) setState(() {});
+  }
+
+  bool _autoPending = false;
+
+  /// Steps the host turned off (or that aren't needed) run on their own:
+  /// confirming an area that snapped to the plate, and Done on a valid
+  /// reading without review.
+  void _autoSteps() {
+    final c = widget.controller;
+    final o = widget.options;
+    if (_autoPending) return;
+    VoidCallback? step;
+    if (c.phase == ScanPhase.confirmingArea) {
+      final skip = switch (o.confirmArea) {
+        ConfirmAreaMode.never => true,
+        ConfirmAreaMode.always => false,
+        ConfirmAreaMode.auto => !c.isSnappingArea && c.areaSnapped,
+      };
+      if (skip) step = c.confirmArea;
+    } else if (c.phase == ScanPhase.review && !o.showReview && c.canConfirm) {
+      step = _confirm;
+    }
+    if (step == null) return;
+    // Not from inside the controller's notification.
+    _autoPending = true;
+    final run = step;
+    scheduleMicrotask(() {
+      _autoPending = false;
+      if (mounted) run();
+    });
   }
 
   Future<void> _confirm() async {
@@ -134,9 +181,16 @@ class _PlateScannerViewState extends State<PlateScannerView> {
   @override
   Widget build(BuildContext context) {
     final controller = widget.controller;
+    final strings = widget.strings ?? PlateScannerStrings.of(context);
+    final colors = ResolvedPlateScannerTheme.of(context, widget.theme);
     final showUnsupported = !controller.isSupported &&
         controller.error != null &&
         !controller.isLoading;
+    // While the area snaps after an automatic capture, don't show the
+    // confirm step only to skip it a moment later.
+    final hideConfirm = controller.phase == ScanPhase.confirmingArea &&
+        widget.options.confirmArea == ConfirmAreaMode.auto &&
+        controller.isSnappingArea;
     final frame = controller.capturedFrame;
     final frozen = frame != null &&
         const {
@@ -149,101 +203,157 @@ class _PlateScannerViewState extends State<PlateScannerView> {
         controller.phase != ScanPhase.confirmingArea &&
         controller.plateArea != null;
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final size = constraints.biggest;
-        final guide = PlateScannerView.guideRect(size);
-        // Search only inside the drawn box. The preview fills this widget,
-        // so view-normalized = preview-normalized coordinates.
-        if (size.width > 0 && size.height > 0) {
-          controller.regionOfInterest = NormalizedRect(
-            guide.left / size.width,
-            guide.top / size.height,
-            guide.right / size.width,
-            guide.bottom / size.height,
-          );
-        }
+    return _Scope(
+      strings: strings,
+      colors: colors,
+      options: widget.options,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final size = constraints.biggest;
+          final guide = PlateScannerView.guideRect(size);
+          // Search only inside the drawn box. The preview fills this widget,
+          // so view-normalized = preview-normalized coordinates.
+          if (size.width > 0 && size.height > 0) {
+            controller.regionOfInterest = NormalizedRect(
+              guide.left / size.width,
+              guide.top / size.height,
+              guide.right / size.width,
+              guide.bottom / size.height,
+            );
+          }
 
-        return Stack(
-          fit: StackFit.expand,
-          children: [
-            const ColoredBox(color: Colors.black),
-            if (controller.isSupported)
-              PlateCameraPreview(
-                key: _previewKey,
-                service: controller.service,
-              ),
-            // Adjusting the area: the whole still, which covers exactly the
-            // visible preview, so normalized coordinates stay aligned.
-            if (frozen && !focused)
-              Image.file(
-                File(frame.path),
-                fit: BoxFit.fill,
-                gaplessPlayback: true,
-              ),
-            // Reading and review: only the plate, enlarged, on black.
-            if (focused) ...[
+          return Stack(
+            fit: StackFit.expand,
+            children: [
               const ColoredBox(color: Colors.black),
-              Align(
-                alignment: const Alignment(0, -0.55),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(maxHeight: size.height * 0.3),
-                    child: _PlateFocus(
-                      frame: frame,
-                      area: controller.plateArea!,
-                      sections: controller.phase == ScanPhase.review
-                          ? controller.arrangement?.sections ??
-                              const <PlateSection>[]
-                          : const <PlateSection>[],
+              if (controller.isSupported)
+                PlateCameraPreview(
+                  key: _previewKey,
+                  service: controller.service,
+                ),
+              // Adjusting the area: the whole still, which covers exactly the
+              // visible preview, so normalized coordinates stay aligned.
+              if (frozen && !focused)
+                Image.file(
+                  File(frame.path),
+                  fit: BoxFit.fill,
+                  gaplessPlayback: true,
+                  // A missing or unreadable photo leaves the area empty.
+                  errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                ),
+              // Reading and review: only the plate, enlarged, on black.
+              if (focused) ...[
+                const ColoredBox(color: Colors.black),
+                Align(
+                  alignment: const Alignment(0, -0.5),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: ConstrainedBox(
+                      constraints:
+                          BoxConstraints(maxHeight: size.height * 0.24),
+                      child: _PlateFocus(
+                        frame: frame,
+                        area: controller.plateArea!,
+                        sections: const <PlateSection>[],
+                      ),
                     ),
                   ),
                 ),
-              ),
-            ],
-            if (controller.isLoading)
-              const Center(
-                child: SizedBox(
-                  width: 28,
-                  height: 28,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2.5,
-                    color: Colors.white70,
+              ],
+              if (controller.isLoading)
+                const Center(
+                  child: SizedBox(
+                    width: 28,
+                    height: 28,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.5,
+                      color: Colors.white70,
+                    ),
                   ),
                 ),
-              ),
-            if (showUnsupported)
-              _MessagePanel(
-                message: controller.error!,
-                onClose: widget.onCancel,
-              )
-            else if (controller.isSupported) ...[
-              if (controller.phase == ScanPhase.detecting)
-                _DetectionLayer(guide: guide, controller: controller)
-              else if (frozen && !focused && controller.plateArea != null)
-                _AreaLayer(controller: controller, size: size),
-              if (widget.overlayBuilder != null)
-                widget.overlayBuilder!(context, controller)
-              else
-                _DefaultOverlay(
-                  controller: controller,
-                  onConfirm: _confirm,
-                  onClose: () async {
-                    await controller.cancelSession();
-                    widget.onCancel?.call();
-                  },
-                ),
+              if (showUnsupported)
+                controller.errorCode == PlateReaderErrorCode.permissionDenied
+                    ? _MessagePanel(
+                        title: strings.permissionTitle,
+                        message: strings.permissionMessage,
+                        onClose: widget.onCancel,
+                        actions: [
+                          FilledButton(
+                            onPressed: openAppSettings,
+                            style: FilledButton.styleFrom(
+                              backgroundColor: colors.accent,
+                              foregroundColor: colors.onAccent,
+                            ),
+                            child: Text(strings.openSettings),
+                          ),
+                          TextButton(
+                            onPressed: _bootstrap,
+                            child: Text(strings.tryAgain),
+                          ),
+                        ],
+                      )
+                    : _MessagePanel(
+                        message: controller.errorCode ==
+                                PlateReaderErrorCode.unsupportedDevice
+                            ? strings.unsupportedDevice
+                            : controller.error!,
+                        onClose: widget.onCancel,
+                      )
+              else if (controller.isSupported) ...[
+                if (controller.phase == ScanPhase.detecting)
+                  _DetectionLayer(guide: guide, controller: controller)
+                else if (frozen &&
+                    !focused &&
+                    !hideConfirm &&
+                    controller.plateArea != null)
+                  _AreaLayer(controller: controller, size: size),
+                if (widget.overlayBuilder != null)
+                  widget.overlayBuilder!(context, controller)
+                else
+                  _DefaultOverlay(
+                    controller: controller,
+                    hideConfirm: hideConfirm,
+                    onConfirm: _confirm,
+                    onClose: () async {
+                      await controller.cancelSession();
+                      widget.onCancel?.call();
+                    },
+                  ),
+              ],
             ],
-          ],
-        );
-      },
+          );
+        },
+      ),
     );
   }
 }
 
-const _accent = Color(0xFFF5C518);
-const _good = Color(0xFF4CAF50);
+/// Strings, colours and options for the scanner's parts.
+class _Scope extends InheritedWidget {
+  const _Scope({
+    required this.strings,
+    required this.colors,
+    required this.options,
+    required super.child,
+  });
+
+  final PlateScannerStrings strings;
+  final ResolvedPlateScannerTheme colors;
+  final PlateScannerOptions options;
+
+  static _Scope of(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<_Scope>()!;
+
+  /// [PlateScannerOptions.allowEdit], without depending (e.g. initState).
+  static bool allowEditOf(BuildContext context) =>
+      context.getInheritedWidgetOfExactType<_Scope>()?.options.allowEdit ??
+      true;
+
+  @override
+  bool updateShouldNotify(_Scope old) =>
+      old.strings != strings || old.colors != colors || old.options != options;
+}
+
 const _dim = Color(0x8C000000);
 
 Rect _toView(NormalizedRect r, Size size) => Rect.fromLTRB(
@@ -253,7 +363,8 @@ Rect _toView(NormalizedRect r, Size size) => Rect.fromLTRB(
       r.bottom * size.height,
     );
 
-/// Step 1: guide box (search area) with the live detected plate area.
+/// Step 1: the guide frame — corner marks over a dimmed preview, in the
+/// accent colour once a plate is found.
 class _DetectionLayer extends StatelessWidget {
   const _DetectionLayer({required this.guide, required this.controller});
 
@@ -263,60 +374,67 @@ class _DetectionLayer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return IgnorePointer(
-      child: LayoutBuilder(
-        builder: (context, c) {
-          final area = controller.detectedArea;
-          return CustomPaint(
-            size: c.biggest,
-            painter: _DetectionPainter(
-              guide: guide,
-              detected: area == null ? null : _toView(area, c.biggest),
-            ),
-          );
-        },
+      child: CustomPaint(
+        size: Size.infinite,
+        painter: _DetectionPainter(
+          guide: guide,
+          color: controller.detectedArea != null
+              ? _Scope.of(context).colors.accent
+              : Colors.white,
+        ),
       ),
     );
   }
 }
 
 class _DetectionPainter extends CustomPainter {
-  _DetectionPainter({required this.guide, required this.detected});
+  _DetectionPainter({required this.guide, required this.color});
 
   final Rect guide;
-  final Rect? detected;
+  final Color color;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final box = RRect.fromRectAndRadius(guide, const Radius.circular(14));
+    const radius = 18.0;
     canvas.drawPath(
       Path()
         ..fillType = PathFillType.evenOdd
         ..addRect(Offset.zero & size)
-        ..addRRect(box),
+        ..addRRect(
+            RRect.fromRectAndRadius(guide, const Radius.circular(radius))),
       Paint()..color = _dim,
     );
-    canvas.drawRRect(
-      box,
-      Paint()
-        ..color = Colors.white70
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2,
-    );
-    final d = detected;
-    if (d != null) {
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(d, const Radius.circular(6)),
-        Paint()
-          ..color = _accent
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 3,
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 4
+      ..strokeCap = StrokeCap.round;
+    final arm = guide.shortestSide * 0.18;
+    final r = guide;
+    for (final (corner, dx, dy) in [
+      (r.topLeft, 1.0, 1.0),
+      (r.topRight, -1.0, 1.0),
+      (r.bottomLeft, 1.0, -1.0),
+      (r.bottomRight, -1.0, -1.0),
+    ]) {
+      canvas.drawPath(
+        Path()
+          ..moveTo(corner.dx, corner.dy + dy * arm)
+          ..lineTo(corner.dx, corner.dy + dy * radius)
+          ..arcToPoint(
+            Offset(corner.dx + dx * radius, corner.dy),
+            radius: const Radius.circular(radius),
+            clockwise: dx * dy > 0,
+          )
+          ..lineTo(corner.dx + dx * arm, corner.dy),
+        paint,
       );
     }
   }
 
   @override
   bool shouldRepaint(_DetectionPainter old) =>
-      old.guide != guide || old.detected != detected;
+      old.guide != guide || old.color != color;
 }
 
 /// Steps 2–4 on the frozen frame: the plate area (draggable while
@@ -331,6 +449,7 @@ class _AreaLayer extends StatelessWidget {
   Widget build(BuildContext context) {
     final area = _toView(controller.plateArea!, size);
     final editing = controller.phase == ScanPhase.confirmingArea;
+    final colors = _Scope.of(context).colors;
     final sections = controller.phase == ScanPhase.review
         ? controller.arrangement?.sections ?? const <PlateSection>[]
         : const <PlateSection>[];
@@ -341,7 +460,8 @@ class _AreaLayer extends StatelessWidget {
           child: CustomPaint(
             painter: _AreaPainter(
               area: area,
-              color: editing ? _accent : _good,
+              color: editing ? colors.accent : colors.confirmed,
+              colors: colors,
               sections: [
                 for (final s in sections)
                   if (s.box != null)
@@ -361,6 +481,7 @@ class _AreaLayer extends StatelessWidget {
         if (editing)
           _AreaEditor(
             area: area,
+            color: colors.accent,
             onChanged: (r) => controller.adjustArea(
               NormalizedRect(
                 r.left / size.width,
@@ -375,29 +496,17 @@ class _AreaLayer extends StatelessWidget {
   }
 }
 
-Color _sectionColor(PlateSectionKind kind) => switch (kind) {
-      PlateSectionKind.code => const Color(0xFF64B5F6),
-      PlateSectionKind.geezRegion => const Color(0xFFBA68C8),
-      PlateSectionKind.number => _accent,
-      PlateSectionKind.latinRegion => const Color(0xFF81C784),
-    };
-
-String _sectionLabel(PlateSectionKind kind) => switch (kind) {
-      PlateSectionKind.code => 'Code',
-      PlateSectionKind.geezRegion => "Region (Ge'ez)",
-      PlateSectionKind.number => 'Number',
-      PlateSectionKind.latinRegion => 'Region',
-    };
-
 class _AreaPainter extends CustomPainter {
   _AreaPainter({
     required this.area,
     required this.color,
+    required this.colors,
     required this.sections,
   });
 
   final Rect area;
   final Color color;
+  final ResolvedPlateScannerTheme colors;
   final List<(Rect, PlateSectionKind)> sections;
 
   @override
@@ -417,7 +526,7 @@ class _AreaPainter extends CustomPainter {
         ..strokeWidth = 3,
     );
     for (final (rect, kind) in sections) {
-      final c = _sectionColor(kind);
+      final c = colors.section(kind);
       canvas.drawRect(
         rect.inflate(2),
         Paint()
@@ -488,11 +597,13 @@ class _PlateFocus extends StatelessWidget {
                     File(frame.path),
                     fit: BoxFit.fill,
                     gaplessPlayback: true,
+                    // A missing or unreadable photo leaves the area empty.
+                    errorBuilder: (_, __, ___) => const SizedBox.shrink(),
                   ),
                 ),
                 IgnorePointer(
                   child: CustomPaint(
-                    painter: _SectionPainter([
+                    painter: _SectionPainter(_Scope.of(context).colors, [
                       for (final s in sections)
                         if (s.box != null)
                           (
@@ -517,14 +628,15 @@ class _PlateFocus extends StatelessWidget {
 }
 
 class _SectionPainter extends CustomPainter {
-  _SectionPainter(this.sections);
+  _SectionPainter(this.colors, this.sections);
 
+  final ResolvedPlateScannerTheme colors;
   final List<(Rect, PlateSectionKind)> sections;
 
   @override
   void paint(Canvas canvas, Size size) {
     for (final (rect, kind) in sections) {
-      final c = _sectionColor(kind);
+      final c = colors.section(kind);
       final r = rect.intersect(Offset.zero & size).deflate(1);
       canvas.drawRect(
         r,
@@ -555,9 +667,14 @@ class _SectionPainter extends CustomPainter {
 
 /// Drag the body to move the area, a corner handle to resize it.
 class _AreaEditor extends StatelessWidget {
-  const _AreaEditor({required this.area, required this.onChanged});
+  const _AreaEditor({
+    required this.area,
+    required this.color,
+    required this.onChanged,
+  });
 
   final Rect area;
+  final Color color;
   final ValueChanged<Rect> onChanged;
 
   static const _handle = 36.0;
@@ -580,7 +697,7 @@ class _AreaEditor extends StatelessWidget {
               width: 18,
               height: 18,
               decoration: BoxDecoration(
-                color: _accent,
+                color: color,
                 shape: BoxShape.circle,
                 border: Border.all(color: Colors.black54, width: 2),
               ),
@@ -624,67 +741,33 @@ class _AreaEditor extends StatelessWidget {
   }
 }
 
-class _DefaultOverlay extends StatefulWidget {
+class _DefaultOverlay extends StatelessWidget {
   const _DefaultOverlay({
     required this.controller,
+    required this.hideConfirm,
     required this.onConfirm,
     required this.onClose,
   });
 
   final PlateReaderController controller;
+  final bool hideConfirm;
   final VoidCallback onConfirm;
   final VoidCallback onClose;
 
   @override
-  State<_DefaultOverlay> createState() => _DefaultOverlayState();
-}
-
-class _DefaultOverlayState extends State<_DefaultOverlay> {
-  bool _editing = false;
-
-  @override
   Widget build(BuildContext context) {
-    final c = widget.controller;
-    if (c.phase != ScanPhase.review) _editing = false;
+    final c = controller;
+    final scope = _Scope.of(context);
+    final strings = scope.strings;
 
-    final panel = switch (c.phase) {
-      ScanPhase.detecting => _DetectingPanel(controller: c),
-      ScanPhase.confirmingArea => _ConfirmAreaPanel(controller: c),
-      ScanPhase.reading => const _Card(
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: Colors.white70,
-                ),
-              ),
-              SizedBox(width: 12),
-              Text(
-                'Reading characters…',
-                style: TextStyle(color: Colors.white70),
-              ),
-            ],
-          ),
-        ),
-      ScanPhase.review => Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (_editing) ...[
-              _EditPanel(controller: c),
-              const SizedBox(height: 8),
-            ],
-            _ReviewPanel(
-              controller: c,
-              onDone: widget.onConfirm,
-              onEdit: () => setState(() => _editing = !_editing),
-            ),
-          ],
-        ),
+    final Widget bottom = switch (c.phase) {
+      ScanPhase.detecting => _ShutterBar(controller: c),
+      ScanPhase.confirmingArea when !hideConfirm =>
+        _ConfirmAreaPanel(controller: c),
+      ScanPhase.confirmingArea ||
+      ScanPhase.reading =>
+        _Pill(text: strings.reading, busy: true),
+      ScanPhase.review => _ResultSheet(controller: c, onDone: onConfirm),
       ScanPhase.error => _ErrorPanel(controller: c),
       _ => const SizedBox.shrink(),
     };
@@ -696,11 +779,18 @@ class _DefaultOverlayState extends State<_DefaultOverlay> {
             padding: const EdgeInsets.all(8),
             child: Row(
               children: [
-                _HudIconButton(icon: Icons.close, onPressed: widget.onClose),
+                _HudIconButton(
+                  icon: Icons.close,
+                  tooltip: strings.close,
+                  onPressed: onClose,
+                ),
                 const Spacer(),
-                if (c.phase == ScanPhase.detecting)
+                if (c.phase == ScanPhase.detecting && scope.options.showTorch)
                   _HudIconButton(
-                    icon: c.torchOn ? Icons.flash_on : Icons.flash_off,
+                    icon: c.torchOn
+                        ? Icons.flashlight_on_rounded
+                        : Icons.flashlight_off_rounded,
+                    tooltip: strings.torch,
                     onPressed: c.toggleTorch,
                   ),
               ],
@@ -708,75 +798,126 @@ class _DefaultOverlayState extends State<_DefaultOverlay> {
           ),
         ),
         Positioned(
-          left: 16,
-          right: 16,
-          bottom: 16,
-          child: SafeArea(top: false, child: panel),
+          left: 0,
+          right: 0,
+          bottom: 0,
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 220),
+            child: KeyedSubtree(key: ValueKey(c.phase), child: bottom),
+          ),
         ),
       ],
     );
   }
 }
 
-String _issueText(PlateIssue issue) => switch (issue) {
-      PlateIssue.missingCode => 'Code not read',
-      PlateIssue.unknownCode => 'Unknown code',
-      PlateIssue.missingRegion => 'Region not read',
-      PlateIssue.missingSerial => 'Serial not read',
-    };
+const _hint = TextStyle(color: Colors.white, fontSize: 15, height: 1.3);
 
-const _hint = TextStyle(color: Colors.white70, fontSize: 14);
+/// A short message in a translucent pill, optionally with a spinner.
+class _Pill extends StatelessWidget {
+  const _Pill({required this.text, this.busy = false});
 
-/// Step 1 controls.
-class _DetectingPanel extends StatelessWidget {
-  const _DetectingPanel({required this.controller});
-
-  final PlateReaderController controller;
+  final String text;
+  final bool busy;
 
   @override
   Widget build(BuildContext context) {
-    final found = controller.detectedArea != null;
-    return _Card(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  found
-                      ? 'Plate found — hold steady'
-                      : 'Fit the plate inside the box',
-                  style: _hint,
-                ),
-              ),
-              const SizedBox(width: 12),
-              FilledButton(
-                onPressed: controller.captureArea,
-                style: FilledButton.styleFrom(
-                  backgroundColor: _accent,
-                  foregroundColor: Colors.black,
-                ),
-                child: const Text('Capture'),
-              ),
-            ],
-          ),
-          if (found) ...[
-            const SizedBox(height: 10),
-            LinearProgressIndicator(
-              value: controller.detectionProgress,
-              color: _accent,
-              backgroundColor: Colors.white12,
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 40),
+        child: Center(
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: const Color(0x99000000),
+              borderRadius: BorderRadius.circular(24),
             ),
-          ],
-        ],
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (busy) ...[
+                    const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                  ],
+                  Text(text, style: _hint),
+                ],
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
 }
 
-/// Step 2 controls.
+/// Step 1: one hint and the shutter.
+class _ShutterBar extends StatelessWidget {
+  const _ShutterBar({required this.controller});
+
+  final PlateReaderController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final scope = _Scope.of(context);
+    final found = controller.detectedArea != null;
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              found ? scope.strings.plateFound : scope.strings.fitPlate,
+              textAlign: TextAlign.center,
+              style: _hint.copyWith(
+                shadows: const [Shadow(blurRadius: 6, color: Colors.black54)],
+              ),
+            ),
+            const SizedBox(height: 22),
+            Semantics(
+              button: true,
+              label: scope.strings.capture,
+              child: GestureDetector(
+                onTap: controller.captureArea,
+                child: Container(
+                  width: 76,
+                  height: 76,
+                  padding: const EdgeInsets.all(5),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: found ? scope.colors.accent : Colors.white,
+                      width: 4,
+                    ),
+                  ),
+                  child: const DecoratedBox(
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Optional step: confirm the plate area (host chose `always`, or the area
+/// couldn't be snapped).
 class _ConfirmAreaPanel extends StatelessWidget {
   const _ConfirmAreaPanel({required this.controller});
 
@@ -784,237 +925,261 @@ class _ConfirmAreaPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return _Card(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const Text(
-            'Is the whole plate inside the yellow box?\n'
-            'Drag the box or its corners to adjust.',
-            textAlign: TextAlign.center,
-            style: _hint,
-          ),
-          const SizedBox(height: 12),
-          Row(
+    final scope = _Scope.of(context);
+    return _Sheet(
+      children: [
+        Text(
+          scope.strings.confirmAreaHint,
+          textAlign: TextAlign.center,
+          style: Theme.of(context).textTheme.bodyMedium,
+        ),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton(
+                onPressed: controller.retake,
+                style: _outlined(),
+                child: Text(scope.strings.retake),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: FilledButton(
+                onPressed: controller.confirmArea,
+                style: _filled(scope.colors),
+                child: Text(scope.strings.confirmArea),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+/// A bottom sheet in the host app's surface colours.
+class _Sheet extends StatelessWidget {
+  const _Sheet({required this.children});
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Material(
+      color: scheme.surface,
+      surfaceTintColor: scheme.surfaceTint,
+      elevation: 6,
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 12, 24, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: controller.retake,
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.white,
+              Center(
+                child: Container(
+                  width: 36,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: scheme.outlineVariant,
+                    borderRadius: BorderRadius.circular(2),
                   ),
-                  child: const Text('Retake'),
                 ),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: FilledButton(
-                  onPressed: controller.confirmArea,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: _accent,
-                    foregroundColor: Colors.black,
-                  ),
-                  child: const Text('Confirm area'),
-                ),
-              ),
+              const SizedBox(height: 18),
+              ...children,
             ],
           ),
-        ],
+        ),
       ),
     );
   }
 }
 
-/// Step 4: the plate as arranged, its fields, and Done.
-class _ReviewPanel extends StatelessWidget {
-  const _ReviewPanel({
-    required this.controller,
-    required this.onDone,
-    required this.onEdit,
-  });
+/// The result: the plate number, one line of detail, edit, Done / Retake.
+class _ResultSheet extends StatefulWidget {
+  const _ResultSheet({required this.controller, required this.onDone});
 
   final PlateReaderController controller;
   final VoidCallback onDone;
-  final VoidCallback onEdit;
+
+  @override
+  State<_ResultSheet> createState() => _ResultSheetState();
+}
+
+class _ResultSheetState extends State<_ResultSheet> {
+  bool _editing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Nothing usable read: go straight to typing it.
+    final c = widget.controller;
+    _editing = _Scope.allowEditOf(context) && c.draftSerial == null;
+  }
 
   @override
   Widget build(BuildContext context) {
-    final c = controller;
+    final c = widget.controller;
+    final scope = _Scope.of(context);
+    final strings = scope.strings;
+    final text = Theme.of(context).textTheme;
+    final scheme = Theme.of(context).colorScheme;
     final issues = c.draftIssues;
-    final region = EthiopianRegion.fromCode(c.draftRegionCode);
+    // Only what blocks Done is shown, e.g. "Number not read".
+    final detail = issues.map(strings.issue).join(' · ');
 
-    return _Card(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // The four sections as placed on the plate, with their characters.
-          if (c.arrangement != null)
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                for (final section in c.arrangement!.sections)
-                  Expanded(
-                    flex: section.kind == PlateSectionKind.number ? 3 : 2,
-                    child: Padding(
-                      padding: const EdgeInsets.only(right: 6),
-                      child: _SectionCard(section: section),
-                    ),
-                  ),
-              ],
-            ),
-          const SizedBox(height: 10),
+    return _Sheet(
+      children: [
+        if (_editing)
+          _EditForm(
+            controller: c,
+            onDone: () => setState(() => _editing = false),
+          )
+        else ...[
           Row(
             children: [
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    FittedBox(
-                      fit: BoxFit.scaleDown,
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        [
-                          c.draftCode ?? '–',
-                          c.draftRegionCode ?? '–',
-                          c.draftSerial ?? '–',
-                        ].join('  ·  '),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 22,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 1.2,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      issues.isNotEmpty
-                          ? issues.map(_issueText).join(' · ')
-                          : region == null
-                              ? 'Plate read'
-                              : '${region.amharicLabel} · ${region.englishName}',
-                      style: TextStyle(
-                        color: issues.isEmpty
-                            ? Colors.white70
-                            : Colors.orangeAccent,
-                        fontSize: 13,
-                      ),
-                    ),
-                  ],
+                child: Center(
+                  child: _PlateChip(
+                    code: c.draftCode,
+                    region: c.draftRegionCode,
+                    serial: c.draftSerial,
+                  ),
                 ),
               ),
-              const SizedBox(width: 12),
-              FilledButton(
-                onPressed: c.canConfirm ? onDone : null,
-                style: FilledButton.styleFrom(
-                  backgroundColor: _accent,
-                  foregroundColor: Colors.black,
-                  disabledBackgroundColor: Colors.white24,
+              if (scope.options.allowEdit)
+                IconButton.filledTonal(
+                  onPressed: () => setState(() => _editing = true),
+                  icon: const Icon(Icons.edit_rounded),
+                  tooltip: strings.edit,
                 ),
-                child: const Text('Done'),
-              ),
             ],
           ),
-          // Debug builds: what OCR actually read, to diagnose sections.
-          if (kDebugMode && c.areaOcr != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 6),
-              child: Text(
-                'OCR: ${c.areaOcr!.text}'
-                '${c.areaOcr!.codeHint == null ? '' : '  · code pass ${c.areaOcr!.codeHint}'}'
-                '${c.areaOcr!.regionColumns.isEmpty ? '' : '  · region pass ${c.areaOcr!.regionColumns.map((r) => '${r.letters}/${r.source}').join(', ')}'}',
-                style: const TextStyle(color: Colors.white38, fontSize: 11),
-              ),
+          if (detail.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Text(
+              detail,
+              textAlign: TextAlign.center,
+              style: text.bodyMedium?.copyWith(color: scheme.error),
             ),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              TextButton(onPressed: onEdit, child: const Text('Edit')),
-              TextButton(
-                onPressed: c.adjustAgain,
-                child: const Text('Adjust area'),
-              ),
-              TextButton(onPressed: c.retake, child: const Text('Retake')),
-            ],
-          ),
+          ],
         ],
-      ),
+        const SizedBox(height: 20),
+        FilledButton(
+          onPressed: c.canConfirm ? widget.onDone : null,
+          style: _filled(scope.colors),
+          child: Text(strings.done),
+        ),
+        const SizedBox(height: 6),
+        TextButton(
+          onPressed: c.retake,
+          style: TextButton.styleFrom(minimumSize: const Size.fromHeight(44)),
+          child: Text(strings.retake),
+        ),
+      ],
     );
   }
 }
 
-/// One plate section: its label and the characters read in it. Stacked
-/// sections (code aside) list their characters top to bottom.
-class _SectionCard extends StatelessWidget {
-  const _SectionCard({required this.section});
+/// The reading drawn like a small plate: code, number, region.
+class _PlateChip extends StatelessWidget {
+  const _PlateChip({this.code, this.region, this.serial});
 
-  final PlateSection section;
+  final String? code, region, serial;
 
   @override
   Widget build(BuildContext context) {
-    final color = _sectionColor(section.kind);
-    final stacked = section.kind == PlateSectionKind.geezRegion ||
-        section.kind == PlateSectionKind.latinRegion;
-    final chars = section.chars.isEmpty
-        ? [section.value.isEmpty ? '–' : section.value]
-        : section.chars.map((ch) => ch.text).toList();
-    final style = TextStyle(
-      color: section.detected ? color : Colors.white38,
-      fontSize: 18,
-      fontWeight: FontWeight.w700,
-      height: 1.1,
-    );
+    final scheme = Theme.of(context).colorScheme;
+    final ink = scheme.onSurface;
+    final numeric = code != null && int.tryParse(code!) != null;
+    final label = PlateServiceType.fromCode(code)?.amharicLabel ?? code;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        border: Border.all(
-          color: section.detected ? color : Colors.white24,
-          width: 1.5,
-        ),
-        borderRadius: BorderRadius.circular(8),
+        color: scheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: scheme.outlineVariant),
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            '${section.kind.index + 1} · ${_sectionLabel(section.kind)}',
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(color: Colors.white54, fontSize: 10),
-          ),
-          const SizedBox(height: 4),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            child: stacked
-                ? Column(
-                    children: [for (final t in chars) Text(t, style: style)],
-                  )
-                : Text(chars.join(), style: style),
-          ),
-          if (section.note != null)
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (code != null) ...[
+              numeric
+                  ? Container(
+                      width: 30,
+                      height: 30,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(color: ink, width: 2),
+                      ),
+                      child: Text(
+                        code!,
+                        style: TextStyle(
+                          color: ink,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    )
+                  : Text(
+                      label!,
+                      style: TextStyle(
+                        color: ink,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+              const SizedBox(width: 12),
+            ],
             Text(
-              section.note!,
-              style: const TextStyle(color: Colors.white54, fontSize: 9),
+              serial ?? '—',
+              style: TextStyle(
+                color: ink,
+                fontSize: 30,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 2,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
             ),
-        ],
+            if (region != null) ...[
+              const SizedBox(width: 12),
+              Text(
+                region!,
+                style: TextStyle(
+                  color: ink,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1,
+                ),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
 }
 
-class _EditPanel extends StatefulWidget {
-  const _EditPanel({required this.controller});
+/// Correct the reading: code, region, number.
+class _EditForm extends StatefulWidget {
+  const _EditForm({required this.controller, required this.onDone});
 
   final PlateReaderController controller;
+  final VoidCallback onDone;
 
   @override
-  State<_EditPanel> createState() => _EditPanelState();
+  State<_EditForm> createState() => _EditFormState();
 }
 
-class _EditPanelState extends State<_EditPanel> {
+class _EditFormState extends State<_EditForm> {
   late final TextEditingController _serial = TextEditingController(
     text: widget.controller.draftSerial ?? '',
   );
@@ -1028,88 +1193,85 @@ class _EditPanelState extends State<_EditPanel> {
   @override
   Widget build(BuildContext context) {
     final c = widget.controller;
+    final strings = _Scope.of(context).strings;
     final codes = PlateServiceType.values.map((t) => t.code).toList();
     final code = codes.contains(c.draftCode) ? c.draftCode : null;
     final region = EthiopianRegion.fromCode(c.draftRegionCode);
-    const fieldStyle = TextStyle(color: Colors.white, fontSize: 18);
+    InputDecoration field(String label) => InputDecoration(
+          labelText: label,
+          border: const OutlineInputBorder(),
+          isDense: true,
+        );
 
-    return _Card(
-      child: Row(
-        children: [
-          Expanded(
-            flex: 2,
-            child: _Labeled(
-              label: 'Code',
-              child: DropdownButton<String>(
-                value: code,
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        TextField(
+          controller: _serial,
+          autofocus: c.draftSerial == null,
+          textCapitalization: TextCapitalization.characters,
+          style: const TextStyle(
+            fontSize: 22,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 2,
+          ),
+          decoration: field(strings.fieldSerial),
+          onChanged: (v) => c.editField(serial: v),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: DropdownButtonFormField<String>(
+                initialValue: code,
                 isExpanded: true,
-                dropdownColor: const Color(0xFF222222),
-                style: fieldStyle,
+                decoration: field(strings.fieldCode),
                 items: [
                   for (final t in PlateServiceType.values)
-                    DropdownMenuItem(value: t.code, child: Text(t.code)),
+                    DropdownMenuItem(
+                      value: t.code,
+                      child: Text(
+                        int.tryParse(t.code) != null
+                            ? '${t.code} · ${t.label}'
+                            : t.label,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
                 ],
                 onChanged: (v) => c.editField(code: v),
               ),
             ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            flex: 3,
-            child: _Labeled(
-              label: 'Region',
-              child: DropdownButton<EthiopianRegion>(
-                value: region,
+            const SizedBox(width: 12),
+            Expanded(
+              child: DropdownButtonFormField<EthiopianRegion>(
+                initialValue: region,
                 isExpanded: true,
-                dropdownColor: const Color(0xFF222222),
-                style: fieldStyle,
+                decoration: field(strings.fieldRegion),
                 items: [
                   for (final r in EthiopianRegion.values)
                     DropdownMenuItem(
                       value: r,
-                      child: Text('${r.code} ${r.amharicLabel}'),
+                      child: Text(
+                        '${r.code} · ${r.englishName}',
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                 ],
                 onChanged: (v) => c.editField(regionCode: v?.code),
               ),
             ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            flex: 4,
-            child: _Labeled(
-              label: 'Serial',
-              child: TextField(
-                controller: _serial,
-                style: fieldStyle,
-                textCapitalization: TextCapitalization.characters,
-                decoration: const InputDecoration(isDense: true),
-                onChanged: (v) => c.editField(serial: v),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _Labeled extends StatelessWidget {
-  const _Labeled({required this.label, required this.child});
-
-  final String label;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: const TextStyle(color: Colors.white60, fontSize: 12),
+          ],
         ),
-        child,
+        const SizedBox(height: 12),
+        Align(
+          alignment: Alignment.centerRight,
+          child: TextButton.icon(
+            onPressed: widget.onDone,
+            icon: const Icon(Icons.check_rounded),
+            label: Text(strings.save),
+          ),
+        ),
       ],
     );
   }
@@ -1127,13 +1289,13 @@ class _ErrorPanel extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-            controller.error ?? 'Something went wrong',
+            controller.error ?? _Scope.of(context).strings.somethingWentWrong,
             textAlign: TextAlign.center,
             style: const TextStyle(color: Colors.white70),
           ),
           TextButton(
             onPressed: controller.retake,
-            child: const Text('Try again'),
+            child: Text(_Scope.of(context).strings.tryAgain),
           ),
         ],
       ),
@@ -1142,13 +1304,21 @@ class _ErrorPanel extends StatelessWidget {
 }
 
 class _MessagePanel extends StatelessWidget {
-  const _MessagePanel({required this.message, this.onClose});
+  const _MessagePanel({
+    required this.message,
+    this.title,
+    this.onClose,
+    this.actions = const [],
+  });
 
+  final String? title;
   final String message;
   final VoidCallback? onClose;
+  final List<Widget> actions;
 
   @override
   Widget build(BuildContext context) {
+    final strings = _Scope.of(context).strings;
     return ColoredBox(
       color: const Color(0xEE111111),
       child: SafeArea(
@@ -1158,15 +1328,46 @@ class _MessagePanel extends StatelessWidget {
               Positioned(
                 top: 8,
                 left: 8,
-                child: _HudIconButton(icon: Icons.close, onPressed: onClose!),
+                child: _HudIconButton(
+                  icon: Icons.close,
+                  tooltip: strings.close,
+                  onPressed: onClose!,
+                ),
               ),
             Center(
               child: Padding(
                 padding: const EdgeInsets.all(24),
-                child: Text(
-                  message,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.white70, fontSize: 15),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (title != null) ...[
+                      Text(
+                        title!,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                    ],
+                    Text(
+                      message,
+                      textAlign: TextAlign.center,
+                      style:
+                          const TextStyle(color: Colors.white70, fontSize: 15),
+                    ),
+                    if (actions.isNotEmpty) ...[
+                      const SizedBox(height: 20),
+                      Wrap(
+                        spacing: 12,
+                        runSpacing: 8,
+                        alignment: WrapAlignment.center,
+                        children: actions,
+                      ),
+                    ],
+                  ],
                 ),
               ),
             ),
@@ -1185,7 +1386,7 @@ class _Card extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: const Color(0xD9111111),
+      color: _Scope.of(context).colors.panel,
       borderRadius: BorderRadius.circular(16),
       child: Padding(padding: const EdgeInsets.all(16), child: child),
     );
@@ -1193,9 +1394,14 @@ class _Card extends StatelessWidget {
 }
 
 class _HudIconButton extends StatelessWidget {
-  const _HudIconButton({required this.icon, required this.onPressed});
+  const _HudIconButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onPressed,
+  });
 
   final IconData icon;
+  final String tooltip;
   final VoidCallback onPressed;
 
   @override
@@ -1205,8 +1411,21 @@ class _HudIconButton extends StatelessWidget {
       shape: const CircleBorder(),
       child: IconButton(
         icon: Icon(icon, color: Colors.white),
+        tooltip: tooltip,
         onPressed: onPressed,
       ),
     );
   }
 }
+
+/// Filled button in the scanner's accent colour.
+ButtonStyle _filled(ResolvedPlateScannerTheme colors) => FilledButton.styleFrom(
+      backgroundColor: colors.accent,
+      foregroundColor: colors.onAccent,
+      minimumSize: const Size.fromHeight(52),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+    );
+
+/// Outlined button on the result sheet.
+ButtonStyle _outlined() =>
+    OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(52));

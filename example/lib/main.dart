@@ -48,23 +48,20 @@ class _HomePageState extends State<HomePage> {
     });
   }
 
-  Future<void> _scan({bool customOverlay = false}) async {
-    final controller = PlateReaderController();
-    final record = await Navigator.of(context).push<PlateRecord>(
-      MaterialPageRoute(
-        builder: (context) => Scaffold(
-          body: PlateScannerView(
-            controller: controller,
-            overlayBuilder: customOverlay ? _minimalOverlay : null,
-            onPlateConfirmed: (r) => Navigator.pop(context, r),
-            onCancel: () => Navigator.pop(context),
-            onError: (e) => debugPrint('Plate reader error: $e'),
-          ),
-        ),
-      ),
+  Future<void> _scan({bool quick = false}) async {
+    final result = await EtPlateReader.scan(
+      context,
+      // Quick: Amharic texts, no confirm step, no review for valid plates.
+      strings: quick ? const PlateScannerStrings.am() : null,
+      options: quick
+          ? const PlateScannerOptions(
+              confirmArea: ConfirmAreaMode.never,
+              showReview: false,
+            )
+          : const PlateScannerOptions(),
     );
-    controller.dispose();
-    if (record == null || !mounted) return;
+    if (result == null || !mounted) return;
+    final record = result.record;
 
     final seen = await _store.findBySerial(
       record.serial,
@@ -85,37 +82,6 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  /// Host-built HUD: shows how [PlateScannerOverlayBuilder] replaces the
-  /// default. One button per step; the view still draws the frame and area.
-  Widget _minimalOverlay(BuildContext context, PlateReaderController c) {
-    final (label, action) = switch (c.phase) {
-      ScanPhase.detecting => (
-          c.detectedArea == null ? 'Point at a plate' : 'Capture',
-          c.captureArea,
-        ),
-      ScanPhase.confirmingArea => ('Confirm area', c.confirmArea),
-      ScanPhase.reading => ('Reading…', null),
-      ScanPhase.review when c.canConfirm => (
-          'Use ${c.arrangement?.layoutText}',
-          () async {
-            final navigator = Navigator.of(context);
-            navigator.pop(await c.confirm());
-          },
-        ),
-      ScanPhase.review || ScanPhase.error => ('Retake', c.retake),
-      _ => ('…', null),
-    };
-    return SafeArea(
-      child: Align(
-        alignment: Alignment.bottomCenter,
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: FilledButton(onPressed: action, child: Text(label)),
-        ),
-      ),
-    );
-  }
-
   @override
   void dispose() {
     _store.close();
@@ -129,7 +95,7 @@ class _HomePageState extends State<HomePage> {
     return Scaffold(
       appBar: AppBar(title: const Text('Ethiopian plate reader')),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: supported ? _scan : null,
+        onPressed: supported ? () => _scan() : null,
         icon: const Icon(Icons.document_scanner_outlined),
         label: const Text('Scan plate'),
       ),
@@ -138,13 +104,15 @@ class _HomePageState extends State<HomePage> {
           if (availability != null && !supported)
             MaterialBanner(
               content: Text(availability.message ?? 'Not supported'),
-              actions: [TextButton(onPressed: _load, child: const Text('Retry'))],
+              actions: [
+                TextButton(onPressed: _load, child: const Text('Retry'))
+              ],
             ),
           if (supported)
             ListTile(
-              leading: const Icon(Icons.tune),
-              title: const Text('Scan with a custom overlay'),
-              onTap: () => _scan(customOverlay: true),
+              leading: const Icon(Icons.bolt),
+              title: const Text('Quick scan (Amharic, no review)'),
+              onTap: () => _scan(quick: true),
             ),
           const Divider(height: 1),
           Expanded(
@@ -169,7 +137,8 @@ class _HomePageState extends State<HomePage> {
                             '${r.editedByUser ? ' · edited' : ''}',
                           ),
                           trailing: Text(
-                            TimeOfDay.fromDateTime(r.capturedAt).format(context),
+                            TimeOfDay.fromDateTime(r.capturedAt)
+                                .format(context),
                           ),
                         ),
                       );

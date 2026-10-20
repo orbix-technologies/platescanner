@@ -38,41 +38,62 @@ void main() {
     await tester.pump();
   }
 
-  testWidgets('full flow: detect → confirm area → review → Done',
-      (tester) async {
+  testWidgets('full flow: photo → plate number → Done', (tester) async {
     PlateRecord? confirmed;
     await pumpView(tester, onConfirmed: (r) => confirmed = r);
-    expect(find.text('Fit the plate inside the box'), findsOneWidget);
+    expect(find.text('Fit the plate inside the frame'), findsOneWidget);
 
     fake.emitLines(['D-0123456']);
     await tester.pump();
     await tester.pump();
-    expect(find.text('Plate found — hold steady'), findsOneWidget);
+    expect(find.text('Hold steady'), findsOneWidget);
 
     // Image.file can't load in tests; the flow itself is what's checked.
     await tester.runAsync(() => controller.captureArea());
-    await tester.pump();
-    expect(find.text('Confirm area'), findsOneWidget);
-    expect(find.text('Retake'), findsOneWidget);
-
-    await tester.tap(find.text('Confirm area'));
-    await tester.pump();
-    await tester.pump();
+    for (var i = 0; i < 3; i++) {
+      await tester.pump();
+      await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 30)));
+      await tester.pump();
+    }
+    // No area step: straight to the plate number.
     expect(controller.phase, ScanPhase.review);
-    // The four sections with their characters.
-    expect(find.text('1 · Code'), findsOneWidget);
-    expect(find.text("2 · Region (Ge'ez)"), findsOneWidget);
-    expect(find.text('3 · Number'), findsOneWidget);
-    expect(find.text('4 · Region'), findsOneWidget);
-    expect(find.text('XX'), findsOneWidget);
+    expect(find.text('Confirm area'), findsNothing);
     expect(find.text('0123456'), findsOneWidget);
-    expect(find.text('A'), findsNWidgets(2)); // stacked A over A
-    expect(find.text('1  ·  AA  ·  0123456'), findsOneWidget);
-    expect(find.text('አአ · Addis Ababa'), findsOneWidget);
+    expect(find.text('AA'), findsOneWidget);
+    expect(find.text('1'), findsOneWidget); // the circled code
+    // Just the plate: no category / region line.
+    expect(find.text('Taxi · Addis Ababa'), findsNothing);
+    // The process isn't shown: no section cards.
+    expect(find.text('1 · Code'), findsNothing);
 
     await tester.tap(find.text('Done'));
     await tester.pump();
     expect(confirmed?.canonical, '1-AA-0123456');
+  });
+
+  testWidgets('edit: fix the number, then Done', (tester) async {
+    PlateRecord? confirmed;
+    await pumpView(tester, onConfirmed: (r) => confirmed = r);
+    fake.emitLines(['D-0123456']);
+    await tester.pump();
+    await tester.runAsync(() => controller.captureArea());
+    for (var i = 0; i < 3; i++) {
+      await tester.pump();
+      await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 30)));
+      await tester.pump();
+    }
+    await tester.tap(find.byIcon(Icons.edit_rounded));
+    await tester.pump();
+    await tester.enterText(find.byType(TextField), '0123457');
+    await tester.tap(find.text('Save'));
+    await tester.pump();
+    expect(find.text('0123457'), findsOneWidget);
+    await tester.tap(find.text('Done'));
+    await tester.pump();
+    expect(confirmed?.serial, '0123457');
+    expect(confirmed?.editedByUser, isTrue);
   });
 
   testWidgets('region of interest follows the drawn guide box', (tester) async {
@@ -91,7 +112,7 @@ void main() {
       overlay: (context, c) => Text('phase: ${c.phase.name}'),
     );
     expect(find.text('phase: detecting'), findsOneWidget);
-    expect(find.text('Capture'), findsNothing);
+    expect(find.bySemanticsLabel('Capture'), findsNothing);
   });
 
   testWidgets('unsupported device shows the message', (tester) async {

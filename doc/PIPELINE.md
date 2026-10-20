@@ -9,6 +9,7 @@ time: test → analyse faults → fix → brainstorm better approaches.
 |---|---|---|
 | 0 | Labelled test set and per-step accuracy | *to build* |
 | 1 | Find the plate area live | native frame OCR, `parsing/plate_area_detector.dart` |
+| 1b | Snap the area to the plate on the still | `segmentation/plate_bounds_finder.dart` |
 | 2 | Capture the still | `PlateScannerView.kt` / `PlateScannerView.swift` |
 | 3 | User confirms / adjusts the area | `widgets/plate_scanner_view.dart` |
 | 4 | Prepare the image | `segmentation/segment_capture.dart` |
@@ -24,6 +25,11 @@ time: test → analyse faults → fix → brainstorm better approaches.
 
 Tools available for testing:
 
+- `tool/area_logs.dart`: snaps every logged session's proposed area and
+  draws proposed (red), confirmed (green), snapped (cyan) and the serial
+  row (yellow) on contact sheets (`ONLY=`, `SHAPES=1` for the shapes).
+- `test/plate_bounds_finder_test.dart`: 12 real stills with the plate area
+  checked by eye.
 - `tool/segment_logs.dart`: draws the segmentation for every logged session
   (`ONLY=` to filter, `COLS=1` for column details).
 - `tool/export_plate_fixture.dart`: saves a session's plate area as a test
@@ -67,6 +73,38 @@ logged).
 - Detect the plate by shape (bright rectangle with a dark border), not text.
 - A fixed margin so the stacks are never cut.
 - "Move closer" hint when the characters are small.
+
+## 1b. Snap the area to the plate on the still
+
+**What:** right after capture, off the UI isolate: find the serial on the
+still (a row of 4+ same-height dark shapes nearest the proposed area,
+extended over digits joined to a screw or the border) → top / bottom = the
+long horizontal edges just outside the row (outer of plate edge / printed
+border) → left / right = the first vertical edge, going outwards, that
+spans the plate's height *including the margins above and below the row*
+(text never does), near where the top / bottom edges end → small margin.
+The proposed box is replaced unless the user already moved it. If nothing
+is found near the proposal, the detection at the moment of the still is
+tried; otherwise the proposal stays.
+
+**Test:** `tool/area_logs.dart` on the logs; `plate_bounds_finder_test`.
+
+**Faults seen (fixed by this step)** — 172 logged sessions:
+- Proposal from a frame before the still: box shifted off the plate, or on
+  a fog lamp.
+- Box too tall (aspect ~3 instead of ~4.2), stack cut at the right edge,
+  neighbouring plate or watermark line included.
+- Snapped: 166 / 172; all four edges found on 146. Diplomatic plates
+  (embassy number · Ge'ez · 4 digits · C/D) fit too: the row stops at the
+  dot before the serial, and the side search reaches the plate's left edge
+  past the embassy number. Only 3 CD scans logged so far. Segmentation on the
+  snapped area finds more circles / Ge'ez / Latin stacks than on the
+  area users confirmed by hand.
+
+**Faults left**
+- Plate whose digits touch a dark holder frame (60648): no row found.
+- Tiny, blurred night shots; old 2-row and AAL plates (out of scope).
+- Plate without a printed border on a white car: a bit loose.
 
 ## 2. Capture the still
 
@@ -227,6 +265,8 @@ yellow background → police, circle vote, ink colour (never red ↔ orange);
 **Ideas**
 - With a classifier, each character has a confidence; most rules go away.
 - Ge'ez ↔ Latin consistency: section 2 must match section 4 (አአ ↔ AA).
+  Done one way: section 2 is now spelled from section 4's region
+  (`PlateArranger.geezFromLatin`, note "from AA"); it is still not read.
 
 ## 12. Review and Done
 

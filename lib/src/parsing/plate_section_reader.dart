@@ -111,12 +111,13 @@ class PlateSectionReader {
       final pitch = number.width / seg.numberChars.length;
       var left = number.left - pitch * 0.3;
       var right = number.right + pitch * 0.3;
-      if (seg.geezStack.isNotEmpty) {
+      // Two-row plates: the region letters are above the number.
+      if (seg.geezStack.isNotEmpty && !seg.twoRow) {
         final g =
             seg.geezStack.map((r) => r.right).reduce((a, b) => a > b ? a : b);
         if (left < (g + number.left) / 2) left = (g + number.left) / 2;
       }
-      if (seg.latinStack.isNotEmpty) {
+      if (seg.latinStack.isNotEmpty && !seg.twoRow) {
         final l =
             seg.latinStack.map((r) => r.left).reduce((a, b) => a < b ? a : b);
         if (right > (l + number.right) / 2) right = (l + number.right) / 2;
@@ -165,6 +166,15 @@ class PlateSectionReader {
     for (var i = 0; i < seg.leftDigits.length; i++) {
       out.add(crop('embassy', i, pad(seg.leftDigits[i], 0.15, 0.08)));
     }
+    if (seg.leftDigits.length >= 2) {
+      // The embassy number as one word ("28"): lone digits often read as
+      // nothing (session logs).
+      out.add(crop(
+        'embassyWord',
+        0,
+        pad(seg.leftDigits.reduce((a, b) => a.union(b)), 0.1, 0.08),
+      ));
+    }
     return out;
   }
 
@@ -184,6 +194,13 @@ class PlateSectionReader {
       return const [];
     }
 
+    // The new national plate's hatched, pale characters break apart in the
+    // image, but the whole-area OCR reads its one line well ("AAAGO00").
+    if (seg.code == null) {
+      final national = PlateArranger(parser: parser).nationalFromOcr(ocr);
+      if (national != null) return national;
+    }
+
     // Section 3: a vote over the whole-number reads (they rarely disagree);
     // single-digit reads only fill positions the vote leaves open.
     final n = seg.numberChars.length;
@@ -193,11 +210,14 @@ class PlateSectionReader {
           readsOf('digit', i).map((t) => _single(t, _toDigit, digit: true)),
         ),
     ];
-    final number = _voteNumber(
-          readsOf('number', 0).map(_digits).toList(),
-          perDigit,
-          n,
-        ) ??
+    // The new national plate (ETH, 2026): no circle, no region letters, and
+    // the number is three letters and four digits ("ABC1234").
+    final national = seg.code == null && seg.latinStack.isEmpty
+        ? _majority(readsOf('number', 0)
+            .map((t) => t == null ? null : parser.readNationalSerial(t)))?.$1
+        : null;
+    final number = national ??
+        _voteNumber(_numberReads(readsOf('number', 0)), perDigit, n) ??
         '';
     // Boxes per digit: the segmentation's when the counts match, else the
     // number box divided evenly (two touching digits found as one shape).
@@ -261,7 +281,7 @@ class PlateSectionReader {
     final latinBox = seg.latinStack.isEmpty
         ? null
         : seg.latinStack.reduce((a, b) => a.union(b));
-    final latinSection = PlateSection(
+    var latinSection = PlateSection(
       kind: PlateSectionKind.latinRegion,
       value: latinValue,
       chars: [
@@ -272,15 +292,19 @@ class PlateSectionReader {
       detected: latinValue.isNotEmpty,
     );
 
-    // Section 2: located, not read.
+    // Section 2: located, not read; spelled from section 4's region.
     final geezBox = seg.geezStack.isEmpty
         ? null
         : seg.geezStack.reduce((a, b) => a.union(b));
-    final geezSection = PlateSection(
-      kind: PlateSectionKind.geezRegion,
-      value: PlateSection.geezPlaceholder,
-      box: geezBox,
-      detected: false,
+    var geezSection = PlateArranger(parser: parser).geezFromLatin(
+      PlateSection(
+        kind: PlateSectionKind.geezRegion,
+        value: PlateSection.geezPlaceholder,
+        box: geezBox,
+        detected: false,
+      ),
+      latinValue,
+      boxes: seg.geezStack,
     );
 
     // Section 1: the digit inside the circle, then the shared code rules.
@@ -290,7 +314,37 @@ class PlateSectionReader {
     ]);
     final circleDigit =
         PlateServiceType.isKnown(circle?.$1) ? circle!.$1 : null;
-    String? special = _specials.contains(latinValue) ? latinValue : null;
+    // Section 4 decided by the plate's layout when its letters weren't read.
+    PlateSection latinByLayout(String v) => PlateSection(
+          kind: PlateSectionKind.latinRegion,
+          value: v,
+          chars: [
+            if (seg.latinStack.length == 2)
+              for (var i = 0; i < 2; i++) PlateChar(v[i], seg.latinStack[i]),
+          ],
+          box: latinBox,
+          note: 'by layout',
+        );
+
+    // Plates without a circle (section 1 is something else):
+    // - diplomatic: the embassy number's big digits left of the Ge'ez (never
+    //   two on the 1–5 plates logged); C/D on its yellow strip is often
+    //   misread, and the strip must not pass for a police plate;
+    // - police: yellow plate, or ፖሊስ in black left of the Ge'ez stack;
+    // - temporary: ተላላፊ in light blue left of the Ge'ez stack;
+    // - UN / AU: የተመ / አሕ and no Ge'ez stack; AU's letters side by side.
+    // Section 4 naming a region rules out UN and AU (a crop that cut the
+    // circle off leaves a stray "word").
+    final noCircle = seg.code == null;
+    final diplomatic = noCircle && seg.leftDigits.length >= 2;
+    final hasWord = noCircle && _isWord(seg);
+    final isRegion = parser.readRegion(latinValue) != null;
+    String? special = national != null
+        ? PlateServiceType.national.code
+        : _specials.contains(latinValue)
+            ? latinValue
+            : null;
+    if (special == null && diplomatic) special = 'CD';
     final paper = ocr.paperColor;
     if (special == null &&
         paper != null &&
@@ -298,12 +352,60 @@ class PlateSectionReader {
         PaperColor.isYellow(paper[0], paper[1], paper[2])) {
       special = PlateServiceType.police.code;
     }
+    if (special == null && hasWord && !isRegion && seg.latinSideBySide) {
+      special = PlateServiceType.africanUnion.code;
+    }
+    if (special == null &&
+        hasWord &&
+        !isRegion &&
+        seg.geezStack.isEmpty &&
+        seg.numberChars.length == 7) {
+      special = PlateServiceType.unitedNations.code;
+    }
+    if (special == null && hasWord && seg.geezStack.isNotEmpty) {
+      final ink = ocr.inkColor;
+      final blue = ink != null && ink.length == 3 && ink[2] - ink[0] >= 40;
+      special =
+          blue ? PlateServiceType.temporary.code : PlateServiceType.police.code;
+    }
+    if ({'CD', 'UN', 'AU'}.contains(special) && latinValue != special) {
+      latinSection = latinByLayout(special!);
+    }
+    // UN, AU and the new national plates carry no Ge'ez region: their
+    // Ge'ez is section 1 (the national plate has no region at all).
+    if (special == 'UN' || special == 'AU' || national != null) {
+      geezSection = PlateSection(
+        kind: PlateSectionKind.geezRegion,
+        value: '',
+        detected: false,
+        note: 'none on $special plates',
+      );
+    }
+    if (national != null) {
+      latinSection = PlateSection(
+        kind: PlateSectionKind.latinRegion,
+        value: '',
+        detected: false,
+        note: 'none on $special plates',
+      );
+    }
     String? embassy;
     if (special == 'CD' && seg.leftDigits.isNotEmpty) {
+      // Per digit: its own reads and that position of the whole-number
+      // reads that have one digit per shape.
+      final words = readsOf('embassyWord', 0)
+          .map(_digits)
+          .where((w) =>
+              w.length == seg.leftDigits.length &&
+              RegExp(r'^[0-9]+$').hasMatch(w))
+          .toList();
       final e = [
         for (var i = 0; i < seg.leftDigits.length; i++)
-          _majority(readsOf('embassy', i)
-              .map((t) => _single(t, _toDigit, digit: true)))?.$1,
+          _majority([
+            ...readsOf('embassy', i)
+                .map((t) => _single(t, _toDigit, digit: true)),
+            for (final w in words) w[i],
+          ])?.$1,
       ];
       if (e.every((d) => d != null)) embassy = e.join();
     }
@@ -312,7 +414,17 @@ class PlateSectionReader {
       // otherwise the whole-area circle pass.
       hint: circleDigit ?? ocr.codeHint,
       votes: circleDigit != null ? (circle!.$2 >= 2 ? 3 : 1) : ocr.codeVotes,
-      box: seg.code,
+      // No circle: section 1 is the embassy number, or the Ge'ez word (on
+      // the national plate, the ኢት / ETH block found as stacks).
+      box: seg.code ??
+          (national != null && seg.geezStack.isNotEmpty
+              ? seg.geezStack.reduce((a, b) => a.union(b))
+              : null) ??
+          (special == 'CD' && seg.leftDigits.isNotEmpty
+              ? seg.leftDigits.reduce((a, b) => a.union(b))
+              : special != null && seg.leftWord.isNotEmpty
+                  ? seg.leftWord.reduce((a, b) => a.union(b))
+                  : null),
       ink: ocr.inkColor,
       special: special,
       embassy: embassy,
@@ -331,7 +443,7 @@ class PlateSectionReader {
       code: code,
       regionCode: region?.code,
       serial: serial,
-      layout: PlateLayout.singleRow,
+      layout: seg.twoRow ? PlateLayout.twoRow : PlateLayout.singleRow,
       rawText: arrangement.layoutText,
       confidence: _confidence(number, letters),
       issues: parser.validate(
@@ -341,6 +453,46 @@ class PlateSectionReader {
       ),
     );
     return (arrangement: arrangement, candidate: candidate);
+  }
+
+  /// The whole-number reads as digits. A read one character longer than
+  /// the most common length has a neighbour glued on (the A/A stack read
+  /// as "1": "BO5475" + "1"); without its last character it votes too —
+  /// mapped again, since the extra character changes how a leading letter
+  /// is taken (session logs: B05475).
+  static List<String> _numberReads(List<String?> raw) {
+    final mapped = raw.map(_digits).toList();
+    final lengths =
+        _majority(mapped.where((m) => m.length >= 4).map((m) => '${m.length}'));
+    if (lengths == null) return mapped;
+    final common = int.parse(lengths.$1);
+    String trimmed(int i) {
+      final clean = raw[i]!.replaceAll(RegExp(r'[^0-9A-Za-z|]'), '');
+      return clean.length > common
+          ? _digits(clean.substring(0, common))
+          : mapped[i];
+    }
+
+    return [
+      for (var i = 0; i < mapped.length; i++)
+        mapped[i].length == common + 1 ? trimmed(i) : mapped[i],
+    ];
+  }
+
+  /// Whether [seg]'s shapes left of section 2 are a Ge'ez word (ፖሊስ,
+  /// ተላላፊ, የተመ, አሕ): two or more letter-sized shapes (0.3–0.6 of a digit)
+  /// over at least 1.5 digit pitches. A broken circle or the stub of a cut
+  /// stack is not (session logs: words span 1.7–3.3 pitches).
+  static bool _isWord(PlateSegmentation seg) {
+    final word = seg.leftWord, digits = seg.numberChars;
+    if (word.length < 2 || digits.isEmpty) return false;
+    final heights = [for (final d in digits) d.height]..sort();
+    final hd = heights[heights.length ~/ 2];
+    final pitch = seg.number!.width / digits.length;
+    final letters =
+        word.where((r) => r.height >= hd * 0.3 && r.height <= hd * 0.6);
+    return letters.length >= 2 &&
+        word.last.right - word.first.left >= pitch * 1.5;
   }
 
   /// The number agreed by at least two of [reads] (5–8 digits each); else a

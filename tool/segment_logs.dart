@@ -83,7 +83,7 @@ void main(List<String> args) {
 
     final id = (log['session'] as String);
     final label =
-        '${id.substring(id.length - 5)} n=${s.numberChars.length} lat=${s.latinStack.length} gz=${s.geezStack.length} code=${s.code != null ? 1 : 0} left=${s.leftDigits.length}';
+        '${id.substring(id.length - 5)} n=${s.numberChars.length} lat=${s.latinStack.length} gz=${s.geezStack.length} code=${s.code != null ? 1 : 0} left=${s.leftDigits.length} word=${s.leftWord.length}${s.latinSideBySide ? ' side' : ''}';
     summary.writeln(
         '$label  cols=${s.columns.map((c) => c.kind == ColumnKind.short ? '.' : c.kind.name[0]).join()}  ${s.notes.join(' ')}');
     if (Platform.environment['COLS'] != null) {

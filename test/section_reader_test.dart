@@ -27,7 +27,7 @@ void main() {
     expect(number.right, lessThan(seg.latinStack.first.left));
   });
 
-  test('sections assembled: 4 · XX · 0123456 · ET', () {
+  test('sections assembled: 4 · ኢት · 0123456 · ET', () {
     final r = reader.read(
       seg,
       crops,
@@ -41,8 +41,11 @@ void main() {
       const AreaOcr(elements: []),
     );
     final a = r.arrangement;
-    expect(a.layoutText, '4 XX 0123456 ET');
+    expect(a.layoutText, '4 ኢት 0123456 ET');
     expect(a.latinRegion.chars.map((c) => c.text), ['E', 'T']);
+    // Section 2 is spelled from section 4, one letter per stacked box.
+    expect(a.geezRegion.chars.map((c) => c.text), ['ኢ', 'ት']);
+    expect(a.geezRegion.note, 'from ET');
     expect(r.candidate.region!.englishName, 'Federal');
     expect(r.candidate.isValid, isTrue);
   });
@@ -128,11 +131,12 @@ void main() {
       }),
       const AreaOcr(elements: []),
     );
-    expect(r.arrangement.layoutText, '4 XX 0123456 ET');
+    expect(r.arrangement.layoutText, '4 ኢት 0123456 ET');
   });
 
   test('crops include the word and repeated-digit requests', () {
-    expect(crops.where((c) => c.role == 'latinWord').single.group, hasLength(2));
+    expect(
+        crops.where((c) => c.role == 'latinWord').single.group, hasLength(2));
     expect(crops.where((c) => c.role == 'codeRepeat').single.repeat, 3);
   });
 }

@@ -3,7 +3,8 @@ import '../models/ocr_frame.dart';
 /// Step 1: finds the area of a frame that holds the plate.
 ///
 /// Anchors on the line carrying the serial (a run of five or more digit-like
-/// characters), then grows a box over everything printed on the same band —
+/// characters, or the new national plate's three letters and four digits),
+/// then grows a box over everything printed on the same band —
 /// the code on the left, stacked region letters on the right — plus margin
 /// for the plate border. Pure Dart; tuned so the user rarely has to adjust.
 class PlateAreaDetector {
@@ -13,19 +14,55 @@ class PlateAreaDetector {
   static final _serialLike = RegExp(r'[0-9OQDISBZG]{5,}');
   static final _digit = RegExp(r'[0-9]');
 
+  /// The new national number: three letters and four digits (`ABC1234`).
+  /// Its notched 0 is read as G, O, D, Q or C, so the digits may come out
+  /// as no digit at all ("AAAGGOO").
+  static final _nationalLike = RegExp(r'^[A-Z]{2}[A-Z0-9][0-9OQDGC]{3,5}$');
+
   /// Plate area in normalized frame coordinates, or `null` if none.
-  NormalizedRect? detect(List<OcrLine> lines) {
+  NormalizedRect? detect(List<OcrLine> lines) => detectDetailed(lines)?.area;
+
+  /// [detect], and whether the anchor is a new national number (`ABC1234`).
+  ///
+  /// That plate is framed from its number line alone: the ኢት / ETH block
+  /// sits left of it, and nothing is printed right of it.
+  ({NormalizedRect area, bool national})? detectDetailed(List<OcrLine> lines) {
     OcrLine? anchor;
+    var national = false;
     for (final l in lines) {
       final text = l.text.toUpperCase().replaceAll(RegExp(r'[^A-Z0-9]'), '');
       final run = _serialLike.firstMatch(text)?.group(0);
-      if (run == null || _digit.allMatches(run).length < 4) continue;
-      if (anchor == null || l.box.height > anchor.box.height) anchor = l;
+      final serial = run != null && _digit.allMatches(run).length >= 4;
+      final newPlate = _nationalLike.hasMatch(text);
+      if (!serial && !newPlate) continue;
+      // The new national number's pattern is specific: it wins over a
+      // plain digit run elsewhere in view (another plate, page text).
+      final isNational = newPlate && !serial;
+      if (anchor == null ||
+          (isNational && !national) ||
+          (isNational == national && l.box.height > anchor.box.height)) {
+        anchor = l;
+        national = isNational;
+      }
     }
     if (anchor == null) return null;
 
     final a = anchor.box;
     final h = a.height;
+    if (national) {
+      // Sideways in units of the line's width: frames aren't square, so a
+      // height-based margin is too narrow across. The ኢት / ETH block takes
+      // about two of the seven characters' width.
+      return (
+        area: NormalizedRect(
+          _clamp(a.left - 0.32 * a.width),
+          _clamp(a.top - 0.3 * h),
+          _clamp(a.right + 0.06 * a.width),
+          _clamp(a.bottom + 0.3 * h),
+        ),
+        national: true,
+      );
+    }
     final bandTop = a.top - 0.6 * h;
     final bandBottom = a.bottom + 0.6 * h;
     var area = a;
@@ -38,11 +75,14 @@ class PlateAreaDetector {
     }
 
     // Margin for the plate border and a circled code OCR may have missed.
-    return NormalizedRect(
-      _clamp(area.left - 0.9 * h),
-      _clamp(area.top - 0.35 * h),
-      _clamp(area.right + 0.5 * h),
-      _clamp(area.bottom + 0.35 * h),
+    return (
+      area: NormalizedRect(
+        _clamp(area.left - 0.9 * h),
+        _clamp(area.top - 0.35 * h),
+        _clamp(area.right + 0.5 * h),
+        _clamp(area.bottom + 0.35 * h),
+      ),
+      national: false,
     );
   }
 

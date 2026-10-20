@@ -1,11 +1,15 @@
 group = "com.et_plate_reader"
 version = "1.0-SNAPSHOT"
 
-// Host Flutter app supplies AGP. Kotlin is applied without a plugin-local
-// buildscript classpath, as in ar_measurement. AGP 9 compiles Kotlin itself
-// unless the host sets android.builtInKotlin=false.
+// Host Flutter app supplies AGP and the Kotlin Gradle plugin. AGP 9
+// compiles Kotlin itself (unless the host sets android.builtInKotlin=false);
+// older AGP (8.x hosts) needs the Kotlin plugin applied here, or the plugin's
+// Kotlin sources are silently left out of the build.
 apply plugin: "com.android.library"
-if (project.findProperty("android.builtInKotlin")?.toString() == "false") {
+def agpMajor = com.android.Version.ANDROID_GRADLE_PLUGIN_VERSION.tokenize(".")[0].toInteger()
+def applyKotlin = agpMajor < 9 ||
+        project.findProperty("android.builtInKotlin")?.toString() == "false"
+if (applyKotlin) {
     apply plugin: "kotlin-android"
 }
 
@@ -21,6 +25,12 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    if (applyKotlin) {
+        kotlinOptions {
+            jvmTarget = "17"
+        }
     }
 
     sourceSets {

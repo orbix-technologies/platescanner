@@ -43,10 +43,32 @@ void main() {
         for (final c in crops)
           logged['${c.role}${c.index}'] ?? const <String?>[null, null, null]
       ];
-      final r = reader.read(seg, crops, reads, const AreaOcr(elements: []));
+      // The logged whole-area pass: colours and circle hint.
+      final o = events.where((e) => e['event'] == 'areaOcr').lastOrNull;
+      List<int>? rgb(Object? v) =>
+          (v as List?)?.whereType<num>().map((x) => x.toInt()).toList();
+      NormalizedRect box(Object? m) {
+        final b = (m as Map).cast<String, num>();
+        return NormalizedRect(b['left']!.toDouble(), b['top']!.toDouble(),
+            b['right']!.toDouble(), b['bottom']!.toDouble());
+      }
+
+      final ocr = AreaOcr(
+        elements: [
+          for (final e in (o?['elements'] as List? ?? const [])
+              .cast<Map<String, dynamic>>())
+            OcrElement(text: e['text'] as String, box: box(e['box'])),
+        ],
+        codeHint: o?['codeHint'] as String?,
+        codeVotes: (o?['codeVotes'] as num?)?.toInt(),
+        inkColor: rgb(o?['inkColor']),
+        paperColor: rgb(o?['paperColor']),
+      );
+      final r = reader.read(seg, crops, reads, ocr);
       final id = log['session'] as String;
       // ignore: avoid_print
-      print('${id.substring(id.length - 5)}  ${r.arrangement.layoutText}');
+      print('${id.substring(id.length - 5)}  ${r.arrangement.layoutText}'
+          '  ${r.arrangement.code.note ?? ''}');
     }
   }, skip: dir == null ? 'set LOGS_DIR' : false);
 }

@@ -62,7 +62,7 @@ void main() {
       paperColor: const [235, 160, 40],
     ));
     expect(r.arrangement.code.value, 'POLICE');
-    expect(r.arrangement.code.note, 'yellow plate');
+    expect(r.arrangement.code.note, 'Police');
     expect(r.arrangement.number.value, '012345');
     expect(r.candidate.regionCode, 'AA');
     expect(r.candidate.isValid, isTrue);

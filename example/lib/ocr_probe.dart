@@ -35,7 +35,8 @@ Future<void> main() async {
     out.writeln('AREA $area');
     final ocr = await PlateReader.recognizeArea(file.path, area);
     for (final e in ocr.elements) {
-      out.writeln('ELEMENT "${e.text}" symbols=${e.symbols.map((s) => s.text).join()}');
+      out.writeln(
+          'ELEMENT "${e.text}" symbols=${e.symbols.map((s) => s.text).join()}');
     }
     out.writeln('AREA CODE HINT ${ocr.codeHint}');
     final arranged = const PlateArranger().arrange(ocr);

@@ -53,7 +53,7 @@ void main() {
     final arranged = (log['events'] as List)
         .cast<Map<String, Object?>>()
         .firstWhere((e) => e['event'] == 'arranged');
-    expect(arranged['layout'], '1 XX 0123456 AA');
+    expect(arranged['layout'], '1 አአ 0123456 AA');
 
     c.dispose();
     await dir.delete(recursive: true);

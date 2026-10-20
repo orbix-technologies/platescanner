@@ -134,6 +134,9 @@ class SessionLog {
         'geezStack': [for (final r in s.geezStack) rect(r)],
         'latinStack': [for (final r in s.latinStack) rect(r)],
         'leftDigits': [for (final r in s.leftDigits) rect(r)],
+        'leftWord': [for (final r in s.leftWord) rect(r)],
+        'latinSideBySide': s.latinSideBySide,
+        'twoRow': s.twoRow,
         'columns': [
           for (final c in s.columns)
             '${c.kind.name}${c.strictStack ? '*' : ''} ${c.box.left},${c.box.top} '

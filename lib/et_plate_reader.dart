@@ -34,6 +34,8 @@ export 'src/parsing/ethiopian_plate_parser.dart' show EthiopianPlateParser;
 export 'src/parsing/ethiopian_region.dart' show EthiopianRegion;
 export 'src/parsing/plate_service_type.dart'
     show InkColor, PaperColor, PlateServiceType;
+export 'src/segmentation/plate_bounds_finder.dart'
+    show PlateBounds, PlateBoundsFinder;
 export 'src/parsing/plate_area_detector.dart'
     show PlateAreaDetector, PlateAreaTracker;
 export 'src/parsing/plate_arranger.dart' show PlateArranger;
@@ -42,5 +44,9 @@ export 'src/recognition/plate_availability.dart'
     show PlateReader, PlateReaderAvailability, PlateReaderAvailabilityStatus;
 export 'src/recognition/plate_recognition_service.dart'
     show CropSpec, PlateRecognitionService, PlateRecognitionServiceFactory;
+export 'src/widgets/plate_scan.dart' show EtPlateReader, PlateScanResult;
+export 'src/widgets/plate_scanner_options.dart'
+    show ConfirmAreaMode, PlateScannerOptions, PlateScannerTheme;
+export 'src/widgets/plate_scanner_strings.dart' show PlateScannerStrings;
 export 'src/widgets/plate_scanner_view.dart'
     show PlateScannerView, PlateScannerOverlayBuilder;

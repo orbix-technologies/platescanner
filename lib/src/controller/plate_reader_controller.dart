@@ -130,6 +130,9 @@ class PlateReaderController extends ChangeNotifier {
 
   ScanPhase _phase = ScanPhase.idle;
   NormalizedRect? _detectedArea;
+
+  /// The detected area is framed on a new national number (`ABC1234`).
+  bool _detectedNational = false;
   CapturedFrame? _frame;
   NormalizedRect? _area;
   PlateArrangement? _arrangement;
@@ -143,7 +146,13 @@ class PlateReaderController extends ChangeNotifier {
   PlateLocation? _location;
   String? _description;
   String? _error;
+  PlateReaderErrorCode? _errorCode;
   bool _isLoading = false;
+
+  /// Area snapping after capture: running, and whether it moved the area
+  /// onto a found plate outline.
+  bool _snapping = false;
+  bool _areaSnapped = false;
   bool _isSupported = false;
   bool _torchOn = false;
   bool _initialized = false;
@@ -195,6 +204,18 @@ class PlateReaderController extends ChangeNotifier {
   /// True in review when the draft validates.
   bool get canConfirm => _phase == ScanPhase.review && draftIssues.isEmpty;
 
+  /// Kind of the last error, when it was a [PlateReaderException] (e.g.
+  /// [PlateReaderErrorCode.permissionDenied]), so a UI can explain it.
+  PlateReaderErrorCode? get errorCode => _errorCode;
+
+  /// True while the proposed area is being snapped to the plate on the
+  /// still (right after capture).
+  bool get isSnappingArea => _snapping;
+
+  /// True when the area was snapped onto a found plate outline — a UI can
+  /// then skip asking the user to confirm it.
+  bool get areaSnapped => _areaSnapped;
+
   /// Whether the torch is on.
   bool get torchOn => _torchOn;
 
@@ -229,6 +250,7 @@ class PlateReaderController extends ChangeNotifier {
     _isLoading = true;
     _phase = ScanPhase.initializing;
     _error = null;
+    _errorCode = null;
     _notify();
 
     try {
@@ -254,6 +276,7 @@ class PlateReaderController extends ChangeNotifier {
     } catch (e, st) {
       _logger.e('Plate reader init failed', error: e, stackTrace: st);
       _error = e is PlateReaderException ? e.message : 'Failed to start: $e';
+      _errorCode = e is PlateReaderException ? e.code : null;
       _phase = ScanPhase.error;
       _initializeCompleter = null;
       completer.completeError(e, st);
@@ -287,7 +310,9 @@ class PlateReaderController extends ChangeNotifier {
     final lines = frame.lines
         .where((l) => _roi.contains(l.box, tolerance: _roiTolerance))
         .toList(growable: false);
-    final area = _detector.detect(lines);
+    final detection = _detector.detectDetailed(lines);
+    final area = detection?.area;
+    _detectedNational = detection?.national ?? false;
     _log?.detection(lines, area);
     final stable = _tracker.add(area);
     _detectedArea = area;
@@ -323,10 +348,20 @@ class PlateReaderController extends ChangeNotifier {
         'height': frame.height,
         'detected': SessionLog.rect(_detectedArea),
         'proposed': SessionLog.rect(proposed),
+        'national': _detectedNational,
         'auto': _tracker.progress >= 1,
       });
+      // Set before the phase changes, so a UI never sees the area as
+      // "not snapped" while the snap is about to run.
+      _snapping = !_detectedNational;
+      _areaSnapped = false;
       _phase = ScanPhase.confirmingArea;
       _notify();
+      // The new national plate is framed from its number line already; its
+      // pale, hatched characters mislead the outline search.
+      if (!_detectedNational) {
+        unawaited(_snapArea(frame, proposed, _detectedArea));
+      }
       return true;
     } catch (e) {
       _onPlatformError(
@@ -336,6 +371,46 @@ class PlateReaderController extends ChangeNotifier {
     } finally {
       _capturing = false;
     }
+  }
+
+  /// Step 1b: snaps the proposed area to the plate's outline on the still
+  /// (the live area is loose and may come from an earlier frame; the
+  /// detection at the moment of the still is tried when nothing is found
+  /// near it). Applied only while the user hasn't moved the box or retaken.
+  Future<void> _snapArea(
+    CapturedFrame frame,
+    NormalizedRect proposed,
+    NormalizedRect? latest,
+  ) async {
+    final watch = Stopwatch()..start();
+    NormalizedRect? snapped;
+    _snapping = true;
+    try {
+      snapped = await snapCaptureArea(
+        frame.path,
+        proposed,
+        fallback: latest == proposed ? null : latest,
+      );
+    } catch (e) {
+      _log?.event('snapError', {'error': '$e'});
+      return;
+    } finally {
+      _snapping = false;
+      if (!_disposed) _notify();
+    }
+    _log?.event('snap', {
+      'area': SessionLog.rect(snapped),
+      'ms': watch.elapsedMilliseconds,
+    });
+    if (_disposed || snapped == null) return;
+    if (_phase != ScanPhase.confirmingArea ||
+        !identical(_frame, frame) ||
+        _area != proposed) {
+      return;
+    }
+    _area = snapped;
+    _areaSnapped = true;
+    _notify();
   }
 
   /// Step 2: replace the proposed plate area (normalized, clamped to the
@@ -552,6 +627,9 @@ class PlateReaderController extends ChangeNotifier {
   void _reset() {
     _tracker.reset();
     _detectedArea = null;
+    _detectedNational = false;
+    _snapping = false;
+    _areaSnapped = false;
     _frame = null;
     _area = null;
     _arrangement = null;

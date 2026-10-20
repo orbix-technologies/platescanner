@@ -22,6 +22,10 @@ class EthiopianPlateParser {
   /// or six / seven digits (new Ge'ez-format plates).
   static final serialPattern = RegExp(r'^([A-Z]?\d{5}|\d{6,7})$');
 
+  /// Serial of the new national plate: three letters, four digits, e.g.
+  /// `ABC1234` (motorcycles reportedly may have three digits: unconfirmed).
+  static final nationalSerialPattern = RegExp(r'^[A-Z]{3}\d{4}$');
+
   // Ge'ez is never read: the region comes from its Latin letters only, so
   // Ge'ez characters split tokens like punctuation.
   static final _splitter = RegExp(r'[^A-Za-z0-9]+');
@@ -157,7 +161,11 @@ class EthiopianPlateParser {
     final diplomatic = type == PlateServiceType.diplomatic &&
         serial != null &&
         RegExp(r'^\d{4}$').hasMatch(serial);
-    if (serial == null || (!serialPattern.hasMatch(serial) && !diplomatic)) {
+    final national = type == PlateServiceType.national &&
+        serial != null &&
+        nationalSerialPattern.hasMatch(serial);
+    if (serial == null ||
+        (!serialPattern.hasMatch(serial) && !diplomatic && !national)) {
       issues.add(PlateIssue.missingSerial);
     }
     return issues;
@@ -183,6 +191,28 @@ class EthiopianPlateParser {
       corrections: hit.corrections,
     );
   }
+
+  /// Reads one token as a new national number (`ABC1234`): three letters
+  /// as read, then four digits, where a letter read in a digit place is
+  /// mapped to its digit (the plate font's notched 0 is read as `G`, `O`,
+  /// `D`, `Q` or `C`). Old serials misread can look alike (`C06703` read
+  /// `CO67038` or `OCO670`), so all three must be read as letters and one
+  /// at least must not be a digit look-alike. Null otherwise.
+  String? readNationalSerial(String token) {
+    final t = token.toUpperCase().replaceAll(RegExp(r'[^A-Z0-9]'), '');
+    if (t.length != 7) return null;
+    final head = t.substring(0, 3), tail = t.substring(3);
+    if (!RegExp(r'^[A-Z]{3}$').hasMatch(head)) return null;
+    if (head.split('').every(_nationalDigit.containsKey)) return null;
+    final digits = tail.split('').map((c) => _nationalDigit[c] ?? c).join();
+    final serial = head + digits;
+    return nationalSerialPattern.hasMatch(serial) ? serial : null;
+  }
+
+  static const _nationalDigit = {
+    'O': '0', 'Q': '0', 'D': '0', 'G': '0', 'C': '0', 'U': '0', //
+    'I': '1', 'L': '1', 'Z': '2', 'S': '5', 'B': '8',
+  };
 
   /// Reads one token as a service code (`1`–`5`, `CD`, `AU`, `UN`, `POLICE`),
   /// correcting a letter read for a digit (`I` → `1`). Returns `null` otherwise.

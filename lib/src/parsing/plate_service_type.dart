@@ -22,16 +22,27 @@ enum PlateServiceType {
   /// Diplomatic corps (embassies carry a numbered country code).
   diplomatic('CD', 'Diplomatic', null),
 
-  /// African Union — light green, marked "አሕ" and "AU".
-  africanUnion('AU', 'African Union', null),
+  /// African Union — light green, marked "አሕ" and "AU" side by side.
+  africanUnion('AU', 'African Union', null, 'አሕ'),
 
   /// United Nations — light blue, marked "የተመ" and "UN".
-  unitedNations('UN', 'United Nations', null),
+  unitedNations('UN', 'United Nations', null, 'የተመ'),
 
   /// Police — yellow with black characters, "ፖሊስ" on the left.
-  police('POLICE', 'Police', null);
+  police('POLICE', 'Police', null, 'ፖሊስ'),
 
-  const PlateServiceType(this.code, this.label, this.ink);
+  /// Temporary — light blue on white, "ተላላፊ" on the left.
+  temporary('TEMP', 'Temporary', null, 'ተላላፊ'),
+
+  /// New national plate (Directive 1050/2025, issued from June 2026):
+  /// "ኢት" / "ETH" and a map on the left, then three letters and four digits;
+  /// no circle and no region. Its category (by colour) is not yet confirmed.
+  national('ETH', 'National (ETH)', null, 'ኢት');
+
+  const PlateServiceType(this.code, this.label, this.ink, [this.amharicLabel]);
+
+  /// Ge'ez word printed in section 1 instead of a circled number, if any.
+  final String? amharicLabel;
 
   /// Value printed in the circle (or the special tag).
   final String code;

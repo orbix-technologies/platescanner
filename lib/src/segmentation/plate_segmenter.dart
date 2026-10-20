@@ -105,6 +105,9 @@ class PlateSegmentation {
     required this.geezStack,
     required this.latinStack,
     required this.leftDigits,
+    this.leftWord = const [],
+    this.latinSideBySide = false,
+    this.twoRow = false,
     required this.columns,
     this.notes = const [],
   });
@@ -133,6 +136,18 @@ class PlateSegmentation {
   /// Big digits left of the Ge'ez (embassy number on diplomatic plates).
   final List<NormalizedRect> leftDigits;
 
+  /// Section 1 on plates without a circle: the shapes of the Ge'ez word
+  /// left of section 2 / the number (ፖሊስ, ተላላፊ, የተመ, አሕ), left to right.
+  final List<NormalizedRect> leftWord;
+
+  /// Section 4 is two letters side by side (AU) rather than stacked.
+  final bool latinSideBySide;
+
+  /// Old two-row plate: circle, Ge'ez and Latin region (letters side by
+  /// side) on the top row, the number alone below. [geezStack] and
+  /// [latinStack] then hold their letters left to right.
+  final bool twoRow;
+
   /// Every column found, left to right (diagnostics).
   final List<Column> columns;
 
@@ -152,7 +167,19 @@ class PlateSegmenter {
   List<String> _notes = [];
 
   /// Segments [g], a crop of the confirmed plate area.
+  ///
+  /// When too few characters are found, a two-row plate's big digits may
+  /// have been cut by the border clean-up: retried keeping broken rows, and
+  /// kept only if it finds a two-row plate with a full number.
   PlateSegmentation segment(GrayImage g) {
+    final first = _segment(g);
+    if (first.found && first.numberChars.length >= 5) return first;
+    final rows = _segment(g, runLines: true);
+    if (rows.twoRow && rows.numberChars.length >= 5) return rows;
+    return first;
+  }
+
+  PlateSegmentation _segment(GrayImage g, {bool runLines = false}) {
     final w = g.width, h = g.height;
     _notes = [];
     final ink = _inkMask(g);
@@ -161,7 +188,7 @@ class PlateSegmenter {
       inkCount += v;
     }
     _notes.add('image=${w}x$h ink=${(100 * inkCount / ink.length).round()}%');
-    _eraseLines(ink, w, h);
+    _eraseLines(ink, w, h, runs: runLines);
     // Shapes far wider than any character are characters joined by thin
     // strokes (watermark text, a mouse cursor): thin strokes are removed
     // there only, so thin rings and Ge'ez strokes elsewhere stay intact.
@@ -216,11 +243,18 @@ class PlateSegmenter {
       return b.width >= hd * 0.08;
     }).toList();
 
+    final rows = _twoRows(kept, hd, h);
+    if (rows != null) {
+      final two = _segmentTwoRow(rows.top, rows.bottom, ink, w, h, hd);
+      if (two != null) return two;
+    }
+
     final blobs = _splitTouching(kept, ink, w, hd);
     final columns = _mergeHalves(_columns(blobs, hd), hd);
     var number = _numberRun(columns, hd);
     if (number == null) return _empty(blobs, columns);
     number = _splitJoinedStack(number, columns, ink, w, hd);
+    number = _reclaimGappedDigit(number, columns, hd);
 
     NormalizedRect n(Blob b) =>
         NormalizedRect(b.left / w, b.top / h, b.right / w, b.bottom / h);
@@ -255,13 +289,34 @@ class PlateSegmenter {
     Column? geez;
     Column? circle;
     final leftTall = <Column>[];
+    final hasCircle =
+        columns.take(first).any((c) => c.kind == ColumnKind.circle);
     for (final c in columns.take(first).toList().reversed) {
       if (c.kind == ColumnKind.stack && geez == null && circle == null) {
+        // Without a circle, a loose short "stack" is a letter of the word
+        // with a mark above it (UN: ተ under the chip), not section 2.
+        if (!hasCircle && !c.strictStack && c.box.height < hd * 0.85) continue;
         geez = c;
       } else if (c.kind == ColumnKind.circle && circle == null) {
         circle = c;
       } else if (c.kind == ColumnKind.tall && geez != null) {
         leftTall.insert(0, c);
+      }
+    }
+
+    // No circle: the Ge'ez word in its place, right to left from section 2
+    // (or the number), letter-sized shapes reaching below the chip.
+    final word = <Column>[];
+    if (circle == null) {
+      final anchor = geez ?? number.first;
+      var edge = anchor.box.left.toDouble();
+      for (final c in columns.take(columns.indexOf(anchor)).toList().reversed) {
+        if (edge - c.box.right > pitch * 1.5) break;
+        if (c.kind == ColumnKind.tall || c.kind == ColumnKind.circle) break;
+        if (c.box.height < hd * 0.15 || c.box.height > hd * 0.9) continue;
+        if (c.box.bottom < numberBox.top + hd * 0.5) continue;
+        word.insert(0, c);
+        edge = c.box.left.toDouble();
       }
     }
 
@@ -285,9 +340,188 @@ class PlateSegmenter {
                 n(b),
             ],
       leftDigits: [for (final c in leftTall) n(c.box)],
+      leftWord: [for (final c in word) n(c.box)],
+      latinSideBySide: latin != null && latin.kind == ColumnKind.short,
       columns: columns,
       notes: _notes,
     );
+  }
+
+  /// Old two-row plates: the digits in the lower part of the crop, and four
+  /// or more letter-sized shapes on one row entirely above them, spread
+  /// across a good part of it (circle, Ge'ez and Latin region). Stacked
+  /// region letters of a one-row plate sit inside the band; screws and the
+  /// chip above it are smaller; another plate above has digit-high shapes.
+  ({List<Blob> top, List<Blob> bottom})? _twoRows(
+      List<Blob> kept, double hd, int h) {
+    final digits =
+        kept.where((b) => (b.height - hd).abs() <= hd * 0.2).toList();
+    if (digits.length < 4) return null;
+    // The digits' tilt (median of pairwise slopes of their tops), so a
+    // tilted plate's rows are compared along it.
+    double cx(Blob b) => (b.left + b.right) / 2;
+    final slopes = <double>[
+      for (var i = 0; i < digits.length; i++)
+        for (var j = i + 1; j < digits.length; j++)
+          if (cx(digits[j]) != cx(digits[i]))
+            (digits[j].top - digits[i].top) / (cx(digits[j]) - cx(digits[i]))
+    ]..sort();
+    final slope =
+        slopes.isEmpty ? 0.0 : slopes[slopes.length ~/ 2].clamp(-0.25, 0.25);
+    final x0 = digits.map(cx).reduce((a, b) => a + b) / digits.length;
+    double level(Blob b, num y) => y - slope * (cx(b) - x0);
+    final tops = [for (final d in digits) level(d, d.top)]..sort();
+    final bandTop = tops[tops.length ~/ 2];
+    // The number fills the lower half; a one-row plate's starts near the
+    // top of its crop.
+    if (bandTop < h * 0.35) return null;
+    // Digit-high shapes above the band are another plate in view.
+    if (digits.any((d) => level(d, d.bottom) <= bandTop)) return null;
+    final left = digits.map((d) => d.left).reduce((a, b) => a < b ? a : b);
+    final right = digits.map((d) => d.right).reduce((a, b) => a > b ? a : b);
+    final candidates = kept
+        .where((b) =>
+            level(b, b.bottom) <= bandTop - hd * 0.03 &&
+            b.height >= hd * 0.2 &&
+            b.height <= hd * 0.9)
+        .toList();
+    if (candidates.length < 3) return null;
+    // One row: centres level with each other.
+    double centre(Blob b) => level(b, (b.top + b.bottom) / 2);
+    final centres = [for (final b in candidates) centre(b)]..sort();
+    final mid = centres[centres.length ~/ 2];
+    final hs = [for (final b in candidates) b.height]..sort();
+    final ht = hs[hs.length ~/ 2];
+    final top = [
+      for (final b in candidates)
+        if ((centre(b) - mid).abs() <= ht * 0.5) b,
+    ];
+    // Circle and four letters, about half a digit high; screws and the
+    // chip above a one-row plate's digits are smaller and fewer.
+    if (top.where((b) => b.height >= hd * 0.35).length < 4) return null;
+    final span = top.map((b) => b.right).reduce((a, b) => a > b ? a : b) -
+        top.map((b) => b.left).reduce((a, b) => a < b ? a : b);
+    if (span < (right - left) * 0.4) return null;
+    return (
+      top: top,
+      bottom: [
+        for (final b in kept)
+          if (!top.contains(b)) b
+      ],
+    );
+  }
+
+  /// Sections of an old two-row plate: the number from the bottom row; on
+  /// the top row, left to right, the circle, two Ge'ez letters, the chip
+  /// (smaller, skipped) and two Latin letters. Null when the top row
+  /// doesn't read so.
+  PlateSegmentation? _segmentTwoRow(List<Blob> top, List<Blob> bottom,
+      Uint8List ink, int w, int h, double hd) {
+    final blobs = _splitTouching(bottom, ink, w, hd);
+    final columns = _mergeHalves(_columns(blobs, hd), hd);
+    var number = _numberRun(columns, hd);
+    if (number == null) return null;
+    // A screw merged with the border corner can sit at either end: far
+    // wider than the digits.
+    final widths = [for (final c in number) c.box.width]..sort();
+    final typical = widths[widths.length ~/ 2];
+    number = [...number];
+    while (number.length > 4 && number.first.box.width > typical * 1.6) {
+      number.removeAt(0);
+    }
+    while (number.length > 4 && number.last.box.width > typical * 1.6) {
+      number.removeLast();
+    }
+
+    // Top row: its own scale (letters ~ half a digit).
+    final heights = [for (final b in top) b.height]..sort();
+    final ht = heights[heights.length ~/ 2].toDouble();
+    final row = _columns(top, ht * 1.3);
+    final circleAt = row.indexWhere((c) => c.kind == ColumnKind.circle);
+    // Letter-shaped only: not the chip (smaller), a screw merged with the
+    // border corner (wider than tall) or a sliver of the border.
+    final letters = [
+      for (var i = 0; i < row.length; i++)
+        if (i != circleAt &&
+            row[i].box.height >= ht * 0.7 &&
+            row[i].box.width <= row[i].box.height * 1.3 &&
+            row[i].box.width >= ht * 0.25)
+          row[i],
+    ];
+    // A blurred ring isn't recognised: the circle is the first shape.
+    var circle = circleAt < 0 ? null : row[circleAt];
+    if (circle == null && letters.length >= 5) circle = letters.removeAt(0);
+    // Top row not read in full (blur, a letter joined to the chip): the
+    // number below is still the plate's — better than one-row guesses.
+    final full = letters.length >= 4;
+    final geez = full ? letters.take(2).toList() : const <Column>[];
+    final latin =
+        full ? letters.skip(letters.length - 2).toList() : const <Column>[];
+
+    NormalizedRect n(Blob b) =>
+        NormalizedRect(b.left / w, b.top / h, b.right / w, b.bottom / h);
+    final numberBox = number.map((c) => c.box).reduce((a, b) => a.union(b));
+    _notes.add('two rows');
+    return PlateSegmentation(
+      number: n(numberBox),
+      numberChars: [for (final c in number) n(c.box)],
+      code: circle == null ? null : n(circle.box),
+      codeInner: circle == null ? null : _inner(circle).let(n),
+      geezStack: [for (final c in geez) n(c.box)],
+      latinStack: [for (final c in latin) n(c.box)],
+      leftDigits: const [],
+      latinSideBySide: full,
+      twoRow: true,
+      columns: [...row, ...columns],
+      notes: _notes,
+    );
+  }
+
+  /// A stencil "1" broken by its gap is classed a stack; with a digit-high
+  /// shape a pitch before it and the Ge'ez stack before that, both are
+  /// digits the number lost (police plates: "0" and "1" of 012345). On a
+  /// 1–5 plate the circle precedes the Ge'ez; on a diplomatic plate the
+  /// embassy digits do, and its Ge'ez sits further from the number.
+  List<Column> _reclaimGappedDigit(
+      List<Column> number, List<Column> columns, double hd) {
+    if (number.length < 2) return number;
+    final pitch =
+        (number.last.box.right - number.first.box.left) / number.length;
+    double cx(Column c) => (c.box.left + c.box.right) / 2;
+    var i = columns.indexOf(number.first) - 1;
+    final pieces = <Column>[];
+    // The 1's foot, cut off below.
+    while (i >= 0 &&
+        columns[i].kind == ColumnKind.short &&
+        columns[i].box.height < hd * 0.3) {
+      pieces.add(columns[i]);
+      i--;
+    }
+    if (i < 2) return number;
+    final gapped = columns[i], digit = columns[i - 1];
+    var j = i - 2;
+    while (j >= 0 && columns[j].kind == ColumnKind.short) {
+      j--;
+    }
+    if (j < 0 || columns[j].kind != ColumnKind.stack) return number;
+    if (gapped.kind != ColumnKind.stack || digit.kind != ColumnKind.tall) {
+      return number;
+    }
+    if (gapped.box.height < hd * 0.85 || gapped.box.width > pitch * 0.6) {
+      return number;
+    }
+    if ((digit.box.height - hd).abs() > hd * 0.15) return number;
+    if (cx(number.first) - cx(gapped) > pitch * 1.3 ||
+        cx(gapped) - cx(digit) > pitch * 1.0) {
+      return number;
+    }
+    final blobs = [...gapped.blobs, for (final c in pieces) ...c.blobs];
+    _notes.add('reclaimed gapped digit');
+    return [
+      digit,
+      Column(blobs, blobs.reduce((a, b) => a.union(b)), ColumnKind.tall),
+      ...number,
+    ];
   }
 
   /// Union of the shapes inside a circle column's ring.
@@ -388,24 +622,41 @@ class PlateSegmenter {
   }
 
   /// Clears rows / columns that are mostly ink: the plate border.
-  void _eraseLines(Uint8List ink, int w, int h) {
-    for (var y = 0; y < h; y++) {
-      var n = 0;
-      for (var x = 0; x < w; x++) {
-        n += ink[y * w + x];
-      }
-      if (n > w * 0.5) {
-        for (var x = 0; x < w; x++) {
-          ink[y * w + x] = 0;
+  /// Clears the plate border: rows / columns that are mostly ink. With
+  /// [runs], only those holding one long unbroken run — a row through the
+  /// big digits of a two-row plate (filling most of its width, but broken
+  /// by the gaps between them) then stays.
+  void _eraseLines(Uint8List ink, int w, int h, {bool runs = false}) {
+    int count(int n, int Function(int) at) {
+      if (!runs) {
+        var c = 0;
+        for (var i = 0; i < n; i++) {
+          c += at(i);
         }
+        return c;
+      }
+      // Longest run; gaps of a couple of pixels (wear, JPEG) don't end it.
+      var best = 0, run = 0, gap = 0;
+      for (var i = 0; i < n; i++) {
+        if (at(i) == 1) {
+          run += gap + 1;
+          gap = 0;
+          if (run > best) best = run;
+        } else if (run > 0 && ++gap > 2) {
+          run = 0;
+          gap = 0;
+        }
+      }
+      return best;
+    }
+
+    for (var y = 0; y < h; y++) {
+      if (count(w, (x) => ink[y * w + x]) > w * 0.5) {
+        ink.fillRange(y * w, (y + 1) * w, 0);
       }
     }
     for (var x = 0; x < w; x++) {
-      var n = 0;
-      for (var y = 0; y < h; y++) {
-        n += ink[y * w + x];
-      }
-      if (n > h * 0.6) {
+      if (count(h, (y) => ink[y * w + x]) > h * 0.6) {
         for (var y = 0; y < h; y++) {
           ink[y * w + x] = 0;
         }

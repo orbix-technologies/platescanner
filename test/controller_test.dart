@@ -91,7 +91,7 @@ void main() {
     await controller.confirmArea();
     expect(fake.lastArea, const NormalizedRect(0.1, 0.3, 0.9, 0.5));
     expect(controller.phase, ScanPhase.review);
-    expect(controller.arrangement!.layoutText, '1 XX 0123456 AA');
+    expect(controller.arrangement!.layoutText, '1 አአ 0123456 AA');
     expect(
       [
         controller.draftCode,

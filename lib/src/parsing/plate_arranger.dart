@@ -59,6 +59,8 @@ class PlateArranger {
   ({PlateArrangement arrangement, PlateCandidate candidate}) arrange(
     AreaOcr ocr,
   ) {
+    final national = nationalFromOcr(ocr);
+    if (national != null) return national;
     var chars = _chars(ocr);
     final ignored = <PlateChar>[];
 
@@ -108,21 +110,23 @@ class PlateArranger {
             : null);
 
     if (number == null) {
+      final latinSection = useColumn
+          ? _columnSection(column)
+          : const PlateSection(
+              kind: PlateSectionKind.latinRegion,
+              value: '',
+              detected: false,
+            );
       final arrangement = PlateArrangement(
         code: _codeSection(const [], ocr.codeHint, null),
-        geezRegion: _geezSection(const [], null),
+        geezRegion:
+            geezFromLatin(_geezSection(const [], null), latinSection.value),
         number: const PlateSection(
           kind: PlateSectionKind.number,
           value: '',
           detected: false,
         ),
-        latinRegion: useColumn
-            ? _columnSection(column)
-            : const PlateSection(
-                kind: PlateSectionKind.latinRegion,
-                value: '',
-                detected: false,
-              ),
+        latinRegion: latinSection,
         ignored: [
           ...ignored,
           for (final c in chars) PlateChar(c.text, c.box),
@@ -211,7 +215,7 @@ class PlateArranger {
         special: special,
         embassy: embassy,
       ),
-      geezRegion: _geezSection(geezChars, geezZone),
+      geezRegion: geezFromLatin(_geezSection(geezChars, geezZone), latin.value),
       number: number.section,
       // Show where section 4 is expected even when nothing was read there.
       latinRegion: latin.box != null
@@ -416,21 +420,30 @@ class PlateArranger {
   }) {
     final box = zone != null && zone.width > 0.01 ? zone : _union(chars);
     if (special != null) {
+      final type = PlateServiceType.fromCode(special);
       final mission = embassy == null
           ? null
           : diplomaticMissions[int.tryParse(embassy) ?? -1];
       return PlateSection(
         kind: PlateSectionKind.code,
         value: special,
-        chars: box == null ? const [] : [PlateChar(special, box)],
+        // Diplomatic: the embassy number is what section 1 shows.
+        // Diplomatic: the embassy number; others: their Ge'ez word.
+        chars: box == null
+            ? const []
+            : [
+                PlateChar(
+                    special == 'CD'
+                        ? embassy ?? special
+                        : type?.amharicLabel ?? special,
+                    box)
+              ],
         box: box,
         note: special == 'CD'
             ? (embassy == null
                 ? 'diplomatic'
                 : 'embassy $embassy${mission == null ? '' : ' · $mission'}')
-            : special == PlateServiceType.police.code
-                ? 'yellow plate'
-                : 'special plate',
+            : type?.label ?? 'special plate',
       );
     }
 
@@ -462,6 +475,110 @@ class PlateArranger {
       box: box,
       detected: value != null,
       note: note,
+    );
+  }
+
+  /// The new national plate (`ETH`, 2026) from the whole-area OCR: a line
+  /// read as three letters and four digits ([EthiopianPlateParser.
+  /// readNationalSerial]). Section 1 is the ኢት / ETH block (boxed on the
+  /// `ETH` element when read); there is no region. Null when no line reads
+  /// so.
+  ({PlateArrangement arrangement, PlateCandidate candidate})? nationalFromOcr(
+      AreaOcr ocr) {
+    OcrElement? line;
+    String? serial;
+    for (final e in ocr.elements) {
+      serial = parser.readNationalSerial(e.text);
+      if (serial != null) {
+        line = e;
+        break;
+      }
+    }
+    if (line == null || serial == null) return null;
+    final b = line.box, n = serial.length;
+    final eth = ocr.elements
+        .where((e) => e.text.toUpperCase().contains('ETH'))
+        .firstOrNull;
+    const type = PlateServiceType.national;
+    const none = 'none on ETH plates';
+    final arrangement = PlateArrangement(
+      code: PlateSection(
+        kind: PlateSectionKind.code,
+        value: type.code,
+        chars:
+            eth == null ? const [] : [PlateChar(type.amharicLabel!, eth.box)],
+        box: eth?.box,
+        note: type.label,
+      ),
+      geezRegion: const PlateSection(
+        kind: PlateSectionKind.geezRegion,
+        value: '',
+        detected: false,
+        note: none,
+      ),
+      number: PlateSection(
+        kind: PlateSectionKind.number,
+        value: serial,
+        chars: [
+          for (var i = 0; i < n; i++)
+            PlateChar(
+              serial[i],
+              NormalizedRect(b.left + b.width * i / n, b.top,
+                  b.left + b.width * (i + 1) / n, b.bottom),
+            ),
+        ],
+        box: b,
+      ),
+      latinRegion: const PlateSection(
+        kind: PlateSectionKind.latinRegion,
+        value: '',
+        detected: false,
+        note: none,
+      ),
+    );
+    return (
+      arrangement: arrangement,
+      candidate: _candidate(arrangement, ocr, 0)
+    );
+  }
+
+  /// Section 2 from section 4 when the Ge'ez itself wasn't read: the
+  /// region's Ge'ez abbreviation (AA → አአ, OR → ኦሮ), one letter per
+  /// stacked box ([boxes], else the halves of the section's box). Unchanged
+  /// when it was read or [latin] names no region.
+  PlateSection geezFromLatin(
+    PlateSection geez,
+    String latin, {
+    List<NormalizedRect> boxes = const [],
+  }) {
+    if (geez.detected) return geez;
+    final region = parser.readRegion(latin);
+    if (region == null) return geez;
+    final letters = region.amharicLabel.split('');
+    final box = geez.box;
+    final slots = boxes.length == letters.length
+        ? boxes
+        : box == null
+            ? const <NormalizedRect>[]
+            : [
+                for (var i = 0; i < letters.length; i++)
+                  NormalizedRect(
+                    box.left,
+                    box.top + box.height * i / letters.length,
+                    box.right,
+                    box.top + box.height * (i + 1) / letters.length,
+                  ),
+              ];
+    return PlateSection(
+      kind: PlateSectionKind.geezRegion,
+      value: region.amharicLabel,
+      chars: [
+        if (slots.length == letters.length)
+          for (var i = 0; i < letters.length; i++)
+            PlateChar(letters[i], slots[i]),
+      ],
+      box: box,
+      note: 'from ${region.code}',
     );
   }
 
