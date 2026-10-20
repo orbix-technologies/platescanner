@@ -37,22 +37,19 @@ import 'package:et_plate_reader/et_plate_reader.dart';
 final availability = await PlateReader.checkAvailability();
 if (!availability.isSupported) return; // show availability.message
 
-final controller = PlateReaderController();
-final record = await Navigator.of(context).push<PlateRecord>(
-  MaterialPageRoute(
-    builder: (context) => Scaffold(
-      body: PlateScannerView(
-        controller: controller,
-        onPlateConfirmed: (r) => Navigator.pop(context, r),
-        onCancel: () => Navigator.pop(context),
-        onError: (e) { /* permission / camera failed */ },
-      ),
-    ),
-  ),
-);
-controller.dispose();
-print(record?.canonical); // 2-AA-A12345
+final result = await EtPlateReader.scan(context);
+if (result == null) return;            // user closed the scanner
+result.plate;                          // 2-AA-B05475
+result.record.serviceType?.label;      // Private
+result.record.region?.englishName;     // Addis Ababa
+result.plateImage;                     // JPEG of the plate (Uint8List)
 ```
+
+`scan()` opens the scanner full screen, asks for camera permission
+(explaining it, with a settings link, when denied) and returns the confirmed
+plate, or `null` when the user closes it. See
+[doc/HOST_INTEGRATION.md](doc/HOST_INTEGRATION.md) for texts, colours and
+steps.
 
 ## Optional persistence
 
@@ -81,7 +78,7 @@ c.isValid; // true
 
 | Import | Contents |
 |--------|----------|
-| `et_plate_reader.dart` | `PlateReader` / `PlateReaderAvailability`, `PlateScannerView`, `PlateReaderController`, `ScanPhase`, `PlateRecord`, `PlateCandidate`, `EthiopianPlateParser`, `EthiopianRegion`, `PlateServiceType`, `PlateStabilityVoter`, `PlateRecognitionService` |
+| `et_plate_reader.dart` | `EtPlateReader.scan`, `PlateScanResult`, `PlateScannerOptions`, `PlateScannerStrings`, `PlateScannerTheme`, `ConfirmAreaMode`, `PlateReader` / `PlateReaderAvailability`, `PlateScannerView`, `PlateReaderController`, `ScanPhase`, `PlateRecord`, `PlateCandidate`, `EthiopianPlateParser`, `EthiopianRegion`, `PlateServiceType`, `PlateStabilityVoter`, `PlateRecognitionService` |
 | `persistence.dart` | `PlateRecordStore`, `SqlitePlateRecordStore` |
 
 Do not import `src/` from host apps.
@@ -110,3 +107,4 @@ characters read, the arrangement and the reading for each.
 ## License
 
 MIT — see [LICENSE](LICENSE).
+# platescanner
