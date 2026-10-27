@@ -596,6 +596,8 @@ class PlateReaderController extends ChangeNotifier {
       imagePath: _frame?.path,
       location: _location,
       description: _description,
+      plateArea: _area,
+      sectionAreas: _sectionAreas(),
     );
     _log?.event('done', {
       'record': record.canonical,
@@ -617,6 +619,25 @@ class PlateReaderController extends ChangeNotifier {
     _phase = _initialized ? ScanPhase.idle : _phase;
     _notify();
   }
+
+  /// Each arranged section's box, from plate-area to photo coordinates.
+  Map<String, NormalizedRect> _sectionAreas() {
+    final area = _area, a = _arrangement;
+    if (area == null || a == null) return const {};
+    return {
+      for (final s in a.sections)
+        if (s.box != null) s.kind.name: toPhoto(area, s.box!),
+    };
+  }
+
+  /// [inner] (normalized to [area]) in the photo's coordinates.
+  static NormalizedRect toPhoto(NormalizedRect area, NormalizedRect inner) =>
+      NormalizedRect(
+        area.left + inner.left * area.width,
+        area.top + inner.top * area.height,
+        area.left + inner.right * area.width,
+        area.top + inner.bottom * area.height,
+      );
 
   /// Toggle the torch.
   Future<void> toggleTorch() async {

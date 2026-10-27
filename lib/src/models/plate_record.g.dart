@@ -36,6 +36,10 @@ PlateRecord _$PlateRecordFromJson(Map<String, dynamic> json) => PlateRecord(
           : PlateLocation.fromJson(json['location'] as Map<String, dynamic>),
       description: json['description'] as String?,
       status: json['status'] as String? ?? 'confirmed',
+      plateArea: _rectFromJson(json['plateArea'] as Map<String, dynamic>?),
+      sectionAreas: json['sectionAreas'] == null
+          ? const {}
+          : _areasFromJson(json['sectionAreas'] as Map<String, dynamic>?),
     );
 
 Map<String, dynamic> _$PlateRecordToJson(PlateRecord instance) =>
@@ -53,6 +57,8 @@ Map<String, dynamic> _$PlateRecordToJson(PlateRecord instance) =>
       'location': instance.location?.toJson(),
       'description': instance.description,
       'status': instance.status,
+      'plateArea': _rectToJson(instance.plateArea),
+      'sectionAreas': _areasToJson(instance.sectionAreas),
     };
 
 const _$PlateLayoutEnumMap = {

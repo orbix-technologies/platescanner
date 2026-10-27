@@ -20,6 +20,8 @@ android {
 
     defaultConfig {
         minSdk = 24
+        // Keeps ML Kit's text recognizer in host apps' minified release builds.
+        consumerProguardFiles "consumer-rules.pro"
     }
 
     compileOptions {

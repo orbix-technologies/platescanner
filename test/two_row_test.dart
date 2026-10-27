@@ -72,4 +72,24 @@ void main() {
       expect(seg.twoRow, isFalse, reason: name);
     }
   });
+
+  // Walking patrol photos (2026-10-23): tilted two-row plates whose
+  // region row touches the border and whose circle and Ge'ez letters merge.
+  // B32675's circle is not found yet.
+  for (final (plate, seed, circle) in [
+    ('B32675', const NormalizedRect(0.1875, 0.338, 0.5988, 0.4422), false),
+    ('C69001', const NormalizedRect(0.0, 0.3922, 0.5714, 0.5484), true),
+  ]) {
+    test('patrol photo $plate: the top row is found and read in sections', () {
+      final path = 'test/fixtures/stills/patrol_$plate.jpg';
+      final bounds = findCaptureBoundsSync(path, seed);
+      expect(bounds?.twoRow, isTrue);
+      final seg = segmentCaptureSync(path, bounds!.area, twoRowHint: true)!;
+      expect(seg.twoRow, isTrue);
+      if (circle) expect(seg.code, isNotNull);
+      expect(seg.geezStack, hasLength(2));
+      expect(seg.latinStack, hasLength(2));
+      expect(seg.numberChars.length, greaterThanOrEqualTo(6));
+    });
+  }
 }

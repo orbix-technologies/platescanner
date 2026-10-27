@@ -139,4 +139,20 @@ void main() {
         crops.where((c) => c.role == 'latinWord').single.group, hasLength(2));
     expect(crops.where((c) => c.role == 'codeRepeat').single.repeat, 3);
   });
+
+  test('border bars and a caught top row are not part of the number', () {
+    final r = reader.read(
+      seg,
+      crops,
+      reads({
+        // Patrol logs: "|97073" / "AA\nA85259".
+        'number0': ['|0123456', '0123456', 'AA\n|0123455'],
+        'latin0': ['E', 'E', null],
+        'latin1': ['T', 'T', null],
+        'code0': ['4', '4', null],
+      }),
+      const AreaOcr(elements: []),
+    );
+    expect(r.arrangement.number.value, '0123456');
+  });
 }

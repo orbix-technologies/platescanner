@@ -14,18 +14,26 @@ const segmentationHeight = 160;
 /// Segments [area] (normalized) of the JPEG still at [path], off the UI
 /// isolate. Boxes in the result are normalized to [area]. Returns null when
 /// the image can't be read.
+///
+/// [twoRowHint]: the outline search saw a row of letters above the number
+/// ([PlateBounds.twoRow]).
 Future<PlateSegmentation?> segmentCapture(
   String path,
-  NormalizedRect area,
-) async {
+  NormalizedRect area, {
+  bool twoRowHint = false,
+}) async {
   if (!File(path).existsSync()) return null;
   final l = area.left, t = area.top, r = area.right, b = area.bottom;
-  return Isolate.run(
-      () => segmentCaptureSync(path, NormalizedRect(l, t, r, b)));
+  return Isolate.run(() => segmentCaptureSync(path, NormalizedRect(l, t, r, b),
+      twoRowHint: twoRowHint));
 }
 
 /// Synchronous body of [segmentCapture] (tests, tools).
-PlateSegmentation? segmentCaptureSync(String path, NormalizedRect area) {
+PlateSegmentation? segmentCaptureSync(
+  String path,
+  NormalizedRect area, {
+  bool twoRowHint = false,
+}) {
   final file = File(path);
   if (!file.existsSync()) return null;
   final photo = img.decodeImage(file.readAsBytesSync());
@@ -48,6 +56,7 @@ PlateSegmentation? segmentCaptureSync(String path, NormalizedRect area) {
       gray.height,
       gray.getBytes(order: img.ChannelOrder.red),
     ),
+    twoRowHint: twoRowHint,
   );
 }
 
@@ -86,6 +95,29 @@ NormalizedRect? snapCaptureAreaSync(
   const finder = PlateBoundsFinder();
   return finder.find(image, seed) ??
       (fallback == null ? null : finder.find(image, fallback));
+}
+
+/// The plate outline around [seed] (normalized) on the JPEG still at
+/// [path], with the edges found, off the UI isolate; null when the image
+/// can't be read or no plate is found.
+Future<PlateBounds?> findCaptureBounds(String path, NormalizedRect seed) async {
+  if (!File(path).existsSync()) return null;
+  final s = NormalizedRect(seed.left, seed.top, seed.right, seed.bottom);
+  return Isolate.run(() => findCaptureBoundsSync(path, s));
+}
+
+/// Synchronous body of [findCaptureBounds] (tests, tools).
+PlateBounds? findCaptureBoundsSync(String path, NormalizedRect seed) {
+  final file = File(path);
+  if (!file.existsSync()) return null;
+  final photo = img.decodeImage(file.readAsBytesSync());
+  if (photo == null) return null;
+  final gray = img.grayscale(photo);
+  return const PlateBoundsFinder().findDetailed(
+    GrayImage(
+        gray.width, gray.height, gray.getBytes(order: img.ChannelOrder.red)),
+    seed,
+  );
 }
 
 /// JPEG of [area] (normalized) of the still at [path], with a little margin,

@@ -460,7 +460,8 @@ class PlateSectionReader {
   /// as "1": "BO5475" + "1"); without its last character it votes too —
   /// mapped again, since the extra character changes how a leading letter
   /// is taken (session logs: B05475).
-  static List<String> _numberReads(List<String?> raw) {
+  static List<String> _numberReads(List<String?> input) {
+    final raw = input.map(_numberLine).toList();
     final mapped = raw.map(_digits).toList();
     final lengths =
         _majority(mapped.where((m) => m.length >= 4).map((m) => '${m.length}'));
@@ -477,6 +478,21 @@ class PlateSectionReader {
       for (var i = 0; i < mapped.length; i++)
         mapped[i].length == common + 1 ? trimmed(i) : mapped[i],
     ];
+  }
+
+  /// One whole-number read cleaned of what isn't the number: of several
+  /// lines (a two-row plate's top row caught in the crop: "AA\nA85259") the
+  /// one with the most digits; bars at either end are the plate's border,
+  /// not a 1 ("|97073"). Patrol logs.
+  static String? _numberLine(String? read) {
+    if (read == null) return null;
+    var line = read;
+    final lines = read.split('\n').where((l) => l.trim().isNotEmpty).toList();
+    if (lines.length > 1) {
+      int digits(String l) => RegExp(r'\d').allMatches(l).length;
+      line = lines.reduce((a, b) => digits(b) > digits(a) ? b : a);
+    }
+    return line.trim().replaceAll(RegExp(r'^[|!\[\]]+|[|!\[\]]+$'), '');
   }
 
   /// Whether [seg]'s shapes left of section 2 are a Ge'ez word (ፖሊስ,

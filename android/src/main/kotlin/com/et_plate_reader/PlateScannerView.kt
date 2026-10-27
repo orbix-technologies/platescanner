@@ -38,6 +38,7 @@ import java.io.FileOutputStream
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * CameraX preview + ML Kit Latin OCR.
@@ -49,6 +50,8 @@ class PlateScannerView(
     private val context: Context,
     messenger: BinaryMessenger,
     viewId: Int,
+    /** Patrol: plates passing by. Larger frames, steady short exposure. */
+    private val patrol: Boolean = false,
 ) : PlatformView, LifecycleOwner, MethodChannel.MethodCallHandler {
 
     private val channel = MethodChannel(messenger, "${PlateScannerViewFactory.VIEW_TYPE}_$viewId")
@@ -67,6 +70,12 @@ class PlateScannerView(
     private var imageCapture: ImageCapture? = null
     private var disposed = false
     @Volatile private var pendingCapture: MethodChannel.Result? = null
+
+    // Patrol: the last few analysed frames that read a number, by frame id,
+    // so a vehicle's picture is the very frame its number was read from.
+    private val frameIds = AtomicInteger(0)
+    private val keptFrames = LinkedHashMap<Int, Bitmap>()
+    private val saveExecutor: ExecutorService = Executors.newSingleThreadExecutor()
 
     override val lifecycle: Lifecycle get() = lifecycleRegistry
 
@@ -95,22 +104,38 @@ class PlateScannerView(
                 val cameraProvider = future.get()
                 provider = cameraProvider
 
-                val preview = Preview.Builder().build().also {
-                    it.setSurfaceProvider(previewView.surfaceProvider)
-                }
-                val analysis = ImageAnalysis.Builder()
+                val previewBuilder = Preview.Builder()
+                val analysisBuilder = ImageAnalysis.Builder()
                     .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                     .setResolutionSelector(
                         ResolutionSelector.Builder()
                             .setResolutionStrategy(
                                 ResolutionStrategy(
-                                    Size(1280, 720),
+                                    // Patrol: plates further away and smaller.
+                                    if (patrol) Size(1920, 1080) else Size(1280, 720),
                                     ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER,
                                 ),
                             )
                             .build(),
                     )
-                    .build()
+                if (patrol) {
+                    // A steady 30 fps keeps each exposure at or under ~33 ms,
+                    // so plates passing by blur less than with the default
+                    // auto exposure (which lengthens it in low light).
+                    val fps = android.util.Range(30, 30)
+                    androidx.camera.camera2.interop.Camera2Interop.Extender(previewBuilder)
+                        .setCaptureRequestOption(
+                            android.hardware.camera2.CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, fps,
+                        )
+                    androidx.camera.camera2.interop.Camera2Interop.Extender(analysisBuilder)
+                        .setCaptureRequestOption(
+                            android.hardware.camera2.CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, fps,
+                        )
+                }
+                val preview = previewBuilder.build().also {
+                    it.setSurfaceProvider(previewView.surfaceProvider)
+                }
+                val analysis = analysisBuilder.build()
                 analysis.setAnalyzer(analysisExecutor, ::analyze)
 
                 // Stills for area confirmation and reading: far more pixels on
@@ -118,14 +143,34 @@ class PlateScannerView(
                 val capture = ImageCapture.Builder()
                     .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
                     .setResolutionSelector(
-                        ResolutionSelector.Builder()
-                            .setResolutionStrategy(
-                                ResolutionStrategy(
-                                    Size(2560, 1440),
-                                    ResolutionStrategy.FALLBACK_RULE_CLOSEST_LOWER_THEN_HIGHER,
-                                ),
-                            )
-                            .build(),
+                        if (patrol) {
+                            // Patrol: plates are small in view, so the most
+                            // pixels the sensor gives in its own 4:3 shape,
+                            // up to ~8 MP (decoding larger is slow). Many
+                            // phones have no 16:9 size between 1080p and the
+                            // sensor's, so 2560×1440 fell back to 1080p.
+                            ResolutionSelector.Builder()
+                                .setAspectRatioStrategy(
+                                    androidx.camera.core.resolutionselector.AspectRatioStrategy
+                                        .RATIO_4_3_FALLBACK_AUTO_STRATEGY,
+                                )
+                                .setResolutionStrategy(
+                                    ResolutionStrategy(
+                                        Size(3264, 2448),
+                                        ResolutionStrategy.FALLBACK_RULE_CLOSEST_LOWER_THEN_HIGHER,
+                                    ),
+                                )
+                                .build()
+                        } else {
+                            ResolutionSelector.Builder()
+                                .setResolutionStrategy(
+                                    ResolutionStrategy(
+                                        Size(2560, 1440),
+                                        ResolutionStrategy.FALLBACK_RULE_CLOSEST_LOWER_THEN_HIGHER,
+                                    ),
+                                )
+                                .build()
+                        },
                     )
                     .build()
 
@@ -139,6 +184,8 @@ class PlateScannerView(
 
                 cameraProvider.unbindAll()
                 camera = try {
+                    // Patrol too: full-resolution stills of the closest view
+                    // of each vehicle, for reading its code and region.
                     cameraProvider.bindToLifecycle(this, CameraSelector.DEFAULT_BACK_CAMERA, group(true))
                         .also { imageCapture = capture }
                 } catch (e: Exception) {
@@ -147,6 +194,20 @@ class PlateScannerView(
                     cameraProvider.unbindAll()
                     imageCapture = null
                     cameraProvider.bindToLifecycle(this, CameraSelector.DEFAULT_BACK_CAMERA, group(false))
+                }
+                Log.i(
+                    TAG,
+                    "bound patrol=$patrol analysis=${analysis.resolutionInfo?.resolution} " +
+                        "still=${imageCapture?.resolutionInfo?.resolution}",
+                )
+                if (patrol) {
+                    // Plates of cars passed a few metres away fill a tenth of
+                    // the frame: zoom in so their code and region letters
+                    // have enough pixels (patrol logs).
+                    camera?.let { cam ->
+                        val max = cam.cameraInfo.zoomState.value?.maxZoomRatio ?: 1f
+                        cam.cameraControl.setZoomRatio(minOf(PATROL_ZOOM, max))
+                    }
                 }
                 channel.invokeMethod("onReady", null)
             } catch (e: Exception) {
@@ -171,6 +232,7 @@ class PlateScannerView(
             val text = Tasks.await(recognizer.process(InputImage.fromMediaImage(media, rotation)))
             if (!analyzing.get() || disposed) return
 
+            val id = frameIds.incrementAndGet()
             val lines = ArrayList<Map<String, Any>>()
             for (block in text.textBlocks) {
                 for (line in block.lines) {
@@ -187,8 +249,11 @@ class PlateScannerView(
                     )
                 }
             }
+            if (patrol && text.textBlocks.any { b -> b.lines.any { l -> l.text.count { it.isDigit() } >= 4 } }) {
+                keepFrame(id, visibleBitmap(proxy, rotation, crop))
+            }
             main.post {
-                if (!disposed) channel.invokeMethod("onFrame", mapOf("lines" to lines))
+                if (!disposed) channel.invokeMethod("onFrame", mapOf("lines" to lines, "frameId" to id))
             }
         } catch (e: Exception) {
             Log.w(TAG, "OCR failed", e)
@@ -223,16 +288,34 @@ class PlateScannerView(
     /** Saves this frame, cropped to the visible preview, as a JPEG still. */
     private fun capture(proxy: ImageProxy, rotation: Int, crop: Rect, result: MethodChannel.Result) {
         try {
-            val upright = uprightBitmap(proxy, rotation)
-            val r = Rect(crop).apply { intersect(0, 0, upright.width, upright.height) }
-            val visible = Bitmap.createBitmap(upright, r.left, r.top, r.width(), r.height())
+            save(visibleBitmap(proxy, rotation, crop), result)
+        } catch (e: Exception) {
+            main.post { result.error("capture_failed", e.message, null) }
+        }
+    }
+
+    /** The frame upright, cropped to the visible preview. */
+    private fun visibleBitmap(proxy: ImageProxy, rotation: Int, crop: Rect): Bitmap {
+        val upright = uprightBitmap(proxy, rotation)
+        val r = Rect(crop).apply { intersect(0, 0, upright.width, upright.height) }
+        return Bitmap.createBitmap(upright, r.left, r.top, r.width(), r.height())
+    }
+
+    /** Writes [bitmap] as a JPEG in the cache and returns its path to Dart. */
+    private fun save(bitmap: Bitmap, result: MethodChannel.Result) {
+        try {
             val file = File(context.cacheDir, "et_plate_${System.currentTimeMillis()}.jpg")
-            FileOutputStream(file).use { visible.compress(Bitmap.CompressFormat.JPEG, 92, it) }
-            val payload = mapOf("path" to file.absolutePath, "width" to visible.width, "height" to visible.height)
+            FileOutputStream(file).use { bitmap.compress(Bitmap.CompressFormat.JPEG, 92, it) }
+            val payload = mapOf("path" to file.absolutePath, "width" to bitmap.width, "height" to bitmap.height)
             main.post { result.success(payload) }
         } catch (e: Exception) {
             main.post { result.error("capture_failed", e.message, null) }
         }
+    }
+
+    private fun keepFrame(id: Int, bitmap: Bitmap) = synchronized(keptFrames) {
+        keptFrames[id] = bitmap
+        while (keptFrames.size > KEPT_FRAMES) keptFrames.remove(keptFrames.keys.first())
     }
 
     private fun uprightBitmap(proxy: ImageProxy, rotation: Int): Bitmap {
@@ -260,6 +343,23 @@ class PlateScannerView(
                     still != null -> takeStill(still, result)
                     else -> pendingCapture = result
                 }
+            }
+            // A frame analysed earlier (by its id), as a still: the very
+            // frame a vehicle's number was read from.
+            "frameImage" -> {
+                val id = call.argument<Int>("id") ?: -1
+                val bitmap = synchronized(keptFrames) { keptFrames[id] }
+                if (bitmap == null) {
+                    result.error("gone", "Frame $id is no longer kept", null)
+                } else {
+                    saveExecutor.execute { save(bitmap, result) }
+                }
+            }
+            // The next analysis frame as a still: instant, for patrol photos.
+            "grabFrame" -> when {
+                camera == null -> result.error("not_ready", "Camera is not ready", null)
+                pendingCapture != null -> result.error("busy", "Capture already in progress", null)
+                else -> pendingCapture = result
             }
             "setTorch" -> {
                 val on = call.argument<Boolean>("on") ?: false
@@ -290,10 +390,18 @@ class PlateScannerView(
         provider?.unbindAll()
         recognizer.close()
         analysisExecutor.shutdown()
+        saveExecutor.shutdown()
+        synchronized(keptFrames) { keptFrames.clear() }
     }
 
     companion object {
         private const val TAG = "EtPlateReader"
+
+        /** Analysed frames kept for [frameImage] (patrol). */
+        private const val KEPT_FRAMES = 4
+
+        /** Zoom while patrolling. */
+        private const val PATROL_ZOOM = 1.6f
 
         /** Rotates a buffer-space [rect] into the upright frame ML Kit reports in. */
         fun uprightRect(rect: Rect, width: Int, height: Int, rotation: Int): Rect = when (rotation) {

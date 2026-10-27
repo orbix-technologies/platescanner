@@ -4,6 +4,9 @@ import 'package:flutter/material.dart';
 
 import '../controller/plate_reader_controller.dart';
 import '../models/plate_record.dart';
+import '../patrol/patrol_controller.dart';
+import '../patrol/patrol_tracker.dart';
+import '../patrol/patrol_view.dart';
 import '../segmentation/segment_capture.dart';
 import 'plate_scanner_options.dart';
 import 'plate_scanner_strings.dart';
@@ -66,6 +69,82 @@ abstract final class EtPlateReader {
             location: location,
             recordSessions: recordSessions,
           ),
+        ),
+      );
+
+  /// Patrol: opens the camera full screen and reads every plate it passes
+  /// (walking or riding past parked vehicles), with no taps. Each vehicle
+  /// is reported once, after it has passed, to [onVehicle] — and again when
+  /// its photo has been read in full (code and region added).
+  /// [onVehicleRemoved] gets a reported vehicle that turned out to be
+  /// another one seen twice (merged into it): delete it if you saved it.
+  ///
+  /// Returns the vehicles read, newest first, when the user taps Finish;
+  /// null when they close it. Vehicles with an uncertain number have
+  /// [PatrolVehicle.needsCheck] set.
+  static Future<List<PatrolVehicle>?> patrol(
+    BuildContext context, {
+    void Function(PatrolVehicle vehicle)? onVehicle,
+    void Function(PatrolVehicle vehicle)? onVehicleRemoved,
+    PlateScannerStrings? strings,
+    PlateScannerTheme? theme,
+    bool? recordSessions,
+  }) =>
+      Navigator.of(context, rootNavigator: true).push<List<PatrolVehicle>>(
+        MaterialPageRoute(
+          fullscreenDialog: true,
+          builder: (_) => _PatrolPage(
+            onVehicle: onVehicle,
+            onVehicleRemoved: onVehicleRemoved,
+            strings: strings,
+            theme: theme,
+            recordSessions: recordSessions,
+          ),
+        ),
+      );
+}
+
+class _PatrolPage extends StatefulWidget {
+  const _PatrolPage({
+    required this.onVehicle,
+    required this.onVehicleRemoved,
+    required this.strings,
+    required this.theme,
+    required this.recordSessions,
+  });
+
+  final void Function(PatrolVehicle vehicle)? onVehicle;
+  final void Function(PatrolVehicle vehicle)? onVehicleRemoved;
+  final PlateScannerStrings? strings;
+  final PlateScannerTheme? theme;
+  final bool? recordSessions;
+
+  @override
+  State<_PatrolPage> createState() => _PatrolPageState();
+}
+
+class _PatrolPageState extends State<_PatrolPage> {
+  late final PatrolController _controller = PatrolController(
+    onVehicle: widget.onVehicle,
+    onVehicleRemoved: widget.onVehicleRemoved,
+    recordSessions: widget.recordSessions,
+  );
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        backgroundColor: Colors.black,
+        body: PatrolView(
+          controller: _controller,
+          strings: widget.strings,
+          theme: widget.theme,
+          onFinish: (all) => Navigator.of(context).pop(all),
+          onClose: () => Navigator.of(context).pop(),
         ),
       );
 }

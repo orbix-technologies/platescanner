@@ -43,6 +43,10 @@ class PlateScannerStrings {
     required this.close,
     required this.torch,
     required this.save,
+    required this.patrolHint,
+    required this.finish,
+    required this.platesRead,
+    required this.check,
   });
 
   /// English.
@@ -79,7 +83,11 @@ class PlateScannerStrings {
         unsupportedDevice = 'This device cannot read plates.',
         close = 'Close',
         torch = 'Torch',
-        save = 'Save';
+        save = 'Save',
+        patrolHint = 'Move past the vehicles — plates are read automatically',
+        finish = 'Finish',
+        platesRead = 'plates',
+        check = 'Check';
 
   /// Amharic.
   const PlateScannerStrings.am()
@@ -114,7 +122,11 @@ class PlateScannerStrings {
         unsupportedDevice = 'ይህ መሣሪያ ታርጋ ማንበብ አይችልም።',
         close = 'ዝጋ',
         torch = 'የእጅ ባትሪ',
-        save = 'አስቀምጥ';
+        save = 'አስቀምጥ',
+        patrolHint = 'በተሽከርካሪዎቹ አጠገብ ይለፉ — ታርጋዎቹ በራሳቸው ይነበባሉ',
+        finish = 'ጨርስ',
+        platesRead = 'ታርጋዎች',
+        check = 'ያረጋግጡ';
 
   /// Built-in strings for [locale]: Amharic for `am`, else English.
   factory PlateScannerStrings.forLocale(Locale? locale) =>
@@ -165,6 +177,10 @@ class PlateScannerStrings {
   /// Closes the edit form.
   final String save;
 
+  /// Patrol: the hint before any plate, the button that ends it, the label
+  /// after the count ("12 plates"), and the mark on an uncertain reading.
+  final String patrolHint, finish, platesRead, check;
+
   /// Text for [issue].
   String issue(PlateIssue issue) => switch (issue) {
         PlateIssue.missingCode => issueMissingCode,
@@ -214,6 +230,10 @@ class PlateScannerStrings {
     String? close,
     String? torch,
     String? save,
+    String? patrolHint,
+    String? finish,
+    String? platesRead,
+    String? check,
   }) =>
       PlateScannerStrings(
         fitPlate: fitPlate ?? this.fitPlate,
@@ -247,5 +267,9 @@ class PlateScannerStrings {
         close: close ?? this.close,
         torch: torch ?? this.torch,
         save: save ?? this.save,
+        patrolHint: patrolHint ?? this.patrolHint,
+        finish: finish ?? this.finish,
+        platesRead: platesRead ?? this.platesRead,
+        check: check ?? this.check,
       );
 }

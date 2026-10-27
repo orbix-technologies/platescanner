@@ -32,6 +32,15 @@ abstract class PlateRecognitionService {
   /// Save the next camera frame (exactly the visible preview) as a still.
   Future<CapturedFrame> captureFrame();
 
+  /// The next analysed frame as a still, without waiting for a full photo
+  /// (patrol). Backends without it take a [captureFrame].
+  Future<CapturedFrame> grabFrame() => captureFrame();
+
+  /// The picture of an analysed frame, by [OcrFrame.id]: the very frame
+  /// its text was read from (patrol). Backends without it, or once the
+  /// frame is no longer kept, give the next frame ([grabFrame]).
+  Future<CapturedFrame> frameImage(int id) => grabFrame();
+
   /// Read every character inside [area] (normalized) of a captured still.
   ///
   /// [sectionPasses] runs the slower circle / stacked-letter passes; they

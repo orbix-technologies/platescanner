@@ -132,6 +132,8 @@ class PlateRecord {
     this.location,
     this.description,
     this.status = 'confirmed',
+    this.plateArea,
+    this.sectionAreas = const {},
   });
 
   /// Unique id (UUID v4).
@@ -173,6 +175,15 @@ class PlateRecord {
   /// Host workflow status (`confirmed` by default).
   final String status;
 
+  /// Where the plate is in [imagePath] (normalized), when known.
+  @JsonKey(fromJson: _rectFromJson, toJson: _rectToJson)
+  final NormalizedRect? plateArea;
+
+  /// Where each section was read in [imagePath] (normalized): `code`,
+  /// `geezRegion`, `number`, `latinRegion` — for checking a reading.
+  @JsonKey(fromJson: _areasFromJson, toJson: _areasToJson)
+  final Map<String, NormalizedRect> sectionAreas;
+
   /// Region enum for [regionCode].
   EthiopianRegion? get region => EthiopianRegion.fromCode(regionCode);
 
@@ -180,8 +191,11 @@ class PlateRecord {
   PlateServiceType? get serviceType => PlateServiceType.fromCode(code);
 
   /// Compact form, e.g. `2-AA-A12345`.
-  String get canonical =>
-      regionCode == null ? '$code-$serial' : '$code-$regionCode-$serial';
+  String get canonical => [
+        if (code.isNotEmpty) code,
+        if (regionCode != null) regionCode,
+        serial,
+      ].join('-');
 
   /// Copy with selected fields replaced.
   PlateRecord copyWith({
@@ -193,6 +207,8 @@ class PlateRecord {
     PlateLocation? location,
     String? description,
     String? status,
+    NormalizedRect? plateArea,
+    Map<String, NormalizedRect>? sectionAreas,
   }) {
     return PlateRecord(
       id: id,
@@ -208,6 +224,8 @@ class PlateRecord {
       location: location ?? this.location,
       description: description ?? this.description,
       status: status ?? this.status,
+      plateArea: plateArea ?? this.plateArea,
+      sectionAreas: sectionAreas ?? this.sectionAreas,
     );
   }
 
@@ -221,3 +239,17 @@ class PlateRecord {
   @override
   String toString() => 'PlateRecord($canonical)';
 }
+
+NormalizedRect? _rectFromJson(Map<String, dynamic>? json) =>
+    json == null ? null : NormalizedRect.fromMap(json);
+
+Map<String, double>? _rectToJson(NormalizedRect? r) => r?.toMap();
+
+Map<String, NormalizedRect> _areasFromJson(Map<String, dynamic>? json) => {
+      for (final e in (json ?? const {}).entries)
+        e.key: NormalizedRect.fromMap(e.value as Map<Object?, Object?>),
+    };
+
+Map<String, Map<String, double>> _areasToJson(
+        Map<String, NormalizedRect> areas) =>
+    {for (final e in areas.entries) e.key: e.value.toMap()};

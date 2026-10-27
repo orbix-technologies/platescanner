@@ -17,6 +17,7 @@ print(result?.plate); // 2-AA-B05475
 [1. Add the package](#1-add-the-package) ·
 [2. Platform setup](#2-platform-setup) · [3. Scan](#3-scan) ·
 [4. Use the result](#4-use-the-result) ·
+[Patrol](#patrol-plates-read-while-passing) ·
 [5. Customise](#5-customise-optional) ·
 [Troubleshooting](#troubleshooting) · [More](#more)
 
@@ -182,6 +183,67 @@ String toCompact(PlateRecord r) {
 Agree with your backend how to send plates that don't fit such a format:
 series letters, diplomatic, police and the new ETH plates.
 
+## Patrol: plates read while passing
+
+To read every vehicle while walking or riding past parked cars, with no
+taps:
+
+```dart
+final vehicles = await EtPlateReader.patrol(
+  context,
+  onVehicle: (v) {
+    // Called once per vehicle after it has passed, and again when its photo
+    // has been read in full (code and region added). Save it here: the
+    // record's id stays the same, so the second save replaces the first.
+    myStore.save(v.toRecord());
+  },
+  // A vehicle reported earlier that turned out to be another one seen
+  // twice (a misread): it was merged into that one. Delete it.
+  onVehicleRemoved: (v) => myStore.delete(v.toRecord().id),
+);
+// Finish: every vehicle read, newest first. Close: null.
+```
+
+**Save in `onVehicle`, not only after Finish.** Closing the patrol (close
+button, back) returns null, but `onVehicle` has been called for every
+vehicle by then, including those still in view. Saving there means a closed
+patrol, or the app being killed mid-walk, loses nothing.
+
+**Keep the photos.** `photoPath` is in the app's cache, which the system
+may clear. Copy the photo into your app's own storage when you save the
+vehicle (the example app copies it into its documents folder).
+
+`PatrolVehicle`: `code`, `regionCode`, `serial`, `plate` (`2-AA-B05475`),
+`needsCheck` (the number was read only once or the frames disagree),
+`confidence`, `votes` / `reads` (frames agreeing / frames that read a
+number), `photoPath` and `photoBox` (a frame of the vehicle and the plate's
+place in it), `firstSeen` / `lastSeen`, and `toRecord()` for storage.
+
+How it works:
+
+- Each camera frame's text is read live. On Android, patrol uses 1080p
+  frames and a steady 30 fps exposure to limit motion blur.
+- Plates are followed from frame to frame and their readings voted on.
+  Each vehicle is reported once, after it has left the view. The same
+  number seen again within 90 s, e.g. its other plate, is the same vehicle.
+- One plate at a time is in focus: the closest one fully in view. It is
+  photographed and the photo read in full (as a single scan does), adding
+  the code and region; again when it is clearly closer, up to 3 photos.
+- Vehicles that never become the focus get a video frame as their photo,
+  with the live number only (no code or region), and `needsCheck` unless
+  the frames agreed.
+- Text that isn't on a plate (screens, signs, paper) is filtered out, and
+  each vehicle's pictures are searched for a plate outline around the
+  number. When none shows one, `noPlateSeen` is set and `toRecord()` has
+  status `check`: review those before acting on them.
+
+See [doc/PATROL.md](doc/PATROL.md) for each step, and for cars parked at
+90° and at 45°.
+
+This is a first version: walking pace works best. Hold the phone steady and
+point it at the plates from a few metres. Debug builds log every patrol to
+`et_plate_logs/patrol_<time>.json` for tuning.
+
 ## 5. Customise (optional)
 
 ```dart
@@ -288,7 +350,7 @@ cd example && flutter run
 ```
 
 It shows `EtPlateReader.scan` with the defaults, a quick Amharic scan without
-review, and a saved history with duplicate detection.
+review, patrol mode, and a saved history with duplicate detection.
 
 ## License
 

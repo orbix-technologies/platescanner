@@ -156,6 +156,43 @@ class ChannelPlateRecognitionService extends PlateRecognitionService {
   }
 
   @override
+  Future<CapturedFrame> frameImage(int id) async {
+    final channel = _channel;
+    if (channel == null) return grabFrame();
+    try {
+      final result = await channel
+          .invokeMapMethod<String, Object?>('frameImage', {'id': id});
+      return CapturedFrame.fromMap(result!);
+    } on MissingPluginException {
+      return grabFrame();
+    } on PlatformException {
+      // No longer kept, or not on this platform (iOS): the next frame.
+      return grabFrame();
+    }
+  }
+
+  @override
+  Future<CapturedFrame> grabFrame() async {
+    final channel = _channel;
+    if (channel == null) return captureFrame();
+    try {
+      final result =
+          await channel.invokeMapMethod<String, Object?>('grabFrame');
+      return CapturedFrame.fromMap(result!);
+    } on MissingPluginException {
+      return captureFrame();
+    } on PlatformException catch (e) {
+      // iOS has no grabFrame yet: a regular still.
+      if (e.code == 'notImplemented') return captureFrame();
+      throw PlateReaderException(
+        PlateReaderErrorCode.cameraUnavailable,
+        e.message ?? 'Could not grab the frame',
+        cause: e,
+      );
+    }
+  }
+
+  @override
   Future<AreaOcr> recognizeArea(
     String path,
     NormalizedRect area, {

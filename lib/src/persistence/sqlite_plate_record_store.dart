@@ -1,6 +1,9 @@
+import 'dart:convert';
+
 import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 
+import '../models/ocr_frame.dart';
 import '../models/plate_record.dart';
 import 'plate_record_store.dart';
 
@@ -15,7 +18,7 @@ class SqlitePlateRecordStore implements PlateRecordStore {
         _factory = factory;
 
   static const _table = 'plates';
-  static const _version = 1;
+  static const _version = 2;
 
   final String? _databasePath;
   final DatabaseFactory? _factory;
@@ -62,7 +65,9 @@ class SqlitePlateRecordStore implements PlateRecordStore {
         longitude REAL,
         accuracy_meters REAL,
         description TEXT,
-        status TEXT NOT NULL
+        status TEXT NOT NULL,
+        plate_area TEXT,
+        section_areas TEXT
       )
     ''');
     await db.execute('CREATE INDEX idx_plates_serial ON $_table (serial)');
@@ -73,6 +78,11 @@ class SqlitePlateRecordStore implements PlateRecordStore {
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     // Add migrations here as `if (oldVersion < N) { ... }`.
+    if (oldVersion < 2) {
+      // Where the plate and its sections are in the photo (JSON).
+      await db.execute('ALTER TABLE $_table ADD COLUMN plate_area TEXT');
+      await db.execute('ALTER TABLE $_table ADD COLUMN section_areas TEXT');
+    }
   }
 
   @override
@@ -153,6 +163,13 @@ class SqlitePlateRecordStore implements PlateRecordStore {
         'accuracy_meters': r.location?.accuracyMeters,
         'description': r.description,
         'status': r.status,
+        'plate_area':
+            r.plateArea == null ? null : jsonEncode(r.plateArea!.toMap()),
+        'section_areas': r.sectionAreas.isEmpty
+            ? null
+            : jsonEncode({
+                for (final e in r.sectionAreas.entries) e.key: e.value.toMap()
+              }),
       };
 
   PlateRecord _fromRow(Map<String, Object?> row) {
@@ -183,6 +200,18 @@ class SqlitePlateRecordStore implements PlateRecordStore {
             ),
       description: row['description'] as String?,
       status: row['status'] as String,
+      plateArea: row['plate_area'] == null
+          ? null
+          : NormalizedRect.fromMap(
+              jsonDecode(row['plate_area'] as String) as Map<String, dynamic>),
+      sectionAreas: row['section_areas'] == null
+          ? const {}
+          : {
+              for (final e in (jsonDecode(row['section_areas'] as String)
+                      as Map<String, dynamic>)
+                  .entries)
+                e.key: NormalizedRect.fromMap(e.value as Map<String, dynamic>),
+            },
     );
   }
 }

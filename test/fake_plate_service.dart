@@ -29,8 +29,17 @@ class FakePlateService extends PlateRecognitionService {
     _frames.add(OcrFrame(lines: lines, timestamp: DateTime(2026)));
   }
 
-  void emitFrame(List<OcrLine> lines) =>
-      _frames.add(OcrFrame(lines: lines, timestamp: DateTime(2026)));
+  void emitFrame(List<OcrLine> lines, {int? id}) =>
+      _frames.add(OcrFrame(lines: lines, timestamp: DateTime(2026), id: id));
+
+  /// Frames asked for by id ([frameImage]).
+  final frameImages = <int>[];
+
+  @override
+  Future<CapturedFrame> frameImage(int id) async {
+    frameImages.add(id);
+    return CapturedFrame(path: '/tmp/frame_$id.jpg', width: 664, height: 1440);
+  }
 
   void emitError(String message) => _errors.add(message);
 
@@ -66,10 +75,27 @@ class FakePlateService extends PlateRecognitionService {
   int captures = 0;
   String framePath = '/tmp/frame.jpg';
 
+  /// The still never comes back (a camera hunting for focus).
+  bool stillHangs = false;
+
   @override
   Future<CapturedFrame> captureFrame() async {
     captures++;
+    if (stillHangs) return Completer<CapturedFrame>().future;
     return CapturedFrame(path: framePath, width: 1080, height: 2340);
+  }
+
+  int grabs = 0;
+  String grabPath = '/tmp/grab.jpg';
+
+  /// How long a video frame takes to come back.
+  Duration grabDelay = Duration.zero;
+
+  @override
+  Future<CapturedFrame> grabFrame() async {
+    grabs++;
+    if (grabDelay > Duration.zero) await Future<void>.delayed(grabDelay);
+    return CapturedFrame(path: grabPath, width: 1080, height: 1440);
   }
 
   @override

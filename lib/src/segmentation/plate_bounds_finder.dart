@@ -357,27 +357,88 @@ class PlateBoundsFinder {
   static ({double top, double left, double right})? _upperRow(
       Uint8List ink, int w, int h, _Row row) {
     final rh = row.height;
-    double level(_Box b, num y) => y - (row.yTop(b.centerX) - row.top);
+    // Worked on straightened along the row's tilt (each column shifted so
+    // the row is level), so the border above is level too.
+    double level(_Box b, num y) => y.toDouble();
     double centre(_Box b) => level(b, (b.top + b.bottom) / 2);
+    // The region row sits against the plate's top border: at small sizes
+    // its letters touch the border line and form one wide shape. Long
+    // horizontal runs of ink (the border; no letter is that wide) are
+    // cleared from the straightened copy first; on a tilted plate the
+    // border would otherwise break into short slanted runs that stay.
+    final clean = Uint8List(w * h);
+    for (var x = 0; x < w; x++) {
+      final d = (row.yTop(x.toDouble()) - row.top).round();
+      for (var y = 0; y < h; y++) {
+        final sy = y + d;
+        if (sy >= 0 && sy < h) clean[y * w + x] = ink[sy * w + x];
+      }
+    }
+    final maxRun = (1.2 * rh).round();
+    for (var y = 0; y < h; y++) {
+      var start = -1;
+      for (var x = 0; x <= w; x++) {
+        final on = x < w && clean[y * w + x] == 1;
+        if (on && start < 0) start = x;
+        if (!on && start >= 0) {
+          if (x - start > maxRun) clean.fillRange(y * w + start, y * w + x, 0);
+          start = -1;
+        }
+      }
+    }
+    // A digit-high shape ending just above the row: the number of another
+    // plate stacked above (whose stacked letters' lower halves would pass
+    // for a region row).
+    final comps = _components(clean, w, h);
+    if (comps.any((b) =>
+        b.height >= 0.85 * rh &&
+        b.width >= 0.3 * rh &&
+        b.width <= b.height * 1.3 &&
+        level(b, b.bottom) <= row.top - 0.02 * rh &&
+        level(b, b.bottom) >= row.top - 0.9 * rh &&
+        b.right >= row.left &&
+        b.left <= row.right)) {
+      return null;
+    }
+    // Letter-high shapes just above the row. Small or seen at an angle,
+    // neighbouring letters (the circle and the Ge'ez pair) touch and form
+    // one wide shape: it counts as the letters it spans.
     final above = [
-      for (final b in _components(ink, w, h))
+      for (final b in comps)
         if (level(b, b.bottom) <= row.top - 0.02 * rh &&
-            level(b, b.bottom) >= row.top - 0.7 * rh &&
+            level(b, b.bottom) >= row.top - 0.9 * rh &&
             b.height >= 0.35 * rh &&
             b.height <= 0.85 * rh &&
-            b.width <= b.height * 1.3 &&
+            b.width <= b.height * 4.5 &&
             b.left >= row.left - 2.5 * rh &&
             b.right <= row.right + 2.5 * rh)
           b,
     ];
-    if (above.length < 4) return null;
+    int count(_Box b) => math.max(1, (b.width / (b.height * 0.9)).round());
+    if (above.length < 2 || above.map(count).fold(0, (a, b) => a + b) < 4) {
+      return null;
+    }
     final centres = [for (final b in above) centre(b)]..sort();
     final mid = centres[centres.length ~/ 2];
     final letters = [
       for (final b in above)
         if ((centre(b) - mid).abs() <= 0.25 * rh) b,
     ];
-    if (letters.length < 4) return null;
+    if (letters.length < 2 || letters.map(count).fold(0, (a, b) => a + b) < 4) {
+      return null;
+    }
+    // Region letters are about half a digit high (the circle a little
+    // more); a row of shapes two-thirds as high is the number of another
+    // plate above.
+    final hs = [for (final b in letters) b.height]..sort();
+    if (hs[hs.length ~/ 2] > 0.65 * rh) return null;
+    // Six or more alike (circle, two Ge'ez, two Latin and a smaller chip
+    // make five): the digits of another plate above.
+    final typical = hs[hs.length ~/ 2];
+    final alike = letters.where((b) =>
+        (b.height - typical).abs() <= typical * 0.15 &&
+        b.width <= b.height * 1.3);
+    if (alike.length >= 6) return null;
     return (
       top: letters.map((b) => level(b, b.top)).reduce(math.min) - row.top,
       left: letters.map((b) => b.left).reduce(math.min).toDouble(),
@@ -646,6 +707,11 @@ class PlateBounds {
 
   /// Which sides came from a found edge (the rest from proportions).
   final bool topEdge, bottomEdge, leftEdge, rightEdge;
+
+  /// The plate's own top and bottom edges were found: a plate, not text
+  /// on a page or a screen (which never has both, measured on logged
+  /// patrol photos and rendered screen text).
+  bool get isPlate => topEdge && bottomEdge;
 }
 
 class _Box {

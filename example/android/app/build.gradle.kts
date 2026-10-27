@@ -34,6 +34,9 @@ android {
             // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
+            // Debuggable through src/release/AndroidManifest.xml (scan logs are
+            // copied off with `adb exec-out run-as …`); `isDebuggable` here
+            // would make Flutter package the debug kernel instead of AOT code.
         }
     }
 }

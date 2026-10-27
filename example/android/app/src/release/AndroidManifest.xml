@@ -1,0 +1,10 @@
+<!-- Example / test app: debuggable so scan logs can be copied off the phone
+     (`adb exec-out run-as …`). Set here, not with `isDebuggable`, which
+     makes Flutter package release builds as debug ones. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <application
+        android:debuggable="true"
+        tools:ignore="HardcodedDebugMode"
+        tools:replace="android:debuggable" />
+</manifest>

@@ -69,6 +69,10 @@ class NormalizedRect {
         (map['bottom'] as num).toDouble(),
       );
 
+  /// `{left, top, right, bottom}`, as [NormalizedRect.fromMap] reads it.
+  Map<String, double> toMap() =>
+      {'left': left, 'top': top, 'right': right, 'bottom': bottom};
+
   @override
   String toString() => 'NormalizedRect($left, $top, $right, $bottom)';
 }
@@ -102,7 +106,13 @@ class OcrFrame {
     required this.lines,
     required this.timestamp,
     this.codeHint,
+    this.id,
   });
+
+  /// The frame's number on the native side, to ask for its picture
+  /// (`frameImage`, patrol); null when not given.
+
+  final int? id;
 
   /// Recognised lines, any order.
   final List<OcrLine> lines;
@@ -124,6 +134,7 @@ class OcrFrame {
           .toList(growable: false),
       timestamp: DateTime.now(),
       codeHint: map['codeHint'] as String?,
+      id: map['frameId'] as int?,
     );
   }
 }

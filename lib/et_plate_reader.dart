@@ -44,6 +44,10 @@ export 'src/recognition/plate_availability.dart'
     show PlateReader, PlateReaderAvailability, PlateReaderAvailabilityStatus;
 export 'src/recognition/plate_recognition_service.dart'
     show CropSpec, PlateRecognitionService, PlateRecognitionServiceFactory;
+export 'src/patrol/patrol_controller.dart' show PatrolController;
+export 'src/patrol/patrol_refiner.dart' show PatrolRefiner, RefineTrace;
+export 'src/patrol/patrol_tracker.dart' show PatrolTracker, PatrolVehicle;
+export 'src/patrol/patrol_view.dart' show PatrolView;
 export 'src/widgets/plate_scan.dart' show EtPlateReader, PlateScanResult;
 export 'src/widgets/plate_scanner_options.dart'
     show ConfirmAreaMode, PlateScannerOptions, PlateScannerTheme;

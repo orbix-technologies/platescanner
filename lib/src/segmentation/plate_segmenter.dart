@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import '../models/ocr_frame.dart';
@@ -165,13 +166,24 @@ class PlateSegmenter {
   PlateSegmenter();
 
   List<String> _notes = [];
+  bool _hint = false;
+
+  /// Letters a top-row shape spans: neighbouring letters seen small or at
+  /// an angle touch and form one wide shape.
+  static int _letters(Blob b) =>
+      math.max(1, (b.width / (b.height * 0.9)).round());
 
   /// Segments [g], a crop of the confirmed plate area.
   ///
   /// When too few characters are found, a two-row plate's big digits may
   /// have been cut by the border clean-up: retried keeping broken rows, and
   /// kept only if it finds a two-row plate with a full number.
-  PlateSegmentation segment(GrayImage g) {
+  ///
+  /// [twoRowHint]: the plate outline search already saw a row of letters
+  /// above the number (`PlateBounds.twoRow`), so less is asked of the top
+  /// row here.
+  PlateSegmentation segment(GrayImage g, {bool twoRowHint = false}) {
+    _hint = twoRowHint;
     final first = _segment(g);
     if (first.found && first.numberChars.length >= 5) return first;
     final rows = _segment(g, runLines: true);
@@ -352,11 +364,17 @@ class PlateSegmenter {
   /// across a good part of it (circle, Ge'ez and Latin region). Stacked
   /// region letters of a one-row plate sit inside the band; screws and the
   /// chip above it are smaller; another plate above has digit-high shapes.
+  /// Notes why the plate isn't read as two rows.
+  Null _no(String why) {
+    _notes.add('one row: $why');
+    return null;
+  }
+
   ({List<Blob> top, List<Blob> bottom})? _twoRows(
       List<Blob> kept, double hd, int h) {
     final digits =
         kept.where((b) => (b.height - hd).abs() <= hd * 0.2).toList();
-    if (digits.length < 4) return null;
+    if (digits.length < 4) return _no('digits ${digits.length}');
     // The digits' tilt (median of pairwise slopes of their tops), so a
     // tilted plate's rows are compared along it.
     double cx(Blob b) => (b.left + b.right) / 2;
@@ -374,9 +392,13 @@ class PlateSegmenter {
     final bandTop = tops[tops.length ~/ 2];
     // The number fills the lower half; a one-row plate's starts near the
     // top of its crop.
-    if (bandTop < h * 0.35) return null;
+    if (bandTop < h * 0.35) {
+      return _no('number high (${(bandTop / h).toStringAsFixed(2)})');
+    }
     // Digit-high shapes above the band are another plate in view.
-    if (digits.any((d) => level(d, d.bottom) <= bandTop)) return null;
+    if (digits.any((d) => level(d, d.bottom) <= bandTop)) {
+      return _no('digit-high shape above');
+    }
     final left = digits.map((d) => d.left).reduce((a, b) => a < b ? a : b);
     final right = digits.map((d) => d.right).reduce((a, b) => a > b ? a : b);
     final candidates = kept
@@ -385,7 +407,9 @@ class PlateSegmenter {
             b.height >= hd * 0.2 &&
             b.height <= hd * 0.9)
         .toList();
-    if (candidates.length < 3) return null;
+    if (candidates.length < (_hint ? 2 : 3)) {
+      return _no('above ${candidates.length}');
+    }
     // One row: centres level with each other.
     double centre(Blob b) => level(b, (b.top + b.bottom) / 2);
     final centres = [for (final b in candidates) centre(b)]..sort();
@@ -398,10 +422,16 @@ class PlateSegmenter {
     ];
     // Circle and four letters, about half a digit high; screws and the
     // chip above a one-row plate's digits are smaller and fewer.
-    if (top.where((b) => b.height >= hd * 0.35).length < 4) return null;
+    final letters = top
+        .where((b) => b.height >= hd * 0.35)
+        .map(_letters)
+        .fold(0, (a, b) => a + b);
+    if (letters < (_hint ? 3 : 4)) {
+      return _no('letters $letters of ${top.length}');
+    }
     final span = top.map((b) => b.right).reduce((a, b) => a > b ? a : b) -
         top.map((b) => b.left).reduce((a, b) => a < b ? a : b);
-    if (span < (right - left) * 0.4) return null;
+    if (span < (right - left) * 0.4) return _no('top row narrow');
     return (
       top: top,
       bottom: [
@@ -451,26 +481,60 @@ class PlateSegmenter {
     // A blurred ring isn't recognised: the circle is the first shape.
     var circle = circleAt < 0 ? null : row[circleAt];
     if (circle == null && letters.length >= 5) circle = letters.removeAt(0);
-    // Top row not read in full (blur, a letter joined to the chip): the
-    // number below is still the plate's — better than one-row guesses.
     final full = letters.length >= 4;
-    final geez = full ? letters.take(2).toList() : const <Column>[];
-    final latin =
-        full ? letters.skip(letters.length - 2).toList() : const <Column>[];
+    var geez = [
+      for (final c in full ? letters.take(2) : const <Column>[]) c.box
+    ];
+    var latin = [
+      for (final c
+          in full ? letters.skip(letters.length - 2) : const <Column>[])
+        c.box
+    ];
 
     NormalizedRect n(Blob b) =>
         NormalizedRect(b.left / w, b.top / h, b.right / w, b.bottom / h);
     final numberBox = number.map((c) => c.box).reduce((a, b) => a.union(b));
+    var code = circle?.box;
+    if (!full) {
+      // Letters joined into fewer shapes: the top row's layout is fixed
+      // (circle, the Ge'ez pair, the chip, the Latin pair; measured
+      // against the number's width), so each section is the ink there.
+      final x0 = numberBox.left, nw = numberBox.width;
+      Blob? zone(double a, double b, {bool letters = true}) {
+        final l = x0 + a * nw, r = x0 + b * nw;
+        Blob? u;
+        for (final t in top) {
+          // Not the chip between the pairs (smaller than the letters).
+          if (t.right <= l || t.left >= r) continue;
+          if (letters && t.height < ht * 0.7) continue;
+          final c = Blob(math.max(t.left, l.round()), t.top,
+              math.min(t.right, r.round()), t.bottom, 0);
+          u = u == null ? c : u.union(c);
+        }
+        return u;
+      }
+
+      List<Blob> pair(Blob? z) => z == null || z.width < 2
+          ? const []
+          : [
+              Blob(z.left, z.top, z.left + z.width ~/ 2, z.bottom, 0),
+              Blob(z.left + z.width ~/ 2, z.top, z.right, z.bottom, 0),
+            ];
+      code ??= zone(-0.08, 0.21, letters: false);
+      geez = pair(zone(0.21, 0.52));
+      latin = pair(zone(0.62, 1.05));
+      if (geez.isNotEmpty || latin.isNotEmpty) _notes.add('top row by layout');
+    }
     _notes.add('two rows');
     return PlateSegmentation(
       number: n(numberBox),
       numberChars: [for (final c in number) n(c.box)],
-      code: circle == null ? null : n(circle.box),
+      code: code == null ? null : n(code),
       codeInner: circle == null ? null : _inner(circle).let(n),
-      geezStack: [for (final c in geez) n(c.box)],
-      latinStack: [for (final c in latin) n(c.box)],
+      geezStack: [for (final c in geez) n(c)],
+      latinStack: [for (final c in latin) n(c)],
       leftDigits: const [],
-      latinSideBySide: full,
+      latinSideBySide: latin.isNotEmpty,
       twoRow: true,
       columns: [...row, ...columns],
       notes: _notes,
@@ -884,12 +948,17 @@ class PlateSegmenter {
 
   ColumnKind _classify(List<Blob> g, Blob box, double hd) {
     final main = g.reduce((a, b) => a.area > b.area ? a : b);
-    // Ring with a shape inside: the circled code.
+    // Ring with a shape inside (the code digit, centred): the circled code.
+    // Down to half as wide as tall, as on a plate seen at 45°.
     final ratio = main.width / main.height;
     if (main.height >= hd * 0.5 &&
-        ratio > 0.75 &&
+        ratio > 0.5 &&
         ratio < 1.35 &&
-        g.any((o) => !identical(o, main) && main.contains(o))) {
+        g.any((o) =>
+            !identical(o, main) &&
+            main.contains(o) &&
+            o.height >= main.height * 0.25 &&
+            (o.centerY - main.centerY).abs() <= main.height * 0.2)) {
       return ColumnKind.circle;
     }
     // Two shapes one above the other, each well short of a digit.

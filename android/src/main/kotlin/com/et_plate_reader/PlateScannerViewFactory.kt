@@ -10,7 +10,12 @@ class PlateScannerViewFactory(
     private val messenger: BinaryMessenger,
 ) : PlatformViewFactory(StandardMessageCodec.INSTANCE) {
     override fun create(context: Context, viewId: Int, args: Any?): PlatformView =
-        PlateScannerView(context, messenger, viewId)
+        PlateScannerView(
+            context,
+            messenger,
+            viewId,
+            patrol = (args as? Map<*, *>)?.get("patrol") == true,
+        )
 
     companion object {
         const val VIEW_TYPE = "et_plate_reader/scanner"

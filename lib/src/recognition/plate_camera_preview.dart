@@ -11,10 +11,18 @@ import 'plate_recognition_service.dart';
 /// Native camera preview (CameraX `PreviewView` / `AVCaptureVideoPreviewLayer`).
 class PlateCameraPreview extends StatefulWidget {
   /// Creates the preview bound to [service].
-  const PlateCameraPreview({super.key, required this.service});
+  const PlateCameraPreview({
+    super.key,
+    required this.service,
+    this.patrol = false,
+  });
 
   /// Service that receives this view's id.
   final PlateRecognitionService service;
+
+  /// Patrol camera settings: larger frames and a short, steady exposure for
+  /// plates passing by (Android).
+  final bool patrol;
 
   @override
   State<PlateCameraPreview> createState() => _PlateCameraPreviewState();
@@ -45,6 +53,7 @@ class _PlateCameraPreviewState extends State<PlateCameraPreview> {
         viewType: viewType,
         onPlatformViewCreated: _onCreated,
         gestureRecognizers: gestures,
+        creationParams: {'patrol': widget.patrol},
         creationParamsCodec: const StandardMessageCodec(),
       );
     }
@@ -53,6 +62,7 @@ class _PlateCameraPreviewState extends State<PlateCameraPreview> {
         viewType: viewType,
         onPlatformViewCreated: _onCreated,
         gestureRecognizers: gestures,
+        creationParams: {'patrol': widget.patrol},
         creationParamsCodec: const StandardMessageCodec(),
       );
     }
