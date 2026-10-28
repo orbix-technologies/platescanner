@@ -243,6 +243,7 @@ class EthiopianPlateParser {
   /// Formats a record for display, e.g. `2 · AA · A12345`.
   String format(PlateRecord record) => [
         record.code,
+        if (record.embassyCode != null) record.embassyCode!,
         if (record.regionCode != null) record.regionCode!,
         record.serial,
       ].join(' · ');

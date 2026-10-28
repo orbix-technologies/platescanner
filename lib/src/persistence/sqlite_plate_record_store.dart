@@ -15,7 +15,7 @@ class SqlitePlateRecordStore implements PlateRecordStore {
         _factory = factory;
 
   static const _table = 'plates';
-  static const _version = 1;
+  static const _version = 2;
 
   final String? _databasePath;
   final DatabaseFactory? _factory;
@@ -62,7 +62,8 @@ class SqlitePlateRecordStore implements PlateRecordStore {
         longitude REAL,
         accuracy_meters REAL,
         description TEXT,
-        status TEXT NOT NULL
+        status TEXT NOT NULL,
+        embassy_code TEXT
       )
     ''');
     await db.execute('CREATE INDEX idx_plates_serial ON $_table (serial)');
@@ -73,6 +74,10 @@ class SqlitePlateRecordStore implements PlateRecordStore {
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     // Add migrations here as `if (oldVersion < N) { ... }`.
+    if (oldVersion < 2) {
+      // Diplomatic plates' embassy number.
+      await db.execute('ALTER TABLE $_table ADD COLUMN embassy_code TEXT');
+    }
   }
 
   @override
@@ -153,6 +158,7 @@ class SqlitePlateRecordStore implements PlateRecordStore {
         'accuracy_meters': r.location?.accuracyMeters,
         'description': r.description,
         'status': r.status,
+        'embassy_code': r.embassyCode,
       };
 
   PlateRecord _fromRow(Map<String, Object?> row) {
@@ -183,6 +189,7 @@ class SqlitePlateRecordStore implements PlateRecordStore {
             ),
       description: row['description'] as String?,
       status: row['status'] as String,
+      embassyCode: row['embassy_code'] as String?,
     );
   }
 }

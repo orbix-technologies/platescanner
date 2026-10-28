@@ -216,8 +216,25 @@ class PlateSectionReader {
         ? _majority(readsOf('number', 0)
             .map((t) => t == null ? null : parser.readNationalSerial(t)))?.$1
         : null;
+    // Every single-digit read per position, as a digit and as a letter (a
+    // series letter is in the number too).
+    final singles = [
+      for (var i = 0; i < n; i++)
+        [
+          for (final t in readsOf('digit', i)) ...[
+            _single(t, _toDigit, digit: true),
+            _single(t, const {}, digit: false),
+          ],
+        ],
+    ];
+    final blank = [
+      for (var i = 0; i < n; i++)
+        readsOf('digit', i).isNotEmpty &&
+            readsOf('digit', i).every((t) => t == null || t.trim().isEmpty),
+    ];
     final number = national ??
-        _voteNumber(_numberReads(readsOf('number', 0)), perDigit, n) ??
+        _voteNumber(_numberReads(readsOf('number', 0)), perDigit, n,
+            singles: singles, blank: blank) ??
         '';
     // Boxes per digit: the segmentation's when the counts match, else the
     // number box divided evenly (two touching digits found as one shape).
@@ -381,6 +398,16 @@ class PlateSectionReader {
         note: 'none on $special plates',
       );
     }
+    // Diplomatic plates' Ge'ez is ኮዲ (CD), not a region.
+    if (special == 'CD') {
+      geezSection = PlateSection(
+        kind: PlateSectionKind.geezRegion,
+        value: 'ኮዲ',
+        box: geezBox,
+        detected: geezBox != null,
+        note: 'diplomatic',
+      );
+    }
     if (national != null) {
       latinSection = PlateSection(
         kind: PlateSectionKind.latinRegion,
@@ -451,6 +478,7 @@ class PlateSectionReader {
         regionCode: region?.code,
         serial: serial,
       ),
+      embassyCode: special == 'CD' ? embassy : null,
     );
     return (arrangement: arrangement, candidate: candidate);
   }
@@ -498,11 +526,17 @@ class PlateSectionReader {
   /// The number agreed by at least two of [reads] (5–8 digits each); else a
   /// per-position vote among reads of the most common length, with an open
   /// position filled only by a [perDigit] read; null when undecided.
+  ///
+  /// A position the whole reads split on is settled by the [singles] read
+  /// there, else, when every single read there was [blank], by `0`: a lone
+  /// 0 reads as nothing (two-row B00490, session logs of 2026-10-27).
   static String? _voteNumber(
     List<String> reads,
     List<(String, int)?> perDigit,
-    int segmented,
-  ) {
+    int segmented, {
+    List<List<String?>> singles = const [],
+    List<bool> blank = const [],
+  }) {
     final usable = reads.where((r) => r.length >= 4 && r.length <= 8).toList();
     final whole = _majority(usable);
     if (whole != null && whole.$2 >= 2) return whole.$1;
@@ -522,18 +556,35 @@ class PlateSectionReader {
     for (var i = 0; i < length; i++) {
       final v = _majority(same.map((r) => r[i]));
       final d = length == perDigit.length ? perDigit[i] : null;
+      final split = length == singles.length
+          ? _split(same.map((r) => r[i]), singles[i])
+          : null;
       if (v != null && same.length == 1 && d != null && d.$2 == 3) {
         // One line read against three agreeing single-digit reads.
         out.write(d.$1);
       } else if (v != null && (v.$2 >= 2 || same.length == 1)) {
         out.write(v.$1);
+      } else if (split != null) {
+        out.write(split);
       } else if (length == perDigit.length && perDigit[i] != null) {
         out.write(perDigit[i]!.$1);
+      } else if (length == blank.length &&
+          blank[i] &&
+          same.any((r) => r[i] == '0')) {
+        out.write('0');
       } else {
         return null;
       }
     }
     return out.toString();
+  }
+
+  /// The one value among [whole] (what the whole reads have at a position)
+  /// that [singles] (the single-digit reads there) back most; null if none
+  /// or a tie.
+  static String? _split(Iterable<String> whole, List<String?> singles) {
+    final options = whole.toSet();
+    return _majority(singles.where(options.contains))?.$1;
   }
 
   /// One letter from a crop's reads: a letter read as such counts once; a

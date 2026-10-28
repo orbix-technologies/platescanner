@@ -14,6 +14,11 @@ class PlateAreaDetector {
   static final _serialLike = RegExp(r'[0-9OQDISBZG]{5,}');
   static final _digit = RegExp(r'[0-9]');
 
+  /// A series letter and five digits, the 0s read as letters ("BOO490"):
+  /// an old plate's number, not the new national one (session logs of
+  /// 2026-10-27, two-row B00490).
+  static final _seriesLike = RegExp(r'^[A-Z][0-9OQDG]{5}$');
+
   /// The new national number: three letters and four digits (`ABC1234`).
   /// Its notched 0 is read as G, O, D, Q or C, so the digits may come out
   /// as no digit at all ("AAAGGOO").
@@ -32,7 +37,8 @@ class PlateAreaDetector {
     for (final l in lines) {
       final text = l.text.toUpperCase().replaceAll(RegExp(r'[^A-Z0-9]'), '');
       final run = _serialLike.firstMatch(text)?.group(0);
-      final serial = run != null && _digit.allMatches(run).length >= 4;
+      final serial = run != null &&
+          (_digit.allMatches(run).length >= 4 || _seriesLike.hasMatch(text));
       final newPlate = _nationalLike.hasMatch(text);
       if (!serial && !newPlate) continue;
       // The new national number's pattern is specific: it wins over a

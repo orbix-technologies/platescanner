@@ -57,6 +57,12 @@ void main() {
   expectReal('real_70695_edge', 5);
   expectReal('real_a41601', 6); // top A cut by a screw head
   expectReal('real_c06703', 6);
+  // The same car photographed at an angle (scans of 2026-10-26): the far
+  // digits shrink, so "03" passed for the region letters until the crop
+  // was straightened.
+  expectReal('angled_c06703_a', 6);
+  expectReal('angled_c06703_b', 6);
+  expectReal('angled_c06703_c', 6);
   expectReal('real_b88418', 6);
 
   test('police: Ge\'ez stack · 6 digits · Latin stack, no circle', () {

@@ -71,6 +71,29 @@ void main() {
     expect(r.arrangement.number.value, '0123456');
   });
 
+  test('split whole reads: single reads settle, blank singles are 0', () {
+    // As logged for the two-row B00490 (session 37882): "BOG490" against
+    // "D67009", each lone 0 read as nothing, the 9 read as 6 and 9.
+    final all = [...crops, ...reader.cropsFor(seg, area, digits: true)];
+    final r = reader.read(
+      seg,
+      all,
+      [
+        for (final c in all)
+          switch ('${c.role}${c.index}') {
+            'number0' => ['0100406', '0670096', ''],
+            'digit1' => ['1', '', ''],
+            'digit2' || 'digit5' => ['', '', ''],
+            'digit4' => ['4', '9', ''],
+            'latin0' || 'latin1' => ['A', 'A', ''],
+            _ => const [null, null, null],
+          },
+      ],
+      const AreaOcr(elements: []),
+    );
+    expect(r.arrangement.number.value, '0100406');
+  });
+
   test('real reads: notched 0 read as G, single digits mostly empty', () {
     // Session 82594 / 54935: number reads and (empty) letter reads as logged.
     final r = reader.read(

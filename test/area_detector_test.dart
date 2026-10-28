@@ -17,6 +17,18 @@ void main() {
     expect(area.bottom, lessThan(0.6));
   });
 
+  test('a series letter and five 0-like digits is not the national number',
+      () {
+    // Live reads of the two-row B00490 (session logs of 2026-10-27).
+    for (final t in ['BOO490', 'BOG490', 'BO0490']) {
+      final d = detector.detectDetailed([
+        OcrLine(text: t, box: const NormalizedRect(0.3, 0.5, 0.7, 0.6)),
+      ]);
+      expect(d, isNotNull, reason: t);
+      expect(d!.national, isFalse, reason: t);
+    }
+  });
+
   test('anchors on the new national number (three letters, four digits)', () {
     final area = detector.detect(const [
       OcrLine(text: 'AAA0000', box: NormalizedRect(0.3, 0.40, 0.8, 0.46)),

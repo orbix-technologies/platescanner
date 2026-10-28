@@ -234,7 +234,9 @@ object CropOcr {
 
     /**
      * Grayscale + Otsu threshold: dark ink on white. Removes plate colours
-     * and the moiré of a photographed screen.
+     * and the moiré of a photographed screen. The brightness is first
+     * evened out against the plate around it, so a shadow over part of the
+     * plate doesn't turn that part black (scans of 2026-10-27).
      */
     fun binarize(src: Bitmap): Bitmap {
         val w = src.width
@@ -245,11 +247,71 @@ object CropOcr {
             val c = px[i]
             (299 * Color.red(c) + 587 * Color.green(c) + 114 * Color.blue(c)) / 1000
         }
+        flatten(lum, w, h)
         val threshold = otsu(lum)
         for (i in px.indices) px[i] = if (lum[i] <= threshold) Color.BLACK else Color.WHITE
         val out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
         out.setPixels(px, 0, w, 0, 0, w, h)
         src.recycle()
+        return out
+    }
+
+    /**
+     * [lum] divided by the brightness of the plate around each pixel: the
+     * brightest value within a window wider than a stroke, smoothed. Ink
+     * stays dark against its own background, lit or shaded.
+     */
+    private fun flatten(lum: IntArray, w: Int, h: Int) {
+        val r = (minOf(w, h) / 10).coerceAtLeast(4)
+        val bg = boxBlur(maxFilter(lum, w, h, r), w, h, r)
+        for (i in lum.indices) lum[i] = (lum[i] * 255 / bg[i].coerceAtLeast(1)).coerceAtMost(255)
+    }
+
+    /** Brightest value within [r] of each pixel (rows, then columns). */
+    private fun maxFilter(src: IntArray, w: Int, h: Int, r: Int): IntArray {
+        val rows = IntArray(src.size)
+        for (y in 0 until h) for (x in 0 until w) {
+            var m = 0
+            for (k in maxOf(0, x - r)..minOf(w - 1, x + r)) m = maxOf(m, src[y * w + k])
+            rows[y * w + x] = m
+        }
+        val out = IntArray(src.size)
+        for (x in 0 until w) for (y in 0 until h) {
+            var m = 0
+            for (k in maxOf(0, y - r)..minOf(h - 1, y + r)) m = maxOf(m, rows[k * w + x])
+            out[y * w + x] = m
+        }
+        return out
+    }
+
+    /** Mean within [r] of each pixel (rows, then columns). */
+    private fun boxBlur(src: IntArray, w: Int, h: Int, r: Int): IntArray {
+        val rows = IntArray(src.size)
+        for (y in 0 until h) {
+            var sum = 0
+            var n = 0
+            for (k in 0..minOf(w - 1, r)) { sum += src[y * w + k]; n++ }
+            for (x in 0 until w) {
+                rows[y * w + x] = sum / n
+                val add = x + r + 1
+                val drop = x - r
+                if (add < w) { sum += src[y * w + add]; n++ }
+                if (drop >= 0) { sum -= src[y * w + drop]; n-- }
+            }
+        }
+        val out = IntArray(src.size)
+        for (x in 0 until w) {
+            var sum = 0
+            var n = 0
+            for (k in 0..minOf(h - 1, r)) { sum += rows[k * w + x]; n++ }
+            for (y in 0 until h) {
+                out[y * w + x] = sum / n
+                val add = y + r + 1
+                val drop = y - r
+                if (add < h) { sum += rows[add * w + x]; n++ }
+                if (drop >= 0) { sum -= rows[drop * w + x]; n-- }
+            }
+        }
         return out
     }
 }
