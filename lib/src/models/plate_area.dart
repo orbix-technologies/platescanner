@@ -10,6 +10,7 @@ class CapturedFrame {
     required this.path,
     required this.width,
     required this.height,
+    this.plates = const [],
   });
 
   /// JPEG file path.
@@ -21,11 +22,15 @@ class CapturedFrame {
   /// Pixel height.
   final int height;
 
+  /// Plates the detector model found on this still, best first.
+  final List<DetectedPlate> plates;
+
   /// Parses a platform payload.
   factory CapturedFrame.fromMap(Map<Object?, Object?> map) => CapturedFrame(
         path: map['path'] as String,
         width: (map['width'] as num).toInt(),
         height: (map['height'] as num).toInt(),
+        plates: DetectedPlate.listFromMap(map),
       );
 }
 

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:logger/logger.dart';
@@ -133,6 +134,10 @@ class PlateReaderController extends ChangeNotifier {
 
   /// The detected area is framed on a new national number (`ABC1234`).
   bool _detectedNational = false;
+
+  /// The detected area is the plate detector model's box (the whole plate),
+  /// not one guessed from OCR text boxes.
+  bool _detectedByModel = false;
   CapturedFrame? _frame;
   NormalizedRect? _area;
   PlateArrangement? _arrangement;
@@ -311,6 +316,7 @@ class PlateReaderController extends ChangeNotifier {
     _reset();
     _log = recordSessions ? SessionLog() : null;
     _log?.event('start', {'roi': SessionLog.rect(_roi)});
+    unawaited(_log?.save());
     _phase = ScanPhase.detecting;
     _notify();
     try {
@@ -327,13 +333,51 @@ class PlateReaderController extends ChangeNotifier {
         .where((l) => _roi.contains(l.box, tolerance: _roiTolerance))
         .toList(growable: false);
     final detection = _detector.detectDetailed(lines);
-    final area = detection?.area;
+    // The detector model frames the whole plate (top row of two-row plates
+    // included) whatever the light; text boxes are the fallback.
+    final plate = _bestPlate(frame.plates);
+    final area = plate?.box ?? detection?.area;
     _detectedNational = detection?.national ?? false;
-    _log?.detection(lines, area);
+    _detectedByModel = plate != null;
+    _log?.detection(lines, area, plates: frame.plates);
     final stable = _tracker.add(area);
     _detectedArea = area;
     _notify();
     if (stable && autoCapture) unawaited(captureArea());
+  }
+
+  /// The most confident detector plate centred inside the guide box.
+  DetectedPlate? _bestPlate(List<DetectedPlate> plates) {
+    for (final p in plates) {
+      if (_roi.containsCenterOf(p.box)) return p;
+    }
+    return null;
+  }
+
+  /// The still's plate that best overlaps [proposed], else its most
+  /// confident plate inside the guide box.
+  NormalizedRect? _plateOnStill(
+    List<DetectedPlate> plates,
+    NormalizedRect proposed,
+  ) {
+    DetectedPlate? best;
+    var bestOverlap = 0.0;
+    for (final p in plates) {
+      final overlap = _iou(p.box, proposed);
+      if (overlap > bestOverlap) {
+        best = p;
+        bestOverlap = overlap;
+      }
+    }
+    return (best ?? _bestPlate(plates))?.box;
+  }
+
+  static double _iou(NormalizedRect a, NormalizedRect b) {
+    final w = math.min(a.right, b.right) - math.max(a.left, b.left);
+    final h = math.min(a.bottom, b.bottom) - math.max(a.top, b.top);
+    if (w <= 0 || h <= 0) return 0;
+    final inter = w * h;
+    return inter / (a.width * a.height + b.width * b.height - inter);
   }
 
   void _onPlatformError(String message) {
@@ -351,10 +395,15 @@ class PlateReaderController extends ChangeNotifier {
     if (_phase != ScanPhase.detecting || _capturing) return false;
     _capturing = true;
     try {
-      final proposed = _detectedArea ?? _roi;
+      var proposed = _detectedArea ?? _roi;
       final frame = await _service.captureFrame();
       await _service.pause();
       if (_phase != ScanPhase.detecting) return false;
+      // The plate as found on the still itself: the live box may be from
+      // an earlier frame.
+      final onStill = _plateOnStill(frame.plates, proposed);
+      if (onStill != null) proposed = onStill;
+      final byModel = onStill != null || _detectedByModel;
       _frame = frame;
       _area = proposed;
       _log?.frame(frame);
@@ -365,17 +414,24 @@ class PlateReaderController extends ChangeNotifier {
         'detected': SessionLog.rect(_detectedArea),
         'proposed': SessionLog.rect(proposed),
         'national': _detectedNational,
+        'byModel': byModel,
+        'stillPlates': [
+          for (final p in frame.plates)
+            {...?SessionLog.rect(p.box), 'score': p.score},
+        ],
         'auto': _tracker.progress >= 1,
       });
       // Set before the phase changes, so a UI never sees the area as
       // "not snapped" while the snap is about to run.
-      _snapping = !_detectedNational;
+      _snapping = !_detectedNational && !byModel;
       _areaSnapped = false;
       _phase = ScanPhase.confirmingArea;
       _notify();
       // The new national plate is framed from its number line already; its
-      // pale, hatched characters mislead the outline search.
-      if (!_detectedNational) {
+      // pale, hatched characters mislead the outline search. The model's box
+      // is the whole plate already; the outline search can lose a shaded or
+      // two-row top.
+      if (!_detectedNational && !byModel) {
         final snap = _snapArea(frame, proposed, _detectedArea);
         _snap = snap;
         unawaited(snap);
@@ -557,6 +613,7 @@ class PlateReaderController extends ChangeNotifier {
     await _log?.save();
     _log = recordSessions ? SessionLog() : null;
     _log?.event('start', {'roi': SessionLog.rect(_roi), 'after': 'retake'});
+    unawaited(_log?.save());
     _error = null;
     _reset();
     _phase = ScanPhase.detecting;
@@ -678,6 +735,7 @@ class PlateReaderController extends ChangeNotifier {
     _tracker.reset();
     _detectedArea = null;
     _detectedNational = false;
+    _detectedByModel = false;
     _snapping = false;
     _areaSnapped = false;
     _snap = null;
@@ -714,6 +772,13 @@ class PlateReaderController extends ChangeNotifier {
 
   @override
   void dispose() {
+    // Closed with back, a route pop or the host going away mid-scan: keep
+    // the attempt. (A finished, cancelled or never-started session is idle
+    // or confirmed.)
+    if (_phase != ScanPhase.idle && _phase != ScanPhase.confirmed) {
+      _log?.event('closed', {'phase': _phase.name});
+      unawaited(_log?.save());
+    }
     _disposed = true;
     unawaited(_frameSub?.cancel());
     unawaited(_errorSub?.cancel());

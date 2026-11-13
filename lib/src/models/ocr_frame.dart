@@ -95,6 +95,31 @@ class OcrLine {
       );
 }
 
+/// A whole plate found by the on-device detector model.
+class DetectedPlate {
+  /// Creates a detection.
+  const DetectedPlate({required this.box, required this.score});
+
+  /// The plate's bounds (every row of it) in normalized image coordinates.
+  final NormalizedRect box;
+
+  /// Detector confidence (`0.0`–`1.0`).
+  final double score;
+
+  /// Parses a platform payload plate.
+  factory DetectedPlate.fromMap(Map<Object?, Object?> map) => DetectedPlate(
+        box: NormalizedRect.fromMap(map),
+        score: (map['score'] as num).toDouble(),
+      );
+
+  /// Parses the optional `plates` list of a platform payload.
+  static List<DetectedPlate> listFromMap(Map<Object?, Object?> map) =>
+      (map['plates'] as List<Object?>? ?? const [])
+          .whereType<Map<Object?, Object?>>()
+          .map(DetectedPlate.fromMap)
+          .toList(growable: false);
+}
+
 /// Recognition output for one analysed camera frame.
 class OcrFrame {
   /// Creates a frame result.
@@ -102,10 +127,15 @@ class OcrFrame {
     required this.lines,
     required this.timestamp,
     this.codeHint,
+    this.plates = const [],
   });
 
   /// Recognised lines, any order.
   final List<OcrLine> lines;
+
+  /// Plates found by the detector model, best first. Empty when the app
+  /// ships without the model.
+  final List<DetectedPlate> plates;
 
   /// Service code read by the native second pass on a circled code
   /// (new-format plates), when the main OCR missed it.
@@ -124,6 +154,7 @@ class OcrFrame {
           .toList(growable: false),
       timestamp: DateTime.now(),
       codeHint: map['codeHint'] as String?,
+      plates: DetectedPlate.listFromMap(map),
     );
   }
 }

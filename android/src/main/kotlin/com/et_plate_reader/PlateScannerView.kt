@@ -40,10 +40,10 @@ import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * CameraX preview + ML Kit Latin OCR.
+ * CameraX preview + ML Kit Latin OCR + the on-device plate detector.
  *
- * Analysis runs keep-latest on a background thread; only recognised lines,
- * normalized to the visible preview area, cross the channel.
+ * Analysis runs keep-latest on a background thread; only recognised lines
+ * and plate boxes, normalized to the visible preview area, cross the channel.
  */
 class PlateScannerView(
     private val context: Context,
@@ -57,6 +57,7 @@ class PlateScannerView(
     private val analysisExecutor: ExecutorService = Executors.newSingleThreadExecutor()
     private val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
     private val analyzing = AtomicBoolean(false)
+    private val detector: PlateDetector? = PlateDetector.create(context)
     private val previewView = PreviewView(context).apply {
         // TextureView so the preview composes under Flutter widgets.
         implementationMode = PreviewView.ImplementationMode.COMPATIBLE
@@ -187,8 +188,20 @@ class PlateScannerView(
                     )
                 }
             }
+            val plates = detector?.let { d ->
+                try {
+                    d.detectNormalized(uprightBitmap(proxy, rotation), crop)
+                } catch (e: Exception) {
+                    Log.w(TAG, "Plate detection failed", e)
+                    null
+                }
+            }
+            val payload = HashMap<String, Any>().apply {
+                put("lines", lines)
+                if (plates != null) put("plates", plates)
+            }
             main.post {
-                if (!disposed) channel.invokeMethod("onFrame", mapOf("lines" to lines))
+                if (!disposed) channel.invokeMethod("onFrame", payload)
             }
         } catch (e: Exception) {
             Log.w(TAG, "OCR failed", e)
@@ -228,7 +241,19 @@ class PlateScannerView(
             val visible = Bitmap.createBitmap(upright, r.left, r.top, r.width(), r.height())
             val file = File(context.cacheDir, "et_plate_${System.currentTimeMillis()}.jpg")
             FileOutputStream(file).use { visible.compress(Bitmap.CompressFormat.JPEG, 92, it) }
-            val payload = mapOf("path" to file.absolutePath, "width" to visible.width, "height" to visible.height)
+            val payload = HashMap<String, Any>().apply {
+                put("path", file.absolutePath)
+                put("width", visible.width)
+                put("height", visible.height)
+                // On the full-resolution still: the plate where it is now, not in an earlier frame.
+                detector?.let { d ->
+                    try {
+                        put("plates", d.detectNormalized(visible, Rect(0, 0, visible.width, visible.height)))
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Plate detection on still failed", e)
+                    }
+                }
+            }
             main.post { result.success(payload) }
         } catch (e: Exception) {
             main.post { result.error("capture_failed", e.message, null) }
@@ -289,6 +314,7 @@ class PlateScannerView(
         lifecycleRegistry.currentState = Lifecycle.State.DESTROYED
         provider?.unbindAll()
         recognizer.close()
+        analysisExecutor.execute { detector?.close() }
         analysisExecutor.shutdown()
     }
 

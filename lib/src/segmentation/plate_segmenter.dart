@@ -138,7 +138,7 @@ class PlateSegmentation {
   final List<NormalizedRect> leftDigits;
 
   /// Section 1 on plates without a circle: the shapes of the Ge'ez word
-  /// left of section 2 / the number (ፖሊስ, ተላላፊ, የተመ, አሕ), left to right.
+  /// left of section 2 / the number (ፖሊስ, ተላላፊ, የዕለት, የተመ, አሕ), left to right.
   final List<NormalizedRect> leftWord;
 
   /// Section 4 is two letters side by side (AU) rather than stacked.

@@ -32,3 +32,15 @@ migrate_working_dir/
 /build/
 /coverage/
 build/
+
+# Pulled device logs and photos
+/scan_logs/
+
+# Detector training: environment, photos, generated dataset and runs
+/training/.venv/
+/training/.venv-export/
+/training/data/
+/training/dataset/
+/training/runs/
+/training/*.log
+/training/*.pt

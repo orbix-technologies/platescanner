@@ -75,6 +75,55 @@ void main() {
     expect(controller.plateArea, controller.regionOfInterest);
   });
 
+  group('detector model', () {
+    // A two-row plate: OCR sees only the big number; the model the whole plate.
+    const number = OcrLine(
+      text: 'B39942',
+      box: NormalizedRect(0.3, 0.45, 0.7, 0.52),
+      confidence: 0.9,
+    );
+    const whole = DetectedPlate(
+      box: NormalizedRect(0.28, 0.36, 0.72, 0.53),
+      score: 0.9,
+    );
+
+    test('its plate box is the detected area, top row included', () async {
+      await detecting();
+      fake.emitFrame(const [number], plates: const [whole]);
+      await tick();
+      expect(controller.detectedArea, whole.box);
+    });
+
+    test('a plate outside the guide box is ignored', () async {
+      await detecting();
+      fake.emitFrame(
+        const [number],
+        plates: const [
+          DetectedPlate(box: NormalizedRect(0.1, 0.9, 0.3, 0.97), score: 0.95),
+        ],
+      );
+      await tick();
+      expect(controller.detectedArea, isNot(whole.box));
+      expect(controller.detectedArea, isNotNull); // from the OCR lines
+    });
+
+    test('the plate found on the still is proposed, without snapping',
+        () async {
+      await detecting();
+      fake.emitFrame(const [number], plates: const [whole]);
+      await tick();
+      const moved = NormalizedRect(0.26, 0.38, 0.7, 0.55);
+      fake.stillPlates = const [
+        DetectedPlate(box: NormalizedRect(0.0, 0.0, 0.1, 0.05), score: 0.99),
+        DetectedPlate(box: moved, score: 0.8),
+      ];
+      expect(await controller.captureArea(), isTrue);
+      expect(controller.plateArea, moved);
+      expect(controller.isSnappingArea, isFalse);
+      expect(controller.areaSnapped, isFalse);
+    });
+  });
+
   test('step 2: adjustArea clamps and rejects tiny areas', () async {
     await detecting();
     await controller.captureArea();

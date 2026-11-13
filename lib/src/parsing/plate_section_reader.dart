@@ -19,7 +19,7 @@ class SectionCrop {
     this.repeat = 1,
   }) : group = group ?? [box];
 
-  /// `number`, `digit`, `latin`, `latinWord`, `code`, `codeRepeat` or
+  /// `number`, `digit`, `latin`, `latinRepeat`, `latinWord`, `code`, `codeRepeat` or
   /// `embassy`.
   final String role;
 
@@ -144,6 +144,12 @@ class PlateSectionReader {
         crop('latin', i, pad(seg.latinStack[i], 0.2, 0.15)),
     ];
     out.addAll(letters);
+    // Each letter drawn three times reads as a word ("AAA"): a lone letter
+    // often reads as nothing (session logs, Nov 9: the second A of a stacked
+    // AA missed on 5 of 13 plates).
+    for (final l in letters) {
+      out.add(SectionCrop('latinRepeat', l.index, l.box, l.inArea, repeat: 3));
+    }
     if (letters.length == 2) {
       // The stacked letters side by side read as one word ("ET"): OCR reads
       // a word far more reliably than a lone letter.
@@ -196,7 +202,9 @@ class PlateSectionReader {
 
     // The new national plate's hatched, pale characters break apart in the
     // image, but the whole-area OCR reads its one line well ("AAAGO00").
-    if (seg.code == null) {
+    // It has no region letters: a stacked pair on the right rules it out
+    // (a daily permit's word + 091 + O/R reads "eee0912").
+    if (seg.code == null && seg.latinStack.isEmpty) {
       final national = PlateArranger(parser: parser).nationalFromOcr(ocr);
       if (national != null) return national;
     }
@@ -232,9 +240,30 @@ class PlateSectionReader {
         readsOf('digit', i).isNotEmpty &&
             readsOf('digit', i).every((t) => t == null || t.trim().isEmpty),
     ];
+    // A daily permit (no circle, region stacked in Ge'ez and Latin, red ink)
+    // has a short number (091): shorter reads must count.
+    final ink = ocr.inkColor;
+    final paperRgb = ocr.paperColor;
+    // Red outright, or red against the plate's own cream (washed out by a
+    // screen, glare or tinted light). Yellow paper is a police plate.
+    final redInk = ink != null &&
+        ink.length == 3 &&
+        (InkColor.classify(ink[0], ink[1], ink[2]) == InkColor.red ||
+            (paperRgb != null &&
+                paperRgb.length == 3 &&
+                !PaperColor.isYellow(paperRgb[0], paperRgb[1], paperRgb[2]) &&
+                InkColor.redOnPaper(ink, paperRgb)));
+    final dailyLike = seg.code == null &&
+        seg.geezStack.isNotEmpty &&
+        seg.latinStack.isNotEmpty &&
+        // Not an embassy plate (its number's digits left of the Ge'ez).
+        (seg.leftDigits.length < 2 || seg.leftWord.isNotEmpty) &&
+        redInk;
+    final minDigits = dailyLike ? 2 : 4;
     final number = national ??
-        _voteNumber(_numberReads(readsOf('number', 0)), perDigit, n,
-            singles: singles, blank: blank) ??
+        _voteNumber(_numberReads(readsOf('number', 0), minDigits: minDigits),
+            perDigit, n,
+            singles: singles, blank: blank, minDigits: minDigits) ??
         '';
     // Boxes per digit: the segmentation's when the counts match, else the
     // number box divided evenly (two touching digits found as one shape).
@@ -263,7 +292,8 @@ class PlateSectionReader {
     // Section 4: each stacked letter read alone, top to bottom.
     var letters = [
       for (var i = 0; i < seg.latinStack.length; i++)
-        _letter(readsOf('latin', i)),
+        _letter(readsOf('latin', i)) ??
+            _majority(readsOf('latinRepeat', i).map(_repeatedLetter))?.$1,
     ];
     // The two letters read side by side as one word fill or confirm them.
     final word = _majority(readsOf('latinWord', 0).map(_twoLetters));
@@ -349,13 +379,18 @@ class PlateSectionReader {
     //   misread, and the strip must not pass for a police plate;
     // - police: yellow plate, or ፖሊስ in black left of the Ge'ez stack;
     // - temporary: ተላላፊ in light blue left of the Ge'ez stack;
+    // - daily permit: የዕለት in red left of the Ge'ez stack (red on cream);
     // - UN / AU: የተመ / አሕ and no Ge'ez stack; AU's letters side by side.
     // Section 4 naming a region rules out UN and AU (a crop that cut the
     // circle off leaves a stray "word").
     final noCircle = seg.code == null;
-    final diplomatic = noCircle && seg.leftDigits.length >= 2;
     final hasWord = noCircle && _isWord(seg);
     final isRegion = parser.readRegion(latinValue) != null;
+    // A Ge'ez word and region letters (O/R) are not an embassy plate: the
+    // "digits" left of them are a bolt hole and a letter of the word.
+    final diplomatic = noCircle &&
+        seg.leftDigits.length >= 2 &&
+        !(isRegion && seg.leftWord.isNotEmpty);
     String? special = national != null
         ? PlateServiceType.national.code
         : _specials.contains(latinValue)
@@ -380,10 +415,20 @@ class PlateSectionReader {
       special = PlateServiceType.unitedNations.code;
     }
     if (special == null && hasWord && seg.geezStack.isNotEmpty) {
-      final ink = ocr.inkColor;
       final blue = ink != null && ink.length == 3 && ink[2] - ink[0] >= 40;
-      special =
-          blue ? PlateServiceType.temporary.code : PlateServiceType.police.code;
+      special = blue
+          ? PlateServiceType.temporary.code
+          : redInk
+              ? PlateServiceType.daily.code
+              : PlateServiceType.police.code;
+    }
+    // The word is small and often breaks apart; the rest of the layout and
+    // the red ink still mark a daily permit when the number is short.
+    if (special == null &&
+        dailyLike &&
+        number.isNotEmpty &&
+        number.length <= 4) {
+      special = PlateServiceType.daily.code;
     }
     if ({'CD', 'UN', 'AU'}.contains(special) && latinValue != special) {
       latinSection = latinByLayout(special!);
@@ -488,10 +533,10 @@ class PlateSectionReader {
   /// as "1": "BO5475" + "1"); without its last character it votes too —
   /// mapped again, since the extra character changes how a leading letter
   /// is taken (session logs: B05475).
-  static List<String> _numberReads(List<String?> raw) {
+  static List<String> _numberReads(List<String?> raw, {int minDigits = 4}) {
     final mapped = raw.map(_digits).toList();
-    final lengths =
-        _majority(mapped.where((m) => m.length >= 4).map((m) => '${m.length}'));
+    final lengths = _majority(
+        mapped.where((m) => m.length >= minDigits).map((m) => '${m.length}'));
     if (lengths == null) return mapped;
     final common = int.parse(lengths.$1);
     String trimmed(int i) {
@@ -508,7 +553,7 @@ class PlateSectionReader {
   }
 
   /// Whether [seg]'s shapes left of section 2 are a Ge'ez word (ፖሊስ,
-  /// ተላላፊ, የተመ, አሕ): two or more letter-sized shapes (0.3–0.6 of a digit)
+  /// ተላላፊ, የዕለት, የተመ, አሕ): two or more letter-sized shapes (0.3–0.6 of a digit)
   /// over at least 1.5 digit pitches. A broken circle or the stub of a cut
   /// stack is not (session logs: words span 1.7–3.3 pitches).
   static bool _isWord(PlateSegmentation seg) {
@@ -536,8 +581,10 @@ class PlateSectionReader {
     int segmented, {
     List<List<String?>> singles = const [],
     List<bool> blank = const [],
+    int minDigits = 4,
   }) {
-    final usable = reads.where((r) => r.length >= 4 && r.length <= 8).toList();
+    final usable =
+        reads.where((r) => r.length >= minDigits && r.length <= 8).toList();
     final whole = _majority(usable);
     if (whole != null && whole.$2 >= 2) return whole.$1;
     if (usable.isEmpty) {
@@ -641,18 +688,36 @@ class PlateSectionReader {
     return ok ? c : null;
   }
 
-  /// Two letters read as one word ("ET", "0R" -> "OR"), or null.
+  /// Two letters read as one word ("ET", "0R" -> "OR"), or null. One letter
+  /// read three times ("A A A") is both letters the same: the word crop's
+  /// edges sometimes repeat a letter.
   static String? _twoLetters(String? text) {
+    if (text == null) return null;
+    var chars = text
+        .split('')
+        .where((c) => c.trim().isNotEmpty && !_noise.contains(c))
+        .map((c) => _toLetter[c] ?? c.toUpperCase())
+        .toList();
+    if (chars.length == 3 && chars.every((c) => c == chars.first)) {
+      chars = chars.sublist(1);
+    }
+    if (chars.length != 2) return null;
+    return chars.every((c) => RegExp(r'^[A-Z]$').hasMatch(c))
+        ? chars.join()
+        : null;
+  }
+
+  /// The letter read in a crop drawn three times ("AAA" -> "A"): at least two
+  /// copies read and all the same.
+  static String? _repeatedLetter(String? text) {
     if (text == null) return null;
     final chars = text
         .split('')
         .where((c) => c.trim().isNotEmpty && !_noise.contains(c))
         .map((c) => _toLetter[c] ?? c.toUpperCase())
         .toList();
-    if (chars.length != 2) return null;
-    return chars.every((c) => RegExp(r'^[A-Z]$').hasMatch(c))
-        ? chars.join()
-        : null;
+    if (chars.length < 2 || chars.any((c) => c != chars.first)) return null;
+    return RegExp(r'^[A-Z]$').hasMatch(chars.first) ? chars.first : null;
   }
 
   /// The digit read in a crop drawn three times ("444" -> "4"): at least two

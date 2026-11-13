@@ -31,13 +31,17 @@ object CropOcr {
         val height: Int get() = bottom - top
     }
 
-    /** The tallest run of 5+ digits read on one line, or null. */
-    fun numberAnchor(text: Text): Anchor? {
+    /**
+     * The tallest run of [minDigits]+ digits read on one line (5 by default:
+     * a plate number), or null.
+     */
+    fun numberAnchor(text: Text, minDigits: Int = 5): Anchor? {
+        val run = if (minDigits == 5) numberRun else Regex("\\d{$minDigits,}")
         var best: Anchor? = null
         for (line in text.textBlocks.flatMap { it.lines }) {
             val symbols = line.elements.flatMap { it.symbols }.filter { it.boundingBox != null }
             val joined = symbols.joinToString("") { it.text.take(1).ifEmpty { " " } }
-            val m = numberRun.find(joined) ?: continue
+            val m = run.find(joined) ?: continue
             val a = Anchor(symbols, m.range.first, m.range.last + 1)
             if (best == null || a.height > best.height) best = a
         }

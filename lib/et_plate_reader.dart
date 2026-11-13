@@ -15,7 +15,8 @@ export 'src/controller/plate_reader_controller.dart'
     show PlateReaderController, ScanPhase;
 export 'src/diagnostics/session_log.dart' show SessionLog;
 export 'src/exceptions/plate_reader_exception.dart';
-export 'src/models/ocr_frame.dart' show NormalizedRect, OcrLine, OcrFrame;
+export 'src/models/ocr_frame.dart'
+    show DetectedPlate, NormalizedRect, OcrLine, OcrFrame;
 export 'src/models/plate_area.dart'
     show
         AreaOcr,
