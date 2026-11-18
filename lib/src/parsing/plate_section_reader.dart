@@ -583,10 +583,17 @@ class PlateSectionReader {
     List<bool> blank = const [],
     int minDigits = 4,
   }) {
-    final usable =
+    var usable =
         reads.where((r) => r.length >= minDigits && r.length <= 8).toList();
     final whole = _majority(usable);
     if (whole != null && whole.$2 >= 2) return whole.$1;
+    // A read two or more characters short of the segmented count, when
+    // another read matches that count, lost characters OCR could not map
+    // ("CO67t3" → "0673"); it must not outvote the full read on length
+    // (session logs of 2026-11-18: C06703 lost to "0673" and "1673").
+    if (usable.any((r) => r.length == segmented)) {
+      usable = usable.where((r) => r.length > segmented - 2).toList();
+    }
     if (usable.isEmpty) {
       // Nothing from the line: all single digits must be read.
       if (perDigit.isEmpty || perDigit.any((d) => d == null)) return null;
@@ -743,6 +750,14 @@ class PlateSectionReader {
         .split('')
         .where((c) => RegExp(r'[0-9A-Za-z|]').hasMatch(c))
         .toList();
+    // A trailing letter that is no digit look-alike is the region stack
+    // glued on ("CU6703A"); without it the series letter is still seen
+    // (session logs of 2026-11-18: read as 06703).
+    if (kept.length == 7 &&
+        RegExp(r'^[A-Za-z]$').hasMatch(kept.last) &&
+        !_toDigit.containsKey(kept.last)) {
+      kept.removeLast();
+    }
     if (kept.length == 6 &&
         RegExp(r'^[A-Z]$').hasMatch(kept.first) &&
         kept.skip(1).every(

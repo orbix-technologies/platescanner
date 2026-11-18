@@ -71,6 +71,46 @@ void main() {
     expect(r.arrangement.number.value, '0123456');
   });
 
+  test('reads short of the segmented count do not outvote the full one', () {
+    // As logged for C06703 (session 1794983758902): "CO67t3" and "Ci673"
+    // lose characters ("0673", "1673") and agreed on length 4 against the
+    // one full read; single digits mostly empty.
+    final all = [...crops, ...reader.cropsFor(seg, area, digits: true)];
+    final r = reader.read(
+      seg,
+      all,
+      [
+        for (final c in all)
+          {
+                'number0': ['0123456', '0I23t5', 'O1234'],
+                'latin0': ['E', 'E', null],
+                'latin1': ['T', 'T', null],
+                'code0': ['4', '4', null],
+              }['${c.role}${c.index}'] ??
+              const [null, null, null],
+      ],
+      const AreaOcr(elements: []),
+    );
+    expect(r.arrangement.number.value, '0123456');
+  });
+
+  test('series letter kept when the region letter is glued on', () {
+    // As logged for C06703 (session 1794984929605): "CU6703A" twice, the
+    // trailing A from the A/A stack; read as 06703 before.
+    final r = reader.read(
+      seg,
+      crops,
+      reads({
+        'number0': ['CU6703A', 'CU6703A', 'Ci6733A]'],
+        'latin0': ['E', 'E', null],
+        'latin1': ['T', 'T', null],
+        'code0': ['4', '4', null],
+      }),
+      const AreaOcr(elements: []),
+    );
+    expect(r.arrangement.number.value, 'C06703');
+  });
+
   test('split whole reads: single reads settle, blank singles are 0', () {
     // As logged for the two-row B00490 (session 37882): "BOG490" against
     // "D67009", each lone 0 read as nothing, the 9 read as 6 and 9.

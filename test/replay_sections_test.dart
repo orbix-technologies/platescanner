@@ -17,7 +17,9 @@ void main() {
     final files = Directory(dir!)
         .listSync()
         .whereType<File>()
-        .where((f) => f.path.endsWith('.json'))
+        .where((f) =>
+            f.uri.pathSegments.last.startsWith('session_') &&
+            f.path.endsWith('.json'))
         .toList()
       ..sort((a, b) => a.path.compareTo(b.path));
     for (final f in files) {

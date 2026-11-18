@@ -15,9 +15,20 @@ import 'package:et_plate_reader/src/segmentation/segment_capture.dart';
 
 void main(List<String> args) {
   final dir = args[0];
-  final labels = (jsonDecode(File('$dir/labels.json').readAsStringSync())
-          as Map<String, dynamic>)
-      .cast<String, Map<String, dynamic>>();
+  // Values are {"plate", "twoRow", "chars"} or just the plate ("2-AA-C06703":
+  // one row, chars = the serial's length).
+  final labels = {
+    for (final e in (jsonDecode(File('$dir/labels.json').readAsStringSync())
+            as Map<String, dynamic>)
+        .entries)
+      e.key: e.value is String
+          ? <String, dynamic>{
+              'plate': e.value,
+              'twoRow': false,
+              'chars': (e.value as String).split('-').last.length,
+            }
+          : (e.value as Map).cast<String, dynamic>(),
+  };
   NormalizedRect? rect(Object? m) {
     if (m == null) return null;
     final a = (m as Map).cast<String, num>();
@@ -25,7 +36,17 @@ void main(List<String> args) {
         a['right']!.toDouble(), a['bottom']!.toDouble());
   }
 
-  final checks = ['layout', 'number', 'code', 'geez', 'latin', 'all'];
+  final checks = [
+    'layout', 'number', 'code', 'geez', 'latin', 'latinH', 'all', //
+  ];
+  // Both stacked letters whole: neither under 0.6 of the other's height (a
+  // letter cut by an erased line is half as tall).
+  bool evenStack(List<NormalizedRect> st) {
+    if (st.length != 2) return false;
+    final a = st[0].height, b = st[1].height;
+    return a >= b * 0.6 && b >= a * 0.6;
+  }
+
   final ok = {for (final c in checks) c: 0};
   final perPlate = <String, List<int>>{};
   final ids = labels.keys.toList()..sort();
@@ -50,6 +71,7 @@ void main(List<String> args) {
       'code': s?.code != null,
       'geez': s?.geezStack.length == 2,
       'latin': s?.latinStack.length == 2,
+      'latinH': s != null && evenStack(s.latinStack),
     };
     r['all'] = r.values.every((v) => v);
     r.forEach((k, v) => ok[k] = ok[k]! + (v ? 1 : 0));

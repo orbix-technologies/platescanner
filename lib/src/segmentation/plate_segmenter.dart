@@ -200,11 +200,61 @@ class PlateSegmenter {
 
   PlateSegmentation _segmentOnce(GrayImage g) {
     final first = _segment(g);
-    if (first.found && first.numberChars.length >= 5) return first;
+    // A crop under twice as wide as tall is an old two-row plate (one-row
+    // plates are 3+): read as one row, its top-row letters join the digits
+    // under them into tall columns and still pass for a number (C69001,
+    // session logs of 2026-11-18), so the two-row reading is tried too.
+    if (first.found && !first.twoRow && g.width < g.height * 2) {
+      final notes = _notes;
+      final rows = _segment(g, runLines: true);
+      if (rows.twoRow && rows.numberChars.length >= 5) return rows;
+      _notes = notes;
+    }
+    if (first.found && first.numberChars.length >= 5) {
+      if (!_unevenStack(first.latinStack)) return first;
+      // The top letter half as tall as the bottom one: a row through bold
+      // character tops was erased as border and cut it (C06703, session
+      // logs of 2026-11-18). Found again with such rows kept, only that
+      // stack is taken: the rest stays as first found (keeping those rows
+      // can join the circle or Ge'ez to their neighbours).
+      final notes = _notes;
+      final kept = _segment(g, keepStrokeRows: true);
+      _notes = notes;
+      final st = kept.latinStack, old = first.latinStack;
+      if (!_unevenStack(st) &&
+          st.length == 2 &&
+          kept.latinSideBySide == first.latinSideBySide &&
+          kept.twoRow == first.twoRow &&
+          // Same column: overlapping the first stack, right of the number.
+          st[0].left < old[0].right &&
+          st[0].right > old[0].left &&
+          st[0].left > first.number!.right) {
+        return PlateSegmentation(
+          number: first.number,
+          numberChars: first.numberChars,
+          code: first.code,
+          codeInner: first.codeInner,
+          geezStack: first.geezStack,
+          latinStack: st,
+          leftDigits: first.leftDigits,
+          leftWord: first.leftWord,
+          latinSideBySide: first.latinSideBySide,
+          twoRow: first.twoRow,
+          columns: first.columns,
+          notes: [...first.notes, 'latin stack with stroke rows kept'],
+        );
+      }
+      return first;
+    }
     final rows = _segment(g, runLines: true);
     if (rows.twoRow && rows.numberChars.length >= 5) return rows;
     return first;
   }
+
+  /// Two stacked letters, one under 0.6 of the other's height.
+  static bool _unevenStack(List<NormalizedRect> st) =>
+      st.length == 2 &&
+      (st[0].height < st[1].height * 0.6 || st[1].height < st[0].height * 0.6);
 
   /// How much of a plate [s] found: a number of plate length, and each
   /// section.
@@ -220,7 +270,11 @@ class PlateSegmenter {
         (s.latinStack.length == 2 ? 2 : 0);
   }
 
-  PlateSegmentation _segment(GrayImage g, {bool runLines = false}) {
+  PlateSegmentation _segment(
+    GrayImage g, {
+    bool runLines = false,
+    bool keepStrokeRows = false,
+  }) {
     final w = g.width, h = g.height;
     _notes = [];
     final ink = _inkMask(g);
@@ -229,7 +283,7 @@ class PlateSegmenter {
       inkCount += v;
     }
     _notes.add('image=${w}x$h ink=${(100 * inkCount / ink.length).round()}%');
-    _eraseLines(ink, w, h, runs: runLines);
+    _eraseLines(ink, w, h, runs: runLines, keepStrokeRows: keepStrokeRows);
     // Shapes far wider than any character are characters joined by thin
     // strokes (watermark text, a mouse cursor): thin strokes are removed
     // there only, so thin rings and Ge'ez strokes elsewhere stay intact.
@@ -730,9 +784,21 @@ class PlateSegmenter {
   /// [runs], only those holding one long unbroken run — a row through the
   /// big digits of a two-row plate (filling most of its width, but broken
   /// by the gaps between them) then stays.
-  void _eraseLines(Uint8List ink, int w, int h, {bool runs = false}) {
-    int count(int n, int Function(int) at) {
-      if (!runs) {
+  ///
+  /// With [keepStrokeRows], a row also needs a run of 0.15 of the width: a
+  /// row through the tops of big, bold characters is half ink in short
+  /// strokes (longest run 0.08), border and background rows run 0.26 or
+  /// more. Not the default: the rest of segmenting is tuned on masks with
+  /// those rows erased (stencil 1s, a bumper edge beside the plate).
+  void _eraseLines(
+    Uint8List ink,
+    int w,
+    int h, {
+    bool runs = false,
+    bool keepStrokeRows = false,
+  }) {
+    int count(int n, int Function(int) at, {bool? longest}) {
+      if (!(longest ?? runs)) {
         var c = 0;
         for (var i = 0; i < n; i++) {
           c += at(i);
@@ -755,7 +821,9 @@ class PlateSegmenter {
     }
 
     for (var y = 0; y < h; y++) {
-      if (count(w, (x) => ink[y * w + x]) > w * 0.5) {
+      if (count(w, (x) => ink[y * w + x]) > w * 0.5 &&
+          (!keepStrokeRows ||
+              count(w, (x) => ink[y * w + x], longest: true) > w * 0.15)) {
         ink.fillRange(y * w, (y + 1) * w, 0);
       }
     }
