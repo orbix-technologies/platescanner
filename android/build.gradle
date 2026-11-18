@@ -57,4 +57,7 @@ dependencies {
 
     // Latin OCR (prototype recogniser — see doc/MODEL_DECISION.md).
     implementation("com.google.mlkit:text-recognition:16.0.1")
+
+    // Whole-plate detector (assets/plate_detector.tflite, trained in training/).
+    implementation("com.google.ai.edge.litert:litert:1.4.2")
 }

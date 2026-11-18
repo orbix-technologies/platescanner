@@ -204,6 +204,46 @@ void main() {
       expect(lax.parse(lines(['2 12345'])).isValid, isTrue);
     });
 
+    test("daily permit: የዕለት ኦሮ 091 OR, a three-digit number", () {
+      expect(PlateServiceType.fromCode('DAILY'), PlateServiceType.daily);
+      expect(PlateServiceType.daily.amharicLabel, 'የዕለት');
+      expect(parser.validate(code: 'DAILY', regionCode: 'OR', serial: '091'),
+          isEmpty);
+      // Short numbers only pass on a daily permit.
+      expect(parser.validate(code: '2', regionCode: 'OR', serial: '091'),
+          [PlateIssue.missingSerial]);
+      expect(parser.validate(code: 'DAILY', regionCode: 'OR', serial: '1'),
+          [PlateIssue.missingSerial]);
+    });
+
+    group("Ge'ez section-1 words from a recogniser that reads Ge'ez", () {
+      test('የዕለት ኦሮ 091 OR → daily permit', () {
+        final r = parser.parse(lines(['የዕለት ኦሮ 091 OR']));
+        expect(r.code, 'DAILY');
+        expect(r.regionCode, 'OR');
+        expect(r.serial, '091');
+        expect(r.isValid, isTrue);
+      });
+
+      test('ተላላፊ ኢት 012345 ET → temporary, not national', () {
+        final r = parser.parse(lines(['ተላላፊ ኢት 012345 ET']));
+        expect(r.code, 'TEMP');
+        expect(r.regionCode, 'ET');
+        expect(r.serial, '012345');
+      });
+
+      test('ፖሊስ 012345 AA → police', () {
+        final r = parser.parse(lines(['ፖሊስ', '012345 AA']));
+        expect(r.code, 'POLICE');
+        expect(r.serial, '012345');
+        expect(r.isValid, isTrue);
+      });
+
+      test('a circled code still wins over no word', () {
+        expect(parser.parse(lines(['② አአ B05475 AA'])).code, '2');
+      });
+    });
+
     test('unknown code is flagged on edited values', () {
       expect(
         parser.validate(code: '9', regionCode: 'AA', serial: '12345'),
@@ -239,5 +279,16 @@ void main() {
     );
     expect(parser.format(r), '2 · AA · A12345');
     expect(r.canonical, '2-AA-A12345');
+  });
+
+  group('ink red against its paper', () {
+    test('washed-out red on cream (screen photo) is red', () {
+      expect(InkColor.redOnPaper([168, 143, 155], [229, 219, 233]), isTrue);
+    });
+    test('black, blue and green inks are not', () {
+      expect(InkColor.redOnPaper([93, 101, 106], [222, 223, 244]), isFalse);
+      expect(InkColor.redOnPaper([62, 69, 140], [222, 224, 228]), isFalse);
+      expect(InkColor.redOnPaper([85, 135, 109], [209, 217, 236]), isFalse);
+    });
   });
 }

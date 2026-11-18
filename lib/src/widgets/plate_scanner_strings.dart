@@ -30,6 +30,8 @@ class PlateScannerStrings {
     required this.fieldCode,
     required this.fieldRegion,
     required this.fieldSerial,
+    this.fieldEmbassy = 'Embassy number',
+    this.moveCloser = 'Move closer to the plate',
     required this.issueMissingCode,
     required this.issueUnknownCode,
     required this.issueMissingRegion,
@@ -66,6 +68,8 @@ class PlateScannerStrings {
         fieldCode = 'Code',
         fieldRegion = 'Region',
         fieldSerial = 'Serial',
+        fieldEmbassy = 'Embassy number',
+        moveCloser = 'Move closer to the plate',
         issueMissingCode = 'Code not read',
         issueUnknownCode = 'Unknown code',
         issueMissingRegion = 'Region not read',
@@ -102,6 +106,8 @@ class PlateScannerStrings {
         fieldCode = 'ኮድ',
         fieldRegion = 'ክልል',
         fieldSerial = 'ቁጥር',
+        fieldEmbassy = 'የኤምባሲ ቁጥር',
+        moveCloser = 'ወደ ታርጋው ይቅረቡ',
         issueMissingCode = 'ኮዱ አልተነበበም',
         issueUnknownCode = 'ያልታወቀ ኮድ',
         issueMissingRegion = 'ክልሉ አልተነበበም',
@@ -143,6 +149,12 @@ class PlateScannerStrings {
 
   /// Field labels when editing.
   final String fieldCode, fieldRegion, fieldSerial;
+
+  /// Field label for a diplomatic plate's embassy number.
+  final String fieldEmbassy;
+
+  /// Step 1 hint: the plate found is too small in the frame to read.
+  final String moveCloser;
 
   /// Validation problems.
   final String issueMissingCode,
@@ -201,6 +213,8 @@ class PlateScannerStrings {
     String? fieldCode,
     String? fieldRegion,
     String? fieldSerial,
+    String? fieldEmbassy,
+    String? moveCloser,
     String? issueMissingCode,
     String? issueUnknownCode,
     String? issueMissingRegion,
@@ -234,6 +248,8 @@ class PlateScannerStrings {
         fieldCode: fieldCode ?? this.fieldCode,
         fieldRegion: fieldRegion ?? this.fieldRegion,
         fieldSerial: fieldSerial ?? this.fieldSerial,
+        fieldEmbassy: fieldEmbassy ?? this.fieldEmbassy,
+        moveCloser: moveCloser ?? this.moveCloser,
         issueMissingCode: issueMissingCode ?? this.issueMissingCode,
         issueUnknownCode: issueUnknownCode ?? this.issueUnknownCode,
         issueMissingRegion: issueMissingRegion ?? this.issueMissingRegion,

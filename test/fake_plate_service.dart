@@ -29,8 +29,13 @@ class FakePlateService extends PlateRecognitionService {
     _frames.add(OcrFrame(lines: lines, timestamp: DateTime(2026)));
   }
 
-  void emitFrame(List<OcrLine> lines) =>
-      _frames.add(OcrFrame(lines: lines, timestamp: DateTime(2026)));
+  void emitFrame(
+    List<OcrLine> lines, {
+    List<DetectedPlate> plates = const [],
+  }) =>
+      _frames.add(
+        OcrFrame(lines: lines, timestamp: DateTime(2026), plates: plates),
+      );
 
   void emitError(String message) => _errors.add(message);
 
@@ -66,10 +71,18 @@ class FakePlateService extends PlateRecognitionService {
   int captures = 0;
   String framePath = '/tmp/frame.jpg';
 
+  /// Plates the detector model "finds" on the next still.
+  List<DetectedPlate> stillPlates = const [];
+
   @override
   Future<CapturedFrame> captureFrame() async {
     captures++;
-    return CapturedFrame(path: framePath, width: 1080, height: 2340);
+    return CapturedFrame(
+      path: framePath,
+      width: 1080,
+      height: 2340,
+      plates: stillPlates,
+    );
   }
 
   @override

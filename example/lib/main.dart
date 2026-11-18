@@ -132,7 +132,7 @@ class _HomePageState extends State<HomePage> {
                           title: Text(_parser.format(r)),
                           subtitle: Text(
                             '${r.serviceType?.label ?? r.code} · '
-                            '${r.region?.englishName ?? 'no region'} · '
+                            '${r.region?.englishName ?? r.mission ?? 'no region'} · '
                             '${(r.confidence * 100).round()}%'
                             '${r.editedByUser ? ' · edited' : ''}',
                           ),

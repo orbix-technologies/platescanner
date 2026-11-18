@@ -45,6 +45,7 @@ Special plates: UN (light blue, "የተመ" / "UN"), AU (light green, "አሕ" /
 | Diplomatic | embassy no. (big, 2 digits, **no circle**) · Ge'ez · number (**4**) · C/D stacked on a yellow strip | No circle + two big digits left of the Ge'ez → code `CD` even when C/D is misread (section 4 shown as `CD`, "by layout"); else stack `CD`. Embassy number read alone and as one word, looked up |
 | Police | ፖሊስ · Ge'ez stack · number (6) · region stacked, **yellow** plate | Yellow background → `POLICE`; else no circle + Ge'ez word + Ge'ez stack in dark ink → `POLICE`. Section 1 shows ፖሊስ |
 | Temporary | ተላላፊ · Ge'ez stack · number (6) · region stacked, light blue on white | No circle + Ge'ez word + Ge'ez stack in blue ink → `TEMP`. Section 1 shows ተላላፊ |
+| Daily permit | የዕለት · Ge'ez stack (ኦሮ) · number (3, e.g. 091) · region stacked (O/R), **red on cream** | No circle + Ge'ez word (or the layout alone with a short number) + Ge'ez stack in red ink → `DAILY`. Red counts outright or against the plate's own cream (`InkColor.redOnPaper`: a screen or dim light washes it to pink-grey); ink colour is measured on a 3-digit read when no 5-digit one exists. Numbers of 2–6 digits accepted until other lengths are seen. Read off a screen photo (`daily_screen.png`); the windscreen photo still fails segmentation (three digits of uneven height; skipped test) |
 
 A "Ge'ez word" is two or more letter-sized shapes (0.3–0.6 of a digit)
 spanning at least 1.5 digit pitches where the circle would be (words in the

@@ -1,5 +1,8 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+
+import 'package:flutter/foundation.dart';
 
 import '../models/ocr_frame.dart';
 import '../models/plate_area.dart';
@@ -17,6 +20,11 @@ import '../segmentation/plate_segmenter.dart';
 ///   read, the sections, the reading, edits and how the session ended;
 /// * `session_<start>.jpg` — the captured frame the reading was made from.
 ///
+/// Every attempt is logged, including ones that never captured a still
+/// (cancelled, closed with back, or the app killed): those have a JSON file
+/// with no `.jpg` and `frame: null`. The file is saved at the start and
+/// every few detections, so its last event shows how far the scan got.
+///
 /// Pull from an Android debug build with:
 /// `adb exec-out run-as <app id> tar c cache/et_plate_logs | tar x`
 class SessionLog {
@@ -31,6 +39,9 @@ class SessionLog {
   /// Detection events kept per session (frames arrive ~10–20 per second).
   static const _maxDetections = 40;
 
+  /// Detection events between saves while no still was captured yet.
+  static const _saveEvery = 5;
+
   String get _id => '${_start.millisecondsSinceEpoch}';
 
   /// Adds an event.
@@ -43,33 +54,72 @@ class SessionLog {
   }
 
   /// Adds a live detection event (capped per session).
-  void detection(List<OcrLine> lines, NormalizedRect? area) {
+  ///
+  /// Saves every [_saveEvery] logged detections, so a session that never
+  /// reaches a capture is still on disk.
+  void detection(
+    List<OcrLine> lines,
+    NormalizedRect? area, {
+    List<DetectedPlate> plates = const [],
+  }) {
     if (_detectionsLogged >= _maxDetections) return;
     _detectionsLogged++;
+    if (_detectionsLogged % _saveEvery == 0) unawaited(save());
     event('detect', {
       'lines': [for (final l in lines) _line(l)],
       'area': rect(area),
+      if (plates.isNotEmpty)
+        'plates': [
+          for (final p in plates) {...?rect(p.box), 'score': p.score},
+        ],
     });
   }
 
   /// Remembers the captured frame to copy beside the log.
   void frame(CapturedFrame frame) => _framePath = frame.path;
 
-  /// Writes the log (and the frame) now. Safe to call repeatedly: the same
-  /// files are overwritten as the session goes on. Never throws.
-  Future<void> save() async {
+  /// Where logs go before any still was captured: the directory the stills
+  /// are written to, so all logs land in one `et_plate_logs/`.
+  @visibleForTesting
+  static String? fallbackDirectory;
+
+  /// The app's cache directory, where the native scanner writes stills.
+  /// Flutter's temp directory is `code_cache/` on Android (its sibling
+  /// `cache/` is `Context.cacheDir`) and `tmp/` on iOS.
+  static String get _cacheDirectory {
+    final temp = Directory.systemTemp.path;
+    if (Platform.isAndroid && temp.endsWith('/code_cache')) {
+      return '${temp.substring(0, temp.length - 'code_cache'.length)}cache';
+    }
+    return temp;
+  }
+
+  Future<void> _saving = Future.value();
+
+  /// Writes the log (and the frame, once there is one) now. Safe to call
+  /// repeatedly: the same files are overwritten as the session goes on, so a
+  /// session that never captured, or that the app was killed in, still
+  /// leaves a log. Saves run one after another. Never throws.
+  Future<void> save() => _saving = _saving.then((_) => _write());
+
+  Future<void> _write() async {
     final framePath = _framePath;
-    if (framePath == null) return; // nowhere to write before a capture
     try {
-      final dir = Directory('${File(framePath).parent.path}/et_plate_logs');
+      final base = framePath != null
+          ? File(framePath).parent.path
+          : fallbackDirectory ?? _cacheDirectory;
+      final dir = Directory('$base/et_plate_logs');
       await dir.create(recursive: true);
-      final image = File('${dir.path}/session_$_id.jpg');
-      if (!await image.exists()) await File(framePath).copy(image.path);
+      File? image;
+      if (framePath != null) {
+        image = File('${dir.path}/session_$_id.jpg');
+        if (!await image.exists()) await File(framePath).copy(image.path);
+      }
       final json = const JsonEncoder.withIndent('  ').convert({
         'session': _id,
         'started': _start.toIso8601String(),
         'platform': Platform.operatingSystem,
-        'frame': image.path,
+        'frame': image?.path,
         'events': _events,
       });
       await File('${dir.path}/session_$_id.json').writeAsString(json);

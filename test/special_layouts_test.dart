@@ -115,4 +115,83 @@ void main() {
     ]).arrangement;
     expect(a.code.value, 'POLICE');
   });
+
+  test('a daily permit read "eee0912" is not taken for a national plate', () {
+    // Whole-area OCR on the phone (2026-11-06): the word as "eee", 091, and
+    // the stacked O/R as "2". A national plate has no stacked region letters.
+    final seg = segmentCaptureSync('test/fixtures/plates/daily.png', area)!;
+    expect(seg.latinStack, hasLength(2));
+    final crops = reader.cropsFor(seg, area);
+    final r = reader.read(
+      seg,
+      crops,
+      [
+        for (final _ in crops) const <String?>[null, null, null]
+      ],
+      const AreaOcr(elements: [
+        OcrElement(text: 'eee0912', box: NormalizedRect(0.05, 0.2, 0.95, 0.8)),
+      ]),
+    );
+    expect(r.arrangement.code.value, isNot('ETH'));
+    expect(r.candidate.serial, isNot('EEE0912'));
+  });
+
+  // The same daily permit photographed off a screen on the phone
+  // (2026-11-06 11:49, reads, ink and paper as logged). The red ink comes out
+  // pink-grey (168, 144, 160) and is red only against its cream paper; the
+  // bolt hole and የ left of the word look like an embassy's two digits.
+  test('daily permit off a screen: washed-out red, bolt hole, 091', () {
+    final seg =
+        segmentCaptureSync('test/fixtures/plates/daily_screen.png', area)!;
+    expect(seg.code, isNull);
+    expect(seg.numberChars, hasLength(3));
+    expect(seg.geezStack, hasLength(2));
+    expect(seg.latinStack, hasLength(2));
+    final r = read('daily_screen.png', {
+      'number0': ['091', '091', ''],
+      'latin0': ['0', '', ''],
+      'latin1': ['R', 'R', 'R'],
+      'latinWord0': ['0R', '0 R', 'R'],
+      'digit1': ['6', '', ''],
+      'digit2': ['1', '1', ''],
+    }, ink: [
+      172,
+      144,
+      160
+    ], paper: [
+      235,
+      223,
+      241
+    ]);
+    expect(r.arrangement.code.value, 'DAILY');
+    expect(r.candidate.regionCode, 'OR');
+    expect(r.candidate.serial, '091');
+    expect(r.candidate.isValid, isTrue);
+  });
+
+  // Real daily permit (የዕለት ኦሮ 091 OR, red on cream, through a windscreen;
+  // 2026-11-06). Section reading is ready for it, but the segmenter takes
+  // the Ge'ez word for digits: with only three digits of uneven height
+  // (88/74/95 px) the digit height settles on the word's letters.
+  test('daily permit: የዕለት, Ge\'ez stack, three digits, O/R stacked', () {
+    final seg = segmentCaptureSync('test/fixtures/plates/daily.png', area)!;
+    expect(seg.code, isNull);
+    expect(seg.numberChars, hasLength(3));
+    expect(seg.geezStack, hasLength(2));
+    expect(seg.latinStack, hasLength(2));
+    final r = read('daily.png', {
+      'number0': ['091', '091', null],
+      'latin0': ['O', 'O', null],
+      'latin1': ['R', 'R', null],
+    }, ink: [
+      160,
+      70,
+      75
+    ]);
+    expect(r.arrangement.code.value, 'DAILY');
+    expect(r.arrangement.code.chars.single.text, 'የዕለት');
+    expect(r.candidate.regionCode, 'OR');
+    expect(r.candidate.serial, '091');
+    expect(r.candidate.isValid, isTrue);
+  }, skip: 'segmenter: digit height on a three-digit number (see comment)');
 }

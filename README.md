@@ -157,6 +157,7 @@ There's nothing to create, initialise or dispose.
 | `plate` | `2-AA-B05475` | The plate as one string (same as `record.canonical`) |
 | `record.code` | `2`, `CD`, `POLICE`, `ETH` | Circled code, or the special-plate type |
 | `record.regionCode` | `AA` | `null` on plates without a region |
+| `record.embassyCode` | `132` | Diplomatic (CD) plates: the embassy number; `record.mission` is its country (`Armenia`). Part of `canonical`: `CD-132-0123` |
 | `record.serial` | `B05475` | The number |
 | `record.serviceType` | `PlateServiceType.private` | `.label` is "Private" |
 | `record.region` | `EthiopianRegion.addisAbaba` | `.englishName`, `.amharicLabel` ("አአ") |

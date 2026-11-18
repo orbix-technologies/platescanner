@@ -191,7 +191,14 @@ class EtPlateReaderPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                     )
                 }
                 // Section 1 fallback: the number's ink colour gives the code.
-                CropOcr.numberAnchor(text)?.let { a ->
+                // Short numbers (the 2–3 digit daily permit) still give the
+                // colour that tells them apart (red ink).
+                // A 5-digit run much smaller than a 3-digit one is other text
+                // in view (a file name, a dealer's phone number), not the plate.
+                val long = CropOcr.numberAnchor(text)
+                val short = CropOcr.numberAnchor(text, minDigits = 3)
+                val anchor = if (long == null || (short != null && short.height > long.height * 1.5)) short else long
+                anchor?.let { a ->
                     val numberBox = Rect(a.first.left, a.top, a.last.right, a.bottom)
                     CropOcr.inkColor(page, numberBox)?.let { rgb ->
                         payload["inkColor"] = rgb.toList()

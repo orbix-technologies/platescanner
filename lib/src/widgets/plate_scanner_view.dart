@@ -9,6 +9,7 @@ import '../exceptions/plate_reader_exception.dart';
 import '../models/ocr_frame.dart';
 import '../models/plate_area.dart';
 import '../models/plate_record.dart';
+import '../parsing/diplomatic_codes.dart';
 import '../parsing/ethiopian_region.dart';
 import '../parsing/plate_service_type.dart';
 import '../recognition/plate_camera_preview.dart';
@@ -877,7 +878,11 @@ class _ShutterBar extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              found ? scope.strings.plateFound : scope.strings.fitPlate,
+              controller.plateTooSmall
+                  ? scope.strings.moveCloser
+                  : found
+                      ? scope.strings.plateFound
+                      : scope.strings.fitPlate,
               textAlign: TextAlign.center,
               style: _hint.copyWith(
                 shadows: const [Shadow(blurRadius: 6, color: Colors.black54)],
@@ -1032,6 +1037,10 @@ class _ResultSheetState extends State<_ResultSheet> {
     final issues = c.draftIssues;
     // Only what blocks Done is shown, e.g. "Number not read".
     final detail = issues.map(strings.issue).join(' · ');
+    // Diplomatic plates: the country of the embassy number.
+    final mission = c.draftCode == 'CD'
+        ? diplomaticMissions[int.tryParse(c.draftEmbassyCode ?? '') ?? -1]
+        : null;
 
     return _Sheet(
       children: [
@@ -1047,6 +1056,7 @@ class _ResultSheetState extends State<_ResultSheet> {
                 child: Center(
                   child: _PlateChip(
                     code: c.draftCode,
+                    embassy: c.draftCode == 'CD' ? c.draftEmbassyCode : null,
                     region: c.draftRegionCode,
                     serial: c.draftSerial,
                   ),
@@ -1060,6 +1070,14 @@ class _ResultSheetState extends State<_ResultSheet> {
                 ),
             ],
           ),
+          if (mission != null) ...[
+            const SizedBox(height: 6),
+            Text(
+              mission,
+              textAlign: TextAlign.center,
+              style: text.bodyMedium,
+            ),
+          ],
           if (detail.isNotEmpty) ...[
             const SizedBox(height: 10),
             Text(
@@ -1088,9 +1106,10 @@ class _ResultSheetState extends State<_ResultSheet> {
 
 /// The reading drawn like a small plate: code, number, region.
 class _PlateChip extends StatelessWidget {
-  const _PlateChip({this.code, this.region, this.serial});
+  const _PlateChip({this.code, this.embassy, this.region, this.serial});
 
-  final String? code, region, serial;
+  /// [embassy]: a diplomatic plate's embassy number, before the serial.
+  final String? code, embassy, region, serial;
 
   @override
   Widget build(BuildContext context) {
@@ -1139,6 +1158,21 @@ class _PlateChip extends StatelessWidget {
                     ),
               const SizedBox(width: 12),
             ],
+            if (embassy != null) ...[
+              Text(
+                embassy!,
+                style: TextStyle(
+                  color: ink,
+                  fontSize: 30,
+                  fontWeight: FontWeight.w800,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+              Text(
+                ' · ',
+                style: TextStyle(color: ink, fontSize: 24),
+              ),
+            ],
             Text(
               serial ?? '—',
               style: TextStyle(
@@ -1183,10 +1217,14 @@ class _EditFormState extends State<_EditForm> {
   late final TextEditingController _serial = TextEditingController(
     text: widget.controller.draftSerial ?? '',
   );
+  late final TextEditingController _embassy = TextEditingController(
+    text: widget.controller.draftEmbassyCode ?? '',
+  );
 
   @override
   void dispose() {
     _serial.dispose();
+    _embassy.dispose();
     super.dispose();
   }
 
@@ -1219,6 +1257,15 @@ class _EditFormState extends State<_EditForm> {
           decoration: field(strings.fieldSerial),
           onChanged: (v) => c.editField(serial: v),
         ),
+        if (c.draftCode == 'CD') ...[
+          const SizedBox(height: 12),
+          TextField(
+            controller: _embassy,
+            keyboardType: TextInputType.number,
+            decoration: field(strings.fieldEmbassy),
+            onChanged: (v) => c.editField(embassyCode: v),
+          ),
+        ],
         const SizedBox(height: 12),
         Row(
           children: [

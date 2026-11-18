@@ -26,6 +26,10 @@ class EthiopianPlateParser {
   /// `ABC1234` (motorcycles reportedly may have three digits: unconfirmed).
   static final nationalSerialPattern = RegExp(r'^[A-Z]{3}\d{4}$');
 
+  /// Serial of a daily permit: a short number (`091`); 2–6 digits accepted
+  /// until other lengths are seen.
+  static final dailySerialPattern = RegExp(r'^\d{2,6}$');
+
   // Ge'ez is never read: the region comes from its Latin letters only, so
   // Ge'ez characters split tokens like punctuation.
   static final _splitter = RegExp(r'[^A-Za-z0-9]+');
@@ -96,9 +100,23 @@ class EthiopianPlateParser {
     // Old plates sometimes merge the code box into the serial ("212345").
     var serial = serialHit?.value;
     final alt = serialHit?.mergedAlternative;
+    // A recogniser that reads Ge'ez gives the special plate's word
+    // (የዕለት, ተላላፊ, ፖሊስ, የተመ, አሕ) in place of a circled code.
+    final word = PlateServiceType.fromAmharic(rawText);
+    if (word != null && (code == null || code == hint)) code = word.code;
     if (code == null && alt != null) {
       code = alt.$1;
       serial = alt.$2;
+    }
+    // A daily permit's number is short (091): the first plain number left.
+    if (code == PlateServiceType.daily.code && serial == null) {
+      for (final t in tokens) {
+        if (!used.contains(t.index) && dailySerialPattern.hasMatch(t.text)) {
+          serial = t.text;
+          used.add(t.index);
+          break;
+        }
+      }
     }
 
     String? regionCode;
@@ -164,8 +182,14 @@ class EthiopianPlateParser {
     final national = type == PlateServiceType.national &&
         serial != null &&
         nationalSerialPattern.hasMatch(serial);
+    final daily = type == PlateServiceType.daily &&
+        serial != null &&
+        dailySerialPattern.hasMatch(serial);
     if (serial == null ||
-        (!serialPattern.hasMatch(serial) && !diplomatic && !national)) {
+        (!serialPattern.hasMatch(serial) &&
+            !diplomatic &&
+            !national &&
+            !daily)) {
       issues.add(PlateIssue.missingSerial);
     }
     return issues;
@@ -243,6 +267,7 @@ class EthiopianPlateParser {
   /// Formats a record for display, e.g. `2 · AA · A12345`.
   String format(PlateRecord record) => [
         record.code,
+        if (record.embassyCode != null) record.embassyCode!,
         if (record.regionCode != null) record.regionCode!,
         record.serial,
       ].join(' · ');

@@ -407,7 +407,8 @@ class PlateArranger {
   /// 1. a special plate (UN / AU / CD stack, yellow police plate);
   /// 2. the circled-code pass, when backed by [_strongVotes] crops;
   /// 3. the number's ink colour (1 red, 2 blue, 3 green, 4 black,
-  ///    5 orange) — except red ↔ orange, which a camera can't tell apart;
+  ///    5 orange) — except red ↔ orange, which a camera can't tell apart,
+  ///    and black, which only fills a missing circle read;
   /// 4. a weak circle read, or a code digit read in the code zone.
   PlateSection _codeSection(
     List<_Char> chars,
@@ -463,7 +464,10 @@ class PlateArranger {
       final byColour = PlateServiceType.fromInk(colour)?.code;
       const warm = {'1', '5'}; // red and orange look alike on camera
       final sameFamily = warm.contains(byColour) && warm.contains(value);
-      if (byColour != null && byColour != value && !sameFamily) {
+      // "Black" is only dark ink without a clear hue — green in shade looks
+      // the same — so it fills a missing circle read but never replaces one.
+      final weak = colour == InkColor.black && value != null;
+      if (byColour != null && byColour != value && !sameFamily && !weak) {
         note = value == null ? 'by colour' : 'by colour (circle read $value)';
         value = byColour;
       }

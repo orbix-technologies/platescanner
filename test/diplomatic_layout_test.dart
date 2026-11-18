@@ -47,5 +47,9 @@ void main() {
     expect(a.latinRegion.value, 'CD');
     expect(a.latinRegion.note, 'by layout');
     expect(a.number.value, '0123');
+    // The result keeps the embassy number (scans of 2026-10-27 lost it:
+    // saved as "CD-0123"), and section 2 is ኮዲ, not a region.
+    expect(r.candidate.embassyCode, '06');
+    expect(a.geezRegion.value, 'ኮዲ');
   });
 }

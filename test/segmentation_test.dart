@@ -57,7 +57,26 @@ void main() {
   expectReal('real_70695_edge', 5);
   expectReal('real_a41601', 6); // top A cut by a screw head
   expectReal('real_c06703', 6);
+  // The same car photographed at an angle (scans of 2026-10-26): the far
+  // digits shrink, so "03" passed for the region letters until the crop
+  // was straightened.
+  expectReal('angled_c06703_a', 6);
+  expectReal('angled_c06703_b', 6);
+  expectReal('angled_c06703_c', 6);
   expectReal('real_b88418', 6);
+
+  // Close-up of C06703 (scans of 2026-11-18): the rows through the bold
+  // character tops are half ink, and erasing them as a border cut the top
+  // A in two.
+  for (final name in ['bold_tops_c06703_a', 'bold_tops_c06703_b']) {
+    expectReal(name, 6);
+    test('$name: both stacked letters whole', () {
+      final st = seg(name).latinStack;
+      expect(st, hasLength(2));
+      expect(st[0].height, greaterThan(st[1].height * 0.6));
+      expect(st[1].height, greaterThan(st[0].height * 0.6));
+    });
+  }
 
   test('police: Ge\'ez stack · 6 digits · Latin stack, no circle', () {
     final s = seg('police');

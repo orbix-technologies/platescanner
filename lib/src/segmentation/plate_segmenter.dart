@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import '../models/ocr_frame.dart';
@@ -137,7 +138,7 @@ class PlateSegmentation {
   final List<NormalizedRect> leftDigits;
 
   /// Section 1 on plates without a circle: the shapes of the Ge'ez word
-  /// left of section 2 / the number (ፖሊስ, ተላላፊ, የተመ, አሕ), left to right.
+  /// left of section 2 / the number (ፖሊስ, ተላላፊ, የዕለት, የተመ, አሕ), left to right.
   final List<NormalizedRect> leftWord;
 
   /// Section 4 is two letters side by side (AU) rather than stacked.
@@ -166,20 +167,114 @@ class PlateSegmenter {
 
   List<String> _notes = [];
 
+  /// Letters a top-row shape spans: neighbouring letters seen small or at
+  /// an angle touch and form one wide shape.
+  static int _letters(Blob b) =>
+      math.max(1, (b.width / (b.height * 0.9)).round());
+
+  /// Notes why the plate isn't read as two rows.
+  Null _no(String why) {
+    _notes.add('one row: $why');
+    return null;
+  }
+
   /// Segments [g], a crop of the confirmed plate area.
   ///
   /// When too few characters are found, a two-row plate's big digits may
   /// have been cut by the border clean-up: retried keeping broken rows, and
   /// kept only if it finds a two-row plate with a full number.
+  ///
+  /// A plate seen at an angle shrinks towards its far end, so one digit
+  /// height misjudges the far digits and the letters beyond them (scans of
+  /// 2026-10-26: "03" taken for the region letters, "AA" lost). It is also
+  /// segmented straightened (the digits' top and bottom lines made level
+  /// and parallel), and that is kept when it finds more of the plate.
   PlateSegmentation segment(GrayImage g) {
+    final plain = _segmentOnce(g);
+    final k = _Keystone.of(this, g);
+    if (k == null) return plain;
+    final straight = _segmentOnce(k.image);
+    if (score(straight) <= score(plain)) return plain;
+    return k.mapBack(straight);
+  }
+
+  PlateSegmentation _segmentOnce(GrayImage g) {
     final first = _segment(g);
-    if (first.found && first.numberChars.length >= 5) return first;
+    // A crop under twice as wide as tall is an old two-row plate (one-row
+    // plates are 3+): read as one row, its top-row letters join the digits
+    // under them into tall columns and still pass for a number (C69001,
+    // session logs of 2026-11-18), so the two-row reading is tried too.
+    if (first.found && !first.twoRow && g.width < g.height * 2) {
+      final notes = _notes;
+      final rows = _segment(g, runLines: true);
+      if (rows.twoRow && rows.numberChars.length >= 5) return rows;
+      _notes = notes;
+    }
+    if (first.found && first.numberChars.length >= 5) {
+      if (!_unevenStack(first.latinStack)) return first;
+      // The top letter half as tall as the bottom one: a row through bold
+      // character tops was erased as border and cut it (C06703, session
+      // logs of 2026-11-18). Found again with such rows kept, only that
+      // stack is taken: the rest stays as first found (keeping those rows
+      // can join the circle or Ge'ez to their neighbours).
+      final notes = _notes;
+      final kept = _segment(g, keepStrokeRows: true);
+      _notes = notes;
+      final st = kept.latinStack, old = first.latinStack;
+      if (!_unevenStack(st) &&
+          st.length == 2 &&
+          kept.latinSideBySide == first.latinSideBySide &&
+          kept.twoRow == first.twoRow &&
+          // Same column: overlapping the first stack, right of the number.
+          st[0].left < old[0].right &&
+          st[0].right > old[0].left &&
+          st[0].left > first.number!.right) {
+        return PlateSegmentation(
+          number: first.number,
+          numberChars: first.numberChars,
+          code: first.code,
+          codeInner: first.codeInner,
+          geezStack: first.geezStack,
+          latinStack: st,
+          leftDigits: first.leftDigits,
+          leftWord: first.leftWord,
+          latinSideBySide: first.latinSideBySide,
+          twoRow: first.twoRow,
+          columns: first.columns,
+          notes: [...first.notes, 'latin stack with stroke rows kept'],
+        );
+      }
+      return first;
+    }
     final rows = _segment(g, runLines: true);
     if (rows.twoRow && rows.numberChars.length >= 5) return rows;
     return first;
   }
 
-  PlateSegmentation _segment(GrayImage g, {bool runLines = false}) {
+  /// Two stacked letters, one under 0.6 of the other's height.
+  static bool _unevenStack(List<NormalizedRect> st) =>
+      st.length == 2 &&
+      (st[0].height < st[1].height * 0.6 || st[1].height < st[0].height * 0.6);
+
+  /// How much of a plate [s] found: a number of plate length, and each
+  /// section.
+  static int score(PlateSegmentation s) {
+    if (!s.found) return 0;
+    final n = s.numberChars.length;
+    return 10 +
+        (n >= 5 && n <= 7 ? 4 : 0) +
+        (s.code != null || s.leftDigits.isNotEmpty || s.leftWord.isNotEmpty
+            ? 2
+            : 0) +
+        (s.geezStack.length == 2 ? 2 : 0) +
+        (s.latinStack.length == 2 ? 2 : 0);
+  }
+
+  PlateSegmentation _segment(
+    GrayImage g, {
+    bool runLines = false,
+    bool keepStrokeRows = false,
+  }) {
     final w = g.width, h = g.height;
     _notes = [];
     final ink = _inkMask(g);
@@ -188,7 +283,7 @@ class PlateSegmenter {
       inkCount += v;
     }
     _notes.add('image=${w}x$h ink=${(100 * inkCount / ink.length).round()}%');
-    _eraseLines(ink, w, h, runs: runLines);
+    _eraseLines(ink, w, h, runs: runLines, keepStrokeRows: keepStrokeRows);
     // Shapes far wider than any character are characters joined by thin
     // strokes (watermark text, a mouse cursor): thin strokes are removed
     // there only, so thin rings and Ge'ez strokes elsewhere stay intact.
@@ -356,7 +451,7 @@ class PlateSegmenter {
       List<Blob> kept, double hd, int h) {
     final digits =
         kept.where((b) => (b.height - hd).abs() <= hd * 0.2).toList();
-    if (digits.length < 4) return null;
+    if (digits.length < 4) return _no('digits ${digits.length}');
     // The digits' tilt (median of pairwise slopes of their tops), so a
     // tilted plate's rows are compared along it.
     double cx(Blob b) => (b.left + b.right) / 2;
@@ -374,9 +469,13 @@ class PlateSegmenter {
     final bandTop = tops[tops.length ~/ 2];
     // The number fills the lower half; a one-row plate's starts near the
     // top of its crop.
-    if (bandTop < h * 0.35) return null;
+    if (bandTop < h * 0.35) {
+      return _no('number high (${(bandTop / h).toStringAsFixed(2)})');
+    }
     // Digit-high shapes above the band are another plate in view.
-    if (digits.any((d) => level(d, d.bottom) <= bandTop)) return null;
+    if (digits.any((d) => level(d, d.bottom) <= bandTop)) {
+      return _no('digit-high shape above');
+    }
     final left = digits.map((d) => d.left).reduce((a, b) => a < b ? a : b);
     final right = digits.map((d) => d.right).reduce((a, b) => a > b ? a : b);
     final candidates = kept
@@ -385,7 +484,7 @@ class PlateSegmenter {
             b.height >= hd * 0.2 &&
             b.height <= hd * 0.9)
         .toList();
-    if (candidates.length < 3) return null;
+    if (candidates.length < 3) return _no('above ${candidates.length}');
     // One row: centres level with each other.
     double centre(Blob b) => level(b, (b.top + b.bottom) / 2);
     final centres = [for (final b in candidates) centre(b)]..sort();
@@ -398,10 +497,16 @@ class PlateSegmenter {
     ];
     // Circle and four letters, about half a digit high; screws and the
     // chip above a one-row plate's digits are smaller and fewer.
-    if (top.where((b) => b.height >= hd * 0.35).length < 4) return null;
+    // Circle and four letters; letters merged into one wide shape count as
+    // the letters they span.
+    final letters = top
+        .where((b) => b.height >= hd * 0.35)
+        .map(_letters)
+        .fold(0, (a, b) => a + b);
+    if (letters < 4) return _no('letters $letters of ${top.length}');
     final span = top.map((b) => b.right).reduce((a, b) => a > b ? a : b) -
         top.map((b) => b.left).reduce((a, b) => a < b ? a : b);
-    if (span < (right - left) * 0.4) return null;
+    if (span < (right - left) * 0.4) return _no('top row narrow');
     return (
       top: top,
       bottom: [
@@ -451,26 +556,79 @@ class PlateSegmenter {
     // A blurred ring isn't recognised: the circle is the first shape.
     var circle = circleAt < 0 ? null : row[circleAt];
     if (circle == null && letters.length >= 5) circle = letters.removeAt(0);
-    // Top row not read in full (blur, a letter joined to the chip): the
-    // number below is still the plate's — better than one-row guesses.
+    // The ring merged with its digit isn't a ring either, but is as wide as
+    // tall and far wider than the Ge'ez letters after it (two-row B00490,
+    // session logs of 2026-10-27).
+    if (circle == null && letters.length >= 3) {
+      final f = letters.first.box;
+      final rest = [for (final c in letters.skip(1)) c.box.width]..sort();
+      if (f.width >= f.height * 0.85 &&
+          f.width >= rest[rest.length ~/ 2] * 1.4) {
+        circle = letters.removeAt(0);
+      }
+    }
     final full = letters.length >= 4;
-    final geez = full ? letters.take(2).toList() : const <Column>[];
-    final latin =
-        full ? letters.skip(letters.length - 2).toList() : const <Column>[];
+    var geez = [
+      for (final c in full ? letters.take(2) : const <Column>[]) c.box
+    ];
+    var latin = [
+      for (final c
+          in full ? letters.skip(letters.length - 2) : const <Column>[])
+        c.box
+    ];
 
     NormalizedRect n(Blob b) =>
         NormalizedRect(b.left / w, b.top / h, b.right / w, b.bottom / h);
     final numberBox = number.map((c) => c.box).reduce((a, b) => a.union(b));
+    var code = circle?.box;
+    if (!full) {
+      // Letters joined into fewer shapes: the top row's layout is fixed
+      // (circle, the Ge'ez pair, the chip, the Latin pair; measured
+      // against the number's width), so each section is the ink there.
+      final x0 = numberBox.left, nw = numberBox.width;
+      Blob? zone(double a, double b, {bool letters = true}) {
+        final l = x0 + a * nw, r = x0 + b * nw;
+        Blob? u;
+        for (final t in top) {
+          if (t.right <= l || t.left >= r) continue;
+          // Not the chip between the pairs (smaller than the letters).
+          if (letters && t.height < ht * 0.7) continue;
+          final c = Blob(math.max(t.left, l.round()), t.top,
+              math.min(t.right, r.round()), t.bottom, 0);
+          u = u == null ? c : u.union(c);
+        }
+        return u;
+      }
+
+      List<Blob> pair(Blob? z) => z == null || z.width < 2
+          ? const []
+          : [
+              Blob(z.left, z.top, z.left + z.width ~/ 2, z.bottom, 0),
+              Blob(z.left + z.width ~/ 2, z.top, z.right, z.bottom, 0),
+            ];
+      code ??= zone(-0.08, 0.21, letters: false);
+      final g = zone(0.21, 0.52);
+      var l = zone(0.62, 1.05);
+      // One Latin letter lost (joined to a screw and the border, erased
+      // with it): the pair is as wide as the Ge'ez pair (two-row B00490).
+      if (g != null && l != null && l.width < g.width * 0.7) {
+        l = Blob(l.left, l.top,
+            math.min(w, l.left + (g.width * 1.1).round()), l.bottom, 0);
+      }
+      geez = pair(g);
+      latin = pair(l);
+      if (geez.isNotEmpty || latin.isNotEmpty) _notes.add('top row by layout');
+    }
     _notes.add('two rows');
     return PlateSegmentation(
       number: n(numberBox),
       numberChars: [for (final c in number) n(c.box)],
-      code: circle == null ? null : n(circle.box),
+      code: code == null ? null : n(code),
       codeInner: circle == null ? null : _inner(circle).let(n),
-      geezStack: [for (final c in geez) n(c.box)],
-      latinStack: [for (final c in latin) n(c.box)],
+      geezStack: [for (final c in geez) n(c)],
+      latinStack: [for (final c in latin) n(c)],
       leftDigits: const [],
-      latinSideBySide: full,
+      latinSideBySide: latin.isNotEmpty,
       twoRow: true,
       columns: [...row, ...columns],
       notes: _notes,
@@ -626,9 +784,21 @@ class PlateSegmenter {
   /// [runs], only those holding one long unbroken run — a row through the
   /// big digits of a two-row plate (filling most of its width, but broken
   /// by the gaps between them) then stays.
-  void _eraseLines(Uint8List ink, int w, int h, {bool runs = false}) {
-    int count(int n, int Function(int) at) {
-      if (!runs) {
+  ///
+  /// With [keepStrokeRows], a row also needs a run of 0.15 of the width: a
+  /// row through the tops of big, bold characters is half ink in short
+  /// strokes (longest run 0.08), border and background rows run 0.26 or
+  /// more. Not the default: the rest of segmenting is tuned on masks with
+  /// those rows erased (stencil 1s, a bumper edge beside the plate).
+  void _eraseLines(
+    Uint8List ink,
+    int w,
+    int h, {
+    bool runs = false,
+    bool keepStrokeRows = false,
+  }) {
+    int count(int n, int Function(int) at, {bool? longest}) {
+      if (!(longest ?? runs)) {
         var c = 0;
         for (var i = 0; i < n; i++) {
           c += at(i);
@@ -651,7 +821,9 @@ class PlateSegmenter {
     }
 
     for (var y = 0; y < h; y++) {
-      if (count(w, (x) => ink[y * w + x]) > w * 0.5) {
+      if (count(w, (x) => ink[y * w + x]) > w * 0.5 &&
+          (!keepStrokeRows ||
+              count(w, (x) => ink[y * w + x], longest: true) > w * 0.15)) {
         ink.fillRange(y * w, (y + 1) * w, 0);
       }
     }
@@ -892,6 +1064,18 @@ class PlateSegmenter {
         g.any((o) => !identical(o, main) && main.contains(o))) {
       return ColumnKind.circle;
     }
+    // The digit touching a thin ring (a red "1" on taxi plates): one shape,
+    // round and hollow — no digit is that round and that empty.
+    final fill = main.area / (main.width * main.height);
+    if (main.height >= hd * 0.45 &&
+        main.height <= hd * 0.9 &&
+        // A ring is as wide as high and mostly empty (a red "1" in one:
+        // ~0.16 ink); a Ge'ez letter is narrower or fuller (~0.27).
+        ratio > 0.88 &&
+        ratio < 1.15 &&
+        fill < 0.26) {
+      return ColumnKind.circle;
+    }
     // Two shapes one above the other, each well short of a digit.
     final parts = g.where((b) => b.height >= hd * 0.18).toList();
     if (parts.length >= 2 && box.height >= hd * 0.6) {
@@ -1065,5 +1249,147 @@ extension _Let<T> on T? {
   R? let<R>(R Function(T) f) {
     final v = this;
     return v == null ? null : f(v);
+  }
+}
+
+/// A plate crop straightened for segmentation: each column stretched so
+/// the digits' top and bottom lines (fitted on the digit-tall shapes) are
+/// level and the digits equally high across the plate.
+class _Keystone {
+  _Keystone(this.image, this._top, this._slopeTop, this._bottom,
+      this._slopeBottom, this._t, this._hn);
+
+  /// The straightened crop.
+  final GrayImage image;
+
+  // Source lines: top(x) = _top + _slopeTop * x, bottom likewise; target
+  // band: from _t, _hn high.
+  final double _top, _slopeTop, _bottom, _slopeBottom, _t, _hn;
+
+  double _srcY(double x, double y) {
+    final st = _top + _slopeTop * x;
+    final sh = (_bottom + _slopeBottom * x) - st;
+    return st + (y - _t) * sh / _hn;
+  }
+
+  /// [g] straightened, or null when its digits are already level and
+  /// equally high (or too few to tell).
+  static _Keystone? of(PlateSegmenter s, GrayImage g) {
+    final w = g.width, h = g.height;
+    final ink = s._inkMask(g);
+    s._eraseLines(ink, w, h);
+    // As segmenting does: shapes far wider than a character are characters
+    // joined by thin strokes (to the border on a tilted plate).
+    for (final b in s._blobs(ink, w, h)) {
+      final fill = b.area / (b.width * b.height);
+      if (b.width > h * 1.2 && b.height > h * 0.4 && fill >= 0.2) {
+        s._open(ink, w, h, b);
+      }
+    }
+    final shapes = s
+        ._blobs(ink, w, h)
+        .where((b) =>
+            b.top > 0 &&
+            b.bottom < h &&
+            b.height >= h * 0.2 &&
+            b.height < h * 0.97 &&
+            b.width <= b.height * 1.1)
+        .toList();
+    if (shapes.length < 4) return null;
+    final tallest = shapes.map((b) => b.height).reduce(math.max);
+    var digits = shapes.where((b) => b.height >= tallest * 0.7).toList();
+    if (digits.length < 4) return null;
+    (double, double) fit(List<Blob> ds, double Function(Blob) y) {
+      final n = ds.length;
+      final mx = ds.map((d) => d.centerX).reduce((a, b) => a + b) / n;
+      final my = ds.map(y).reduce((a, b) => a + b) / n;
+      var sxy = 0.0, sxx = 0.0;
+      for (final d in ds) {
+        sxy += (d.centerX - mx) * (y(d) - my);
+        sxx += (d.centerX - mx) * (d.centerX - mx);
+      }
+      final b = sxx == 0 ? 0.0 : sxy / sxx;
+      return (my - b * mx, b);
+    }
+
+    var (t0, tb) = fit(digits, (d) => d.top.toDouble());
+    var (b0, bb) = fit(digits, (d) => d.bottom.toDouble());
+    // Grown along the row: the far digits are shorter than the tallest,
+    // so each round takes the shapes the lines predict at their place
+    // (as high, on both lines; not a screw or a letter), and refits.
+    for (var round = 0; round < 3; round++) {
+      final grown = [
+        for (final d in shapes)
+          if (() {
+            final pt = t0 + tb * d.centerX, pb = b0 + bb * d.centerX;
+            final ph = pb - pt;
+            return ph > 0 &&
+                (d.height - ph).abs() <= ph * 0.2 &&
+                (d.top - pt).abs() <= ph * 0.15 &&
+                (d.bottom - pb).abs() <= ph * 0.15;
+          }())
+            d,
+      ];
+      if (grown.length < 4) break;
+      digits = grown;
+      (t0, tb) = fit(digits, (d) => d.top.toDouble());
+      (b0, bb) = fit(digits, (d) => d.bottom.toDouble());
+    }
+    final hm =
+        digits.map((d) => d.height).reduce((a, b) => a + b) / digits.length;
+    final x0 = digits.map((d) => d.left).reduce(math.min).toDouble();
+    final x1 = digits.map((d) => d.right).reduce(math.max).toDouble();
+    if (x1 - x0 < w * 0.3) return null;
+    double ht(double x) => (b0 + bb * x) - (t0 + tb * x);
+    final h0 = ht(x0), h1 = ht(x1);
+    if (h0 <= 0 || h1 <= 0) return null;
+    final ratio = math.max(h0, h1) / math.min(h0, h1);
+    // Level and equally high already: nothing to straighten.
+    if (ratio < 1.08 && (tb.abs() * w) < hm * 0.15) return null;
+    final cx = w / 2;
+    final t = t0 + tb * cx, hn = ht(cx);
+    if (hn <= 0) return null;
+    final out = Uint8List(w * h);
+    final k = _Keystone(GrayImage(w, h, out), t0, tb, b0, bb, t, hn);
+    for (var x = 0; x < w; x++) {
+      for (var y = 0; y < h; y++) {
+        final sy = k._srcY(x.toDouble(), y.toDouble()).round().clamp(0, h - 1);
+        out[y * w + x] = g.pixels[sy * w + x];
+      }
+    }
+    return k;
+  }
+
+  /// [r] (normalized to the straightened crop) on the original crop.
+  NormalizedRect _back(NormalizedRect r) {
+    final w = image.width.toDouble(), h = image.height.toDouble();
+    final ys = [
+      for (final x in [r.left * w, r.right * w])
+        for (final y in [r.top * h, r.bottom * h]) _srcY(x, y) / h,
+    ];
+    double c(double v) => v.clamp(0.0, 1.0);
+    return NormalizedRect(
+        r.left, c(ys.reduce(math.min)), r.right, c(ys.reduce(math.max)));
+  }
+
+  /// [s] with its boxes on the original crop.
+  PlateSegmentation mapBack(PlateSegmentation s) {
+    NormalizedRect? one(NormalizedRect? r) => r == null ? null : _back(r);
+    List<NormalizedRect> all(List<NormalizedRect> rs) =>
+        [for (final r in rs) _back(r)];
+    return PlateSegmentation(
+      number: one(s.number),
+      numberChars: all(s.numberChars),
+      code: one(s.code),
+      codeInner: one(s.codeInner),
+      geezStack: all(s.geezStack),
+      latinStack: all(s.latinStack),
+      leftDigits: all(s.leftDigits),
+      leftWord: all(s.leftWord),
+      latinSideBySide: s.latinSideBySide,
+      twoRow: s.twoRow,
+      columns: s.columns,
+      notes: [...s.notes, 'straightened'],
+    );
   }
 }

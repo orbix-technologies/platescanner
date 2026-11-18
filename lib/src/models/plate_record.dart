@@ -1,5 +1,6 @@
 import 'package:json_annotation/json_annotation.dart';
 
+import '../parsing/diplomatic_codes.dart';
 import '../parsing/ethiopian_region.dart';
 import '../parsing/plate_service_type.dart';
 import 'ocr_frame.dart';
@@ -72,7 +73,12 @@ class PlateCandidate {
     required this.confidence,
     required this.issues,
     this.boundingBox,
+    this.embassyCode,
   });
+
+  /// Diplomatic plates: the embassy number left of the Ge'ez (`132`), or
+  /// `null`.
+  final String? embassyCode;
 
   /// Code-box value (`2`, `CD`, …), or `null` when not read.
   final String? code;
@@ -132,6 +138,7 @@ class PlateRecord {
     this.location,
     this.description,
     this.status = 'confirmed',
+    this.embassyCode,
   });
 
   /// Unique id (UUID v4).
@@ -173,15 +180,29 @@ class PlateRecord {
   /// Host workflow status (`confirmed` by default).
   final String status;
 
+  /// Diplomatic plates: the embassy number (`132`), which tells the
+  /// country ([mission]); `null` on other plates. Two embassies' cars can
+  /// carry the same number, so it is part of [canonical].
+  final String? embassyCode;
+
+  /// The country or organisation of [embassyCode] (`Armenia`), if known.
+  String? get mission => embassyCode == null
+      ? null
+      : diplomaticMissions[int.tryParse(embassyCode!) ?? -1];
+
   /// Region enum for [regionCode].
   EthiopianRegion? get region => EthiopianRegion.fromCode(regionCode);
 
   /// Service type for [code].
   PlateServiceType? get serviceType => PlateServiceType.fromCode(code);
 
-  /// Compact form, e.g. `2-AA-A12345`.
-  String get canonical =>
-      regionCode == null ? '$code-$serial' : '$code-$regionCode-$serial';
+  /// Compact form, e.g. `2-AA-A12345`; diplomatic `CD-132-0123`.
+  String get canonical => [
+        code,
+        if (embassyCode != null) embassyCode!,
+        if (regionCode != null) regionCode!,
+        serial,
+      ].join('-');
 
   /// Copy with selected fields replaced.
   PlateRecord copyWith({
@@ -193,6 +214,7 @@ class PlateRecord {
     PlateLocation? location,
     String? description,
     String? status,
+    String? embassyCode,
   }) {
     return PlateRecord(
       id: id,
@@ -208,6 +230,7 @@ class PlateRecord {
       location: location ?? this.location,
       description: description ?? this.description,
       status: status ?? this.status,
+      embassyCode: embassyCode ?? this.embassyCode,
     );
   }
 

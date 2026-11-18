@@ -17,6 +17,10 @@ void main() {
     'two_row_51988_et.png': (5, true),
     'two_row_71141_rotated.png': (5, true),
     'two_row_a84451.png': (6, false),
+    // Read as one row before (session logs of 2026-11-18): top-row letters
+    // joined the digits under them and still passed for a number.
+    'two_row_c69001.png': (6, true),
+    'two_row_b00761.png': (6, true),
   };
 
   fixtures.forEach((name, expected) {
@@ -34,7 +38,9 @@ void main() {
         for (final r in [...seg.geezStack, ...seg.latinStack]) {
           expect(r.bottom, lessThanOrEqualTo(seg.number!.top + 0.02));
         }
-        expect(seg.latinStack[0].right, lessThan(seg.latinStack[1].left));
+        // Side by side, not overlapping (they may touch).
+        expect(seg.latinStack[0].right,
+            lessThanOrEqualTo(seg.latinStack[1].left));
       }
     });
   });
