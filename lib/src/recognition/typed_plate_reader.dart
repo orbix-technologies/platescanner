@@ -38,6 +38,7 @@ class TypedPlateReader {
     EthiopianPlateParser parser = const EthiopianPlateParser(),
     GlyphClassifier? glyphClassifier,
     this.minGlyphMeanScore = 0.62,
+    this.earlyExitMinConfidence = 0.85,
   })  : parser = parser,
         _arranger = PlateArranger(parser: parser),
         _sections = PlateSectionReader(parser: parser),
@@ -52,11 +53,39 @@ class TypedPlateReader {
   /// Glyph ballots below this mean score are dropped.
   final double minGlyphMeanScore;
 
+  /// Primary OCR must meet this confidence to skip extra prep passes.
+  final double earlyExitMinConfidence;
+
   final PlateArranger _arranger;
   final PlateSectionReader _sections;
   final GlyphPlateReader _glyph;
 
+  /// Whether primary OCR (and optional glyph) are strong enough to skip
+  /// contrast / padVertical consensus passes.
+  static bool shouldEarlyExit({
+    required PlateCandidate ocr,
+    PlateCandidate? glyph,
+    double minConfidence = 0.85,
+  }) {
+    final serial = ocr.serial;
+    if (serial == null || serial.isEmpty) return false;
+    if (ocr.confidence < minConfidence) return false;
+    if (!_mildIssues(ocr.issues)) return false;
+    if (glyph == null) return true;
+    return glyph.key == ocr.key;
+  }
+
+  /// [missingCode] alone is mild (circle often hard); other issues block.
+  static bool _mildIssues(List<PlateIssue> issues) {
+    if (issues.isEmpty) return true;
+    return issues.length == 1 && issues.first == PlateIssue.missingCode;
+  }
+
   /// Collects consensus ballots for [family] on the still at [path].
+  ///
+  /// Pass [still] to avoid re-reading the JPEG for each prep. Pass
+  /// [primarySeg] when the controller already segmented primary for type
+  /// classification so that pass is not repeated.
   Future<List<TypedReadPass>> collectBallots({
     required PlateFamily family,
     required String path,
@@ -64,6 +93,8 @@ class TypedPlateReader {
     required AreaOcr ocr,
     required Future<List<List<String?>>> Function(List<CropSpec> crops)
         readCrops,
+    PreparedStill? still,
+    PlateSegmentation? primarySeg,
     void Function(String name, [Map<String, Object?> data])? log,
     void Function(PlateSegmentation seg)? onPrimarySegmentation,
   }) async {
@@ -87,6 +118,8 @@ class TypedPlateReader {
           area: area,
           ocr: ocr,
           readCrops: readCrops,
+          still: still,
+          primarySeg: primarySeg,
           log: log,
           onPrimarySegmentation: onPrimarySegmentation,
           // Special plates still use section crops; section reader applies
@@ -129,17 +162,24 @@ class TypedPlateReader {
     required AreaOcr ocr,
     required Future<List<List<String?>>> Function(List<CropSpec> crops)
         readCrops,
+    PreparedStill? still,
+    PlateSegmentation? primarySeg,
     void Function(String name, [Map<String, Object?> data])? log,
     void Function(PlateSegmentation seg)? onPrimarySegmentation,
     required bool includeGlyph,
   }) async {
     final out = <TypedReadPass>[];
+
     for (final prep in SegmentPrep.values) {
       PlateSegmentation? seg;
-      try {
-        seg = await segmentCapture(path, area, prep: prep);
-      } catch (e) {
-        log?.call('segmentationError', {'error': '$e', 'prep': prep.name});
+      if (prep == SegmentPrep.primary && primarySeg != null) {
+        seg = primarySeg;
+      } else {
+        try {
+          seg = await segmentCapture(path, area, prep: prep, still: still);
+        } catch (e) {
+          log?.call('segmentationError', {'error': '$e', 'prep': prep.name});
+        }
       }
       if (prep == SegmentPrep.primary && seg != null) {
         onPrimarySegmentation?.call(seg);
@@ -156,36 +196,64 @@ class TypedPlateReader {
       }
 
       final ocrPass = await _readWithOcrCrops(path, area, seg, ocr, readCrops);
-      out.add(TypedReadPass(
+      final ocrBallot = TypedReadPass(
         candidate: ocrPass.candidate,
         arrangement: ocrPass.arrangement,
         source: 'ocr:${prep.name}',
-      ));
+      );
+      out.add(ocrBallot);
 
-      if (!includeGlyph) continue;
-      final gray = plateGraySync(path, area, prep: prep);
-      if (gray == null) continue;
-      final glyphPass = _glyph.read(gray, seg, ocr);
-      final scored =
-          glyphPass.glyphs.where((g) => g.score > 0).map((g) => g.score);
-      final mean = scored.isEmpty
-          ? 0.0
-          : scored.reduce((a, b) => a + b) / scored.length;
-      if (prep == SegmentPrep.primary) {
-        log?.call('glyphs', {
-          'labels': [for (final g in glyphPass.glyphs) g.label],
-          'scores': [for (final g in glyphPass.glyphs) g.score],
-          'meanScore': mean,
-        });
+      TypedReadPass? glyphBallot;
+      if (includeGlyph) {
+        final gray = plateGraySync(path, area, prep: prep, still: still);
+        if (gray != null) {
+          final glyphPass = _glyph.read(gray, seg, ocr);
+          final scored =
+              glyphPass.glyphs.where((g) => g.score > 0).map((g) => g.score);
+          final mean = scored.isEmpty
+              ? 0.0
+              : scored.reduce((a, b) => a + b) / scored.length;
+          if (prep == SegmentPrep.primary) {
+            log?.call('glyphs', {
+              'labels': [for (final g in glyphPass.glyphs) g.label],
+              'scores': [for (final g in glyphPass.glyphs) g.score],
+              'meanScore': mean,
+            });
+          }
+          if (mean >= minGlyphMeanScore &&
+              glyphPass.candidate.serial != null &&
+              glyphPass.candidate.serial!.isNotEmpty) {
+            glyphBallot = TypedReadPass(
+              candidate: glyphPass.candidate,
+              arrangement: glyphPass.arrangement,
+              source: 'glyph:${prep.name}',
+            );
+            out.add(glyphBallot);
+          }
+        }
       }
-      if (mean >= minGlyphMeanScore &&
-          glyphPass.candidate.serial != null &&
-          glyphPass.candidate.serial!.isNotEmpty) {
-        out.add(TypedReadPass(
-          candidate: glyphPass.candidate,
-          arrangement: glyphPass.arrangement,
-          source: 'glyph:${prep.name}',
-        ));
+
+      if (prep == SegmentPrep.primary) {
+        if (shouldEarlyExit(
+          ocr: ocrBallot.candidate,
+          glyph: glyphBallot?.candidate,
+          minConfidence: earlyExitMinConfidence,
+        )) {
+          log?.call('typedReader', {
+            'earlyExit': true,
+            'prep': prep.name,
+            'ocrKey': ocrBallot.candidate.key,
+            'glyphKey': glyphBallot?.candidate.key,
+            'confidence': ocrBallot.candidate.confidence,
+          });
+          return out;
+        }
+        log?.call('typedReader', {
+          'earlyExit': false,
+          'prep': prep.name,
+          'ocrKey': ocrBallot.candidate.key,
+          'confidence': ocrBallot.candidate.confidence,
+        });
       }
     }
     return out;

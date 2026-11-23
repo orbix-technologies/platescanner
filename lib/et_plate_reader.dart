@@ -61,7 +61,7 @@ export 'src/recognition/plate_availability.dart'
     show PlateReader, PlateReaderAvailability, PlateReaderAvailabilityStatus;
 export 'src/recognition/plate_recognition_service.dart'
     show CropSpec, PlateRecognitionService, PlateRecognitionServiceFactory;
-export 'src/segmentation/segment_capture.dart' show SegmentPrep;
+export 'src/segmentation/segment_capture.dart' show PreparedStill, SegmentPrep;
 export 'src/widgets/plate_scan.dart' show EtPlateReader, PlateScanResult;
 export 'src/widgets/plate_scanner_options.dart'
     show ConfirmAreaMode, PlateScannerOptions, PlateScannerTheme;

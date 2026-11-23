@@ -578,6 +578,9 @@ class PlateReaderController extends ChangeNotifier {
     _log?.event('confirmArea', {'area': SessionLog.rect(area)});
     _notify();
     try {
+      // One disk read for all prep / glyph passes.
+      final still = await PreparedStill.load(frame.path);
+
       // Colours + text hints; sectionPasses off — typed readers request crops.
       final ocr = await _service.recognizeArea(
         frame.path,
@@ -591,7 +594,11 @@ class PlateReaderController extends ChangeNotifier {
       // Primary segmentation feeds the type classifier (geometry signals).
       PlateSegmentation? primarySeg;
       try {
-        primarySeg = await segmentCapture(frame.path, area);
+        primarySeg = await segmentCapture(
+          frame.path,
+          area,
+          still: still,
+        );
       } catch (e) {
         _log?.event('segmentationError', {'error': '$e', 'prep': 'primary'});
       }
@@ -619,6 +626,8 @@ class PlateReaderController extends ChangeNotifier {
         path: frame.path,
         area: area,
         ocr: ocr,
+        still: still,
+        primarySeg: primarySeg,
         readCrops: (crops) => _service.readCrops(
           frame.path,
           crops,

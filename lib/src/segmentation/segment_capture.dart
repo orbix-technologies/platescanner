@@ -24,19 +24,53 @@ enum SegmentPrep {
   padVertical,
 }
 
+/// JPEG/PNG bytes for one still, loaded once and reused across prep passes
+/// so each segment/gray call skips another disk read.
+class PreparedStill {
+  PreparedStill._(this.path, this.bytes);
+
+  /// Original file path (logging / native OCR).
+  final String path;
+
+  /// File bytes (decoded per isolate call, not re-read from disk).
+  final Uint8List bytes;
+
+  /// Reads [path] once. Null when missing or empty.
+  static Future<PreparedStill?> load(String path) async {
+    final file = File(path);
+    if (!file.existsSync()) return null;
+    final bytes = await file.readAsBytes();
+    if (bytes.isEmpty) return null;
+    return PreparedStill._(path, bytes);
+  }
+
+  /// Sync load for tests / tools.
+  static PreparedStill? loadSync(String path) {
+    final file = File(path);
+    if (!file.existsSync()) return null;
+    final bytes = file.readAsBytesSync();
+    if (bytes.isEmpty) return null;
+    return PreparedStill._(path, bytes);
+  }
+}
+
 /// Segments [area] (normalized) of the JPEG still at [path], off the UI
 /// isolate. Boxes in the result are normalized to [area]. Returns null when
-/// the image can't be read.
+/// the image can't be read. Pass [still] to skip re-reading the file.
 Future<PlateSegmentation?> segmentCapture(
   String path,
   NormalizedRect area, {
   SegmentPrep prep = SegmentPrep.primary,
+  PreparedStill? still,
 }) async {
-  if (!File(path).existsSync()) return null;
+  final bytes = still?.bytes ??
+      (File(path).existsSync() ? File(path).readAsBytesSync() : null);
+  if (bytes == null || bytes.isEmpty) return null;
   final l = area.left, t = area.top, r = area.right, b = area.bottom;
   final p = prep;
+  final copy = Uint8List.fromList(bytes);
   return Isolate.run(
-      () => segmentCaptureSync(path, NormalizedRect(l, t, r, b), prep: p));
+      () => segmentCaptureFromBytes(copy, NormalizedRect(l, t, r, b), prep: p));
 }
 
 /// Synchronous body of [segmentCapture] (tests, tools).
@@ -44,10 +78,21 @@ PlateSegmentation? segmentCaptureSync(
   String path,
   NormalizedRect area, {
   SegmentPrep prep = SegmentPrep.primary,
+  PreparedStill? still,
 }) {
-  final file = File(path);
-  if (!file.existsSync()) return null;
-  final photo = img.decodeImage(file.readAsBytesSync());
+  final bytes = still?.bytes ??
+      (File(path).existsSync() ? File(path).readAsBytesSync() : null);
+  if (bytes == null || bytes.isEmpty) return null;
+  return segmentCaptureFromBytes(bytes, area, prep: prep);
+}
+
+/// Segments from already-loaded image [bytes] (one decode per call).
+PlateSegmentation? segmentCaptureFromBytes(
+  Uint8List bytes,
+  NormalizedRect area, {
+  SegmentPrep prep = SegmentPrep.primary,
+}) {
+  final photo = img.decodeImage(bytes);
   if (photo == null) return null;
   final first = _segmentArea(photo, area, prep: prep);
   if (first == null || !first.found) return first;
@@ -85,10 +130,12 @@ GrayImage? plateGraySync(
   String path,
   NormalizedRect area, {
   SegmentPrep prep = SegmentPrep.primary,
+  PreparedStill? still,
 }) {
-  final file = File(path);
-  if (!file.existsSync()) return null;
-  final photo = img.decodeImage(file.readAsBytesSync());
+  final bytes = still?.bytes ??
+      (File(path).existsSync() ? File(path).readAsBytesSync() : null);
+  if (bytes == null || bytes.isEmpty) return null;
+  final photo = img.decodeImage(bytes);
   if (photo == null) return null;
   return _plateGray(photo, area, prep: prep);
 }
