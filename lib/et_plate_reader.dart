@@ -55,6 +55,8 @@ export 'src/recognition/reading_consensus.dart'
     show ReadingConsensus, voteReadings;
 export 'src/recognition/plate_type_classifier.dart'
     show PlateTypeClassifier, PlateTypeDecision, TypeFeatures;
+export 'src/recognition/typed_plate_reader.dart'
+    show TypedPlateReader, TypedReadPass;
 export 'src/recognition/plate_availability.dart'
     show PlateReader, PlateReaderAvailability, PlateReaderAvailabilityStatus;
 export 'src/recognition/plate_recognition_service.dart'

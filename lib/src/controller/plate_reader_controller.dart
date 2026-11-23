@@ -14,12 +14,13 @@ import '../models/plate_record.dart';
 import '../parsing/ethiopian_plate_parser.dart';
 import '../parsing/plate_area_detector.dart';
 import '../parsing/plate_arranger.dart';
+import '../parsing/plate_family.dart';
 import '../recognition/glyph_bank_loader.dart';
 import '../recognition/glyph_classifier.dart';
-import '../recognition/glyph_plate_reader.dart';
 import '../recognition/plate_recognition_service.dart';
+import '../recognition/plate_type_classifier.dart';
 import '../recognition/reading_consensus.dart';
-import '../parsing/plate_section_reader.dart';
+import '../recognition/typed_plate_reader.dart';
 import '../segmentation/plate_segmenter.dart';
 import '../segmentation/segment_capture.dart';
 
@@ -87,9 +88,9 @@ class PlateReaderController extends ChangeNotifier {
             requestCameraPermission ?? _defaultRequestCameraPermission,
         _parser = parser,
         _arranger = PlateArranger(parser: parser),
-        _sectionReader = PlateSectionReader(parser: parser),
         _glyphClassifier =
             glyphClassifier ?? GlyphClassifier.synthetic(),
+        _typeClassifier = const PlateTypeClassifier(),
         _detector = detector,
         _tracker = PlateAreaTracker(stableFrames: stableFrames);
 
@@ -98,8 +99,8 @@ class PlateReaderController extends ChangeNotifier {
   final Future<bool> Function() _requestCameraPermission;
   final EthiopianPlateParser _parser;
   final PlateArranger _arranger;
-  final PlateSectionReader _sectionReader;
   GlyphClassifier _glyphClassifier;
+  final PlateTypeClassifier _typeClassifier;
   final PlateAreaDetector _detector;
   final PlateAreaTracker _tracker;
 
@@ -164,6 +165,9 @@ class PlateReaderController extends ChangeNotifier {
   bool _isLoading = false;
   bool _lowAgreement = false;
   double _consensusAgreement = 1;
+  PlateFamily _plateFamily = PlateFamily.unknown;
+  double _typeConfidence = 0;
+  PlateTypeDecision? _typeDecision;
 
   /// Area snapping after capture: running, and whether it moved the area
   /// onto a found plate outline.
@@ -241,10 +245,21 @@ class PlateReaderController extends ChangeNotifier {
   /// Fraction of consensus ballots matching the chosen reading (`0`–`1`).
   double get consensusAgreement => _consensusAgreement;
 
-  /// Whether [lowAgreement] should force the review step even if the host
-  /// asked to skip it (`showReview: false`).
+  /// Detected plate layout family for the current reading.
+  PlateFamily get plateFamily => _plateFamily;
+
+  /// Confidence of [plateFamily] (`0`–`1`).
+  double get typeConfidence => _typeConfidence;
+
+  /// Last type decision (reasons for logs / UI), if classified.
+  PlateTypeDecision? get typeDecision => _typeDecision;
+
+  /// Whether review must not be skipped (`showReview: false`): disagreement,
+  /// parse issues, unknown family, or low type confidence.
   bool get requiresReview =>
-      _lowAgreement || (_candidate != null && _candidate!.issues.isNotEmpty);
+      _lowAgreement ||
+      (_candidate != null && _candidate!.issues.isNotEmpty) ||
+      (_typeDecision?.requiresReview ?? false);
 
   /// Kind of the last error, when it was a [PlateReaderException] (e.g.
   /// [PlateReaderErrorCode.permissionDenied]), so a UI can explain it.
@@ -557,11 +572,13 @@ class PlateReaderController extends ChangeNotifier {
     _phase = ScanPhase.reading;
     _lowAgreement = false;
     _consensusAgreement = 1;
+    _plateFamily = PlateFamily.unknown;
+    _typeConfidence = 0;
+    _typeDecision = null;
     _log?.event('confirmArea', {'area': SessionLog.rect(area)});
     _notify();
     try {
-      // Hybrid: native crop OCR (accurate on real fonts) + glyph classifier
-      // (deterministic when the bank matches). Three prep variants vote.
+      // Colours + text hints; sectionPasses off — typed readers request crops.
       final ocr = await _service.recognizeArea(
         frame.path,
         area,
@@ -571,89 +588,62 @@ class PlateReaderController extends ChangeNotifier {
       if (_phase != ScanPhase.reading) return;
       _areaOcr = ocr;
 
-      final glyphReader = GlyphPlateReader(
-        classifier: _glyphClassifier,
-        parser: _parser,
-      );
-      final ballots = <PlateCandidate>[];
-      final arrangements = <PlateArrangement>[];
-      final ballotKeys = <String>[];
-      final ballotSources = <String>[];
+      // Primary segmentation feeds the type classifier (geometry signals).
       PlateSegmentation? primarySeg;
-
-      for (final prep in SegmentPrep.values) {
-        PlateSegmentation? seg;
-        try {
-          seg = await segmentCapture(frame.path, area, prep: prep);
-        } catch (e) {
-          _log?.event('segmentationError', {
-            'error': '$e',
-            'prep': prep.name,
-          });
-        }
-        if (prep == SegmentPrep.primary) {
-          primarySeg = seg;
-          if (seg != null) {
-            _log?.event('segmentation', SessionLog.segmentation(seg));
-          }
-        }
-        if (seg == null || !seg.found) {
-          final fallback = _arranger.arrange(ocr);
-          ballots.add(fallback.candidate);
-          arrangements.add(fallback.arrangement);
-          ballotKeys.add(fallback.candidate.key);
-          ballotSources.add('arrange:${prep.name}');
-          continue;
-        }
-
-        // 1) Native crop OCR — primary accuracy path for real plate fonts.
-        final ocrPass = await _readWithOcrCrops(frame.path, area, seg, ocr);
-        ballots.add(ocrPass.candidate);
-        arrangements.add(ocrPass.arrangement);
-        ballotKeys.add(ocrPass.candidate.key);
-        ballotSources.add('ocr:${prep.name}');
-
-        // 2) Glyph path — only counted when scores look like a bank match
-        // (synthetic 7-segment prototypes score poorly on real fonts).
-        final gray = plateGraySync(frame.path, area, prep: prep);
-        if (gray == null) continue;
-        final glyphPass = glyphReader.read(gray, seg, ocr);
-        final scored =
-            glyphPass.glyphs.where((g) => g.score > 0).map((g) => g.score);
-        final mean = scored.isEmpty
-            ? 0.0
-            : scored.reduce((a, b) => a + b) / scored.length;
-        if (prep == SegmentPrep.primary) {
-          _log?.event('glyphs', {
-            'labels': [for (final g in glyphPass.glyphs) g.label],
-            'scores': [for (final g in glyphPass.glyphs) g.score],
-            'margins': [for (final g in glyphPass.glyphs) g.margin],
-            'meanScore': mean,
-          });
-        }
-        if (mean >= _minGlyphMeanScore &&
-            glyphPass.candidate.serial != null &&
-            glyphPass.candidate.serial!.isNotEmpty) {
-          ballots.add(glyphPass.candidate);
-          arrangements.add(glyphPass.arrangement);
-          ballotKeys.add(glyphPass.candidate.key);
-          ballotSources.add('glyph:${prep.name}');
-        }
+      try {
+        primarySeg = await segmentCapture(frame.path, area);
+      } catch (e) {
+        _log?.event('segmentationError', {'error': '$e', 'prep': 'primary'});
+      }
+      if (primarySeg != null) {
+        _log?.event('segmentation', SessionLog.segmentation(primarySeg));
       }
 
+      final features = TypeFeatures.from(
+        area: area,
+        seg: primarySeg,
+        ocr: ocr,
+      );
+      final decision = _typeClassifier.classify(features);
+      _typeDecision = decision;
+      _plateFamily = decision.family;
+      _typeConfidence = decision.confidence;
+      _log?.event('typeDecision', decision.toJson());
+
+      final typed = TypedPlateReader(
+        parser: _parser,
+        glyphClassifier: _glyphClassifier,
+      );
+      final passes = await typed.collectBallots(
+        family: decision.family,
+        path: frame.path,
+        area: area,
+        ocr: ocr,
+        readCrops: (crops) => _service.readCrops(
+          frame.path,
+          crops,
+        ),
+        log: (name, [data = const {}]) => _log?.event(name, data),
+      );
+
+      final ballots = [for (final p in passes) p.candidate];
+      final arrangements = [for (final p in passes) p.arrangement];
+      final ballotKeys = [for (final p in passes) p.candidate.key];
+      final ballotSources = [for (final p in passes) p.source];
+
       final consensus = voteReadings(ballots);
-      _lowAgreement = !consensus.agreed;
+      _lowAgreement = !consensus.agreed && ballots.length > 1;
       _consensusAgreement = consensus.agreement;
       _log?.event('consensus', {
         'keys': ballotKeys,
         'sources': ballotSources,
+        'family': decision.family.name,
         'winner': consensus.winner.key,
         'agreement': consensus.agreement,
         'agreed': consensus.agreed,
         'meanConfidence': consensus.meanConfidence,
       });
 
-      // Arrangement from the first ballot that matches the winning key.
       var arrangement = arrangements.isEmpty
           ? _arranger.arrange(ocr).arrangement
           : arrangements.first;
@@ -662,9 +652,6 @@ class PlateReaderController extends ChangeNotifier {
           arrangement = arrangements[i];
           break;
         }
-      }
-      if (primarySeg == null || !primarySeg.found) {
-        arrangement = _arranger.arrange(ocr).arrangement;
       }
 
       _arrangement = arrangement;
@@ -678,6 +665,8 @@ class PlateReaderController extends ChangeNotifier {
         ...SessionLog.arrangement(arrangement),
         'reading': SessionLog.candidate(consensus.winner),
         'lowAgreement': _lowAgreement,
+        'family': decision.family.name,
+        'typeConfidence': decision.confidence,
       });
       unawaited(_log?.save());
       _phase = ScanPhase.review;
@@ -829,6 +818,9 @@ class PlateReaderController extends ChangeNotifier {
     _detectedByModel = false;
     _lowAgreement = false;
     _consensusAgreement = 1;
+    _plateFamily = PlateFamily.unknown;
+    _typeConfidence = 0;
+    _typeDecision = null;
     _snapping = false;
     _areaSnapped = false;
     _snap = null;
@@ -857,35 +849,6 @@ class PlateReaderController extends ChangeNotifier {
         'Call initialize() before startSession()',
       );
     }
-  }
-
-  /// Glyph ballots below this mean cosine score are ignored (synthetic
-  /// 7-segment prototypes score ~0.2–0.4 on real plate fonts).
-  static const _minGlyphMeanScore = 0.62;
-
-  Future<({PlateArrangement arrangement, PlateCandidate candidate})>
-      _readWithOcrCrops(
-    String path,
-    NormalizedRect area,
-    PlateSegmentation seg,
-    AreaOcr ocr,
-  ) async {
-    var crops = _sectionReader.cropsFor(seg, area);
-    var reads =
-        await _service.readCrops(path, [for (final c in crops) c.spec]);
-    var result = _sectionReader.read(seg, crops, reads, ocr);
-    if (result.arrangement.number.value.isEmpty) {
-      final digits = _sectionReader.cropsFor(seg, area, digits: true);
-      final more =
-          await _service.readCrops(path, [for (final c in digits) c.spec]);
-      crops = [...crops, ...digits];
-      reads = [...reads, ...more];
-      result = _sectionReader.read(seg, crops, reads, ocr);
-    }
-    _log?.event('crops', {
-      'crops': SessionLog.crops(crops, reads),
-    });
-    return result;
   }
 
   Future<void> _loadGlyphBank() async {
