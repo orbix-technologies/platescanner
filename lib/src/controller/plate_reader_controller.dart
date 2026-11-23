@@ -379,10 +379,21 @@ class PlateReaderController extends ChangeNotifier {
     _detectedNational = detection?.national ?? false;
     _detectedByModel = plate != null;
     _log?.detection(lines, area, plates: frame.plates);
-    final stable = _tracker.add(area);
+    final stable = _tracker.add(area, confidence: _frameConfidence(plate, lines));
     _detectedArea = area;
     _notify();
     if (stable && autoCapture) unawaited(captureArea());
+  }
+
+  /// Detector score when present, else mean OCR line confidence in the ROI.
+  double? _frameConfidence(DetectedPlate? plate, List<OcrLine> lines) {
+    if (plate != null) return plate.score;
+    final confs = <double>[
+      for (final l in lines)
+        if (l.confidence != null) l.confidence!,
+    ];
+    if (confs.isEmpty) return null;
+    return confs.reduce((a, b) => a + b) / confs.length;
   }
 
   /// The most confident detector plate centred inside the guide box.

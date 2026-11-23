@@ -98,37 +98,65 @@ class PlateAreaDetector {
 /// Decides when a detected area has held still long enough to capture.
 class PlateAreaTracker {
   /// Creates a tracker needing [stableFrames] consecutive overlapping areas.
-  PlateAreaTracker({this.stableFrames = 3, this.minOverlap = 0.7});
+  ///
+  /// When [add] receives a confidence ≥ [highConfidenceThreshold], only
+  /// [fastStableFrames] overlapping frames are required (faster lock in
+  /// good light); otherwise [stableFrames] applies.
+  PlateAreaTracker({
+    this.stableFrames = 3,
+    this.minOverlap = 0.7,
+    this.highConfidenceThreshold = 0.75,
+    this.fastStableFrames = 2,
+  });
 
-  /// Consecutive overlapping detections needed.
+  /// Consecutive overlapping detections needed at normal confidence.
   final int stableFrames;
+
+  /// Consecutive overlapping detections needed when confidence is high.
+  final int fastStableFrames;
+
+  /// Mean OCR / detector confidence at or above this uses [fastStableFrames].
+  final double highConfidenceThreshold;
 
   /// Minimum intersection-over-union between consecutive detections.
   final double minOverlap;
 
   NormalizedRect? _last;
   int _streak = 0;
+  int _needed = 3;
 
   /// Progress towards a stable area (`0.0`–`1.0`).
-  double get progress => (_streak / stableFrames).clamp(0.0, 1.0);
+  double get progress => (_streak / _needed).clamp(0.0, 1.0);
+
+  /// Frames currently required for a lock (depends on last [add] confidence).
+  int get neededFrames => _needed;
 
   /// Feeds one frame's detection; returns `true` once stable.
-  bool add(NormalizedRect? area) {
+  ///
+  /// [confidence] is the mean in-area OCR (or detector) confidence when known.
+  bool add(NormalizedRect? area, {double? confidence}) {
     final last = _last;
     if (area == null) {
       _streak = 0;
       _last = null;
+      _needed = stableFrames;
       return false;
     }
     _streak = last != null && iou(last, area) >= minOverlap ? _streak + 1 : 1;
     _last = area;
-    return _streak >= stableFrames;
+    final fast = confidence != null && confidence >= highConfidenceThreshold;
+    var target = fast ? fastStableFrames : stableFrames;
+    if (target > stableFrames) target = stableFrames;
+    if (target < 1) target = 1;
+    _needed = target;
+    return _streak >= _needed;
   }
 
   /// Clears the run.
   void reset() {
     _streak = 0;
     _last = null;
+    _needed = stableFrames;
   }
 
   /// Intersection over union of two boxes.

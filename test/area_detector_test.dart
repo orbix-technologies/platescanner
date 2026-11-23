@@ -82,4 +82,21 @@ void main() {
     expect(t.add(moved), isTrue);
     expect(t.add(null), isFalse);
   });
+
+  test('tracker locks in 2 frames when confidence is high', () {
+    final t = PlateAreaTracker(stableFrames: 3);
+    const a = NormalizedRect(0.1, 0.4, 0.9, 0.5);
+    expect(t.add(a, confidence: 0.9), isFalse);
+    expect(t.neededFrames, 2);
+    expect(t.add(a, confidence: 0.8), isTrue);
+  });
+
+  test('tracker keeps stableFrames when confidence is low', () {
+    final t = PlateAreaTracker(stableFrames: 3);
+    const a = NormalizedRect(0.1, 0.4, 0.9, 0.5);
+    expect(t.add(a, confidence: 0.5), isFalse);
+    expect(t.neededFrames, 3);
+    expect(t.add(a, confidence: 0.4), isFalse);
+    expect(t.add(a, confidence: 0.6), isTrue);
+  });
 }

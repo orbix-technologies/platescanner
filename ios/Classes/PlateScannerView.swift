@@ -166,7 +166,8 @@ class PlateScannerView: UIView, AVCaptureVideoDataOutputSampleBufferDelegate {
     let request = VNRecognizeTextRequest { [weak self] request, _ in
       self?.deliver(request.results as? [VNRecognizedTextObservation] ?? [], visible: visible)
     }
-    request.recognitionLevel = .accurate
+    // Live framing: .fast for lower latency; still/crop paths stay .accurate.
+    request.recognitionLevel = .fast
     request.usesLanguageCorrection = false
     request.regionOfInterest = visible.flippedForVision
 
