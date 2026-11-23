@@ -11,26 +11,45 @@ import 'plate_segmenter.dart';
 /// Height the plate area is scaled to before segmentation.
 const segmentationHeight = 160;
 
+/// Controlled prep variants for multi-read consensus (same still, different
+/// geometry / contrast). Deskew itself lives inside [PlateSegmenter].
+enum SegmentPrep {
+  /// Default crop → 160 px → grayscale / ink.
+  primary,
+
+  /// Contrast-stretched luminance before segmentation.
+  contrast,
+
+  /// Slightly taller crop (more vertical margin) before resize.
+  padVertical,
+}
+
 /// Segments [area] (normalized) of the JPEG still at [path], off the UI
 /// isolate. Boxes in the result are normalized to [area]. Returns null when
 /// the image can't be read.
 Future<PlateSegmentation?> segmentCapture(
   String path,
-  NormalizedRect area,
-) async {
+  NormalizedRect area, {
+  SegmentPrep prep = SegmentPrep.primary,
+}) async {
   if (!File(path).existsSync()) return null;
   final l = area.left, t = area.top, r = area.right, b = area.bottom;
+  final p = prep;
   return Isolate.run(
-      () => segmentCaptureSync(path, NormalizedRect(l, t, r, b)));
+      () => segmentCaptureSync(path, NormalizedRect(l, t, r, b), prep: p));
 }
 
 /// Synchronous body of [segmentCapture] (tests, tools).
-PlateSegmentation? segmentCaptureSync(String path, NormalizedRect area) {
+PlateSegmentation? segmentCaptureSync(
+  String path,
+  NormalizedRect area, {
+  SegmentPrep prep = SegmentPrep.primary,
+}) {
   final file = File(path);
   if (!file.existsSync()) return null;
   final photo = img.decodeImage(file.readAsBytesSync());
   if (photo == null) return null;
-  final first = _segmentArea(photo, area);
+  final first = _segmentArea(photo, area, prep: prep);
   if (first == null || !first.found) return first;
   // A shape cut by the crop's side with its section missing (the circle
   // when the plate's side was taken at the ring, the region letters at
@@ -46,7 +65,7 @@ PlateSegmentation? segmentCaptureSync(String path, NormalizedRect area) {
     cutRight ? (area.right + m).clamp(0.0, 1.0) : area.right,
     area.bottom,
   );
-  final again = _segmentArea(photo, wider);
+  final again = _segmentArea(photo, wider, prep: prep);
   // Kept when it finds the missing part and loses none (a cut piece of the
   // ring can pass for digits left of the number, so scores may tie).
   bool more(int a, int b) => a >= b;
@@ -58,6 +77,20 @@ PlateSegmentation? segmentCaptureSync(String path, NormalizedRect area) {
           (cutRight && again.latinStack.length == 2));
   if (!better) return first;
   return _relative(again, wider, area);
+}
+
+/// Grayscale working image of [area] on [path] after the same resize used
+/// for segmentation (for glyph classification). Null when unreadable.
+GrayImage? plateGraySync(
+  String path,
+  NormalizedRect area, {
+  SegmentPrep prep = SegmentPrep.primary,
+}) {
+  final file = File(path);
+  if (!file.existsSync()) return null;
+  final photo = img.decodeImage(file.readAsBytesSync());
+  if (photo == null) return null;
+  return _plateGray(photo, area, prep: prep);
 }
 
 /// Whether a shape of [s] touches the crop's left (or right) side.
@@ -104,15 +137,26 @@ PlateSegmentation _relative(
   );
 }
 
-/// [area] of [photo] segmented: by brightness and by the darkest channel,
-/// keeping the one that finds more of the plate. Brightness suits most
-/// plates; red characters (taxi plates) are about as bright as the plate
-/// and show only in the darkest channel.
-PlateSegmentation? _segmentArea(img.Image photo, NormalizedRect area) {
-  final x = (area.left * photo.width).round().clamp(0, photo.width - 1);
-  final y = (area.top * photo.height).round().clamp(0, photo.height - 1);
-  final w = (area.width * photo.width).round().clamp(1, photo.width - x);
-  final h = (area.height * photo.height).round().clamp(1, photo.height - y);
+/// [area] of [photo] as the grayscale working image used for segmentation.
+GrayImage? _plateGray(
+  img.Image photo,
+  NormalizedRect area, {
+  SegmentPrep prep = SegmentPrep.primary,
+}) {
+  var use = area;
+  if (prep == SegmentPrep.padVertical) {
+    final my = area.height * 0.06;
+    use = NormalizedRect(
+      area.left,
+      (area.top - my).clamp(0.0, 1.0),
+      area.right,
+      (area.bottom + my).clamp(0.0, 1.0),
+    );
+  }
+  final x = (use.left * photo.width).round().clamp(0, photo.width - 1);
+  final y = (use.top * photo.height).round().clamp(0, photo.height - 1);
+  final w = (use.width * photo.width).round().clamp(1, photo.width - x);
+  final h = (use.height * photo.height).round().clamp(1, photo.height - y);
   if (w < 10 || h < 10) return null;
   final crop = img.copyCrop(photo, x: x, y: y, width: w, height: h);
   final plate = img.copyResize(
@@ -121,13 +165,61 @@ PlateSegmentation? _segmentArea(img.Image photo, NormalizedRect area) {
     interpolation: img.Interpolation.average,
   );
   final gray = img.grayscale(img.Image.from(plate));
-  final byBrightness = PlateSegmenter().segment(
-    GrayImage(
-      gray.width,
-      gray.height,
-      gray.getBytes(order: img.ChannelOrder.red),
-    ),
+  var bytes = gray.getBytes(order: img.ChannelOrder.red);
+  if (prep == SegmentPrep.contrast) {
+    bytes = _contrastStretch(bytes);
+  }
+  return GrayImage(gray.width, gray.height, bytes);
+}
+
+Uint8List _contrastStretch(Uint8List src) {
+  var lo = 255, hi = 0;
+  for (final v in src) {
+    if (v < lo) lo = v;
+    if (v > hi) hi = v;
+  }
+  if (hi <= lo) return Uint8List.fromList(src);
+  final out = Uint8List(src.length);
+  final span = hi - lo;
+  for (var i = 0; i < src.length; i++) {
+    out[i] = ((src[i] - lo) * 255 / span).round().clamp(0, 255);
+  }
+  return out;
+}
+
+/// [area] of [photo] segmented: by brightness and by the darkest channel,
+/// keeping the one that finds more of the plate. Brightness suits most
+/// plates; red characters (taxi plates) are about as bright as the plate
+/// and show only in the darkest channel.
+PlateSegmentation? _segmentArea(
+  img.Image photo,
+  NormalizedRect area, {
+  SegmentPrep prep = SegmentPrep.primary,
+}) {
+  final brightness = _plateGray(photo, area, prep: prep);
+  if (brightness == null) return null;
+  // Rebuild colour crop for inkImage (darkest channel) on the same geometry.
+  var use = area;
+  if (prep == SegmentPrep.padVertical) {
+    final my = area.height * 0.06;
+    use = NormalizedRect(
+      area.left,
+      (area.top - my).clamp(0.0, 1.0),
+      area.right,
+      (area.bottom + my).clamp(0.0, 1.0),
+    );
+  }
+  final x = (use.left * photo.width).round().clamp(0, photo.width - 1);
+  final y = (use.top * photo.height).round().clamp(0, photo.height - 1);
+  final w = (use.width * photo.width).round().clamp(1, photo.width - x);
+  final h = (use.height * photo.height).round().clamp(1, photo.height - y);
+  final crop = img.copyCrop(photo, x: x, y: y, width: w, height: h);
+  final plate = img.copyResize(
+    crop,
+    height: brightness.height,
+    interpolation: img.Interpolation.average,
   );
+  final byBrightness = PlateSegmenter().segment(brightness);
   // Only when brightness misses two parts of the plate or more (red
   // characters seen in pieces) — and not on a plate with a word left of
   // its number (the national plate's ኢት/ETH, special plates): those have
@@ -136,7 +228,11 @@ PlateSegmentation? _segmentArea(img.Image photo, NormalizedRect area) {
       PlateSegmenter.score(byBrightness) >= 10 + 4 + 2 + 2) {
     return byBrightness;
   }
-  final byInk = PlateSegmenter().segment(inkImage(plate));
+  var ink = inkImage(plate);
+  if (prep == SegmentPrep.contrast) {
+    ink = GrayImage(ink.width, ink.height, _contrastStretch(ink.pixels));
+  }
+  final byInk = PlateSegmenter().segment(ink);
   return PlateSegmenter.score(byInk) > PlateSegmenter.score(byBrightness)
       ? byInk
       : byBrightness;

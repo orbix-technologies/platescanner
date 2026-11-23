@@ -18,7 +18,8 @@ time: test → analyse faults → fix → brainstorm better approaches.
 | 7 | Columns | `plate_segmenter.dart` (`_columns`, `_classify`, `_mergeHalves`) |
 | 8 | Assign the four sections | `plate_segmenter.dart` (`segment`, `_numberRun`, `_splitJoinedStack`) |
 | 9 | Decide the crops to read | `parsing/plate_section_reader.dart` (`cropsFor`) |
-| 10 | OCR the crops | native `readCrops`, `CropOcr.kt` / `CropOcr.swift` |
+| 10 | Classify the crops | `GlyphClassifier` + bank (`glyph_plate_reader.dart`); native `readCrops` only as fallback when segmentation fails |
+| 10b | Consensus (3 preps) | `SegmentPrep` + `voteReadings` in `plate_reader_controller.dart` |
 | 11 | Interpret and validate | `plate_section_reader.dart` (`read`), `plate_arranger.dart` (code rules), `ethiopian_plate_parser.dart` |
 | 12 | Review and Done | `widgets/plate_scanner_view.dart` |
 | 13 | Logging | `diagnostics/session_log.dart` |

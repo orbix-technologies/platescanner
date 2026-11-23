@@ -1,19 +1,20 @@
 # Recognition model decision
 
-## Now (0.1.0): platform OCR + Dart parser
+## Now (0.2.0): glyph bank + consensus; OCR for live framing only
 
 | | Android | iOS |
 |---|---|---|
 | Camera | CameraX Preview + ImageAnalysis (keep-latest), shared ViewPort | AVCaptureSession, aspect-fill preview |
-| OCR | ML Kit Latin text recognition (bundled) | Vision `VNRecognizeTextRequest` (.accurate) |
-| Output | Lines with confidence, normalized to the visible preview | Same |
+| Live area | ML Kit Latin text recognition (bundled) | Vision `VNRecognizeTextRequest` (.accurate) |
+| Characters | Dart `GlyphClassifier` over segmented ink masks | Same (pure Dart) |
+| Stability | 3× `SegmentPrep` consensus on one still (`voteReadings`) | Same |
 
-Decisions live in Dart: `EthiopianPlateParser` (fields, OCR-confusion fixes,
-validation) and `PlateStabilityVoter` (multi-frame agreement).
+Decisions live in Dart: `EthiopianPlateParser`, `GlyphPlateReader`,
+`voteReadings`. See [RELIABILITY.md](RELIABILITY.md).
 
-**Limitation:** neither OCR reads Ge'ez. The region is taken from its Latin
-code (AA, OR, …). The parser already accepts Amharic labels for when a
-recogniser can produce them.
+**Limitation:** Ge'ez is still not read (spelled from Latin). Synthetic +
+fixture prototypes beat scene OCR on repeatability; a trained CRNN remains
+the accuracy ceiling.
 
 ## Next: custom detector + CRNN
 

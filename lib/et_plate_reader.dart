@@ -41,10 +41,22 @@ export 'src/parsing/plate_area_detector.dart'
     show PlateAreaDetector, PlateAreaTracker;
 export 'src/parsing/plate_arranger.dart' show PlateArranger;
 export 'src/parsing/plate_stability_voter.dart' show PlateStabilityVoter;
+export 'src/recognition/glyph_bank.dart'
+    show
+        GlyphBank,
+        GlyphPrototype,
+        glyphWidth,
+        glyphHeight,
+        buildSyntheticPrototypes;
+export 'src/recognition/glyph_classifier.dart' show GlyphClassifier, GlyphResult;
+export 'src/recognition/glyph_plate_reader.dart' show GlyphPlateReader;
+export 'src/recognition/reading_consensus.dart'
+    show ReadingConsensus, voteReadings;
 export 'src/recognition/plate_availability.dart'
     show PlateReader, PlateReaderAvailability, PlateReaderAvailabilityStatus;
 export 'src/recognition/plate_recognition_service.dart'
     show CropSpec, PlateRecognitionService, PlateRecognitionServiceFactory;
+export 'src/segmentation/segment_capture.dart' show SegmentPrep;
 export 'src/widgets/plate_scan.dart' show EtPlateReader, PlateScanResult;
 export 'src/widgets/plate_scanner_options.dart'
     show ConfirmAreaMode, PlateScannerOptions, PlateScannerTheme;

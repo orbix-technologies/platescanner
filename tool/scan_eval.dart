@@ -11,6 +11,9 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:et_plate_reader/src/models/ocr_frame.dart';
+import 'package:et_plate_reader/src/models/plate_area.dart';
+import 'package:et_plate_reader/src/recognition/glyph_classifier.dart';
+import 'package:et_plate_reader/src/recognition/glyph_plate_reader.dart';
 import 'package:et_plate_reader/src/segmentation/segment_capture.dart';
 
 void main(List<String> args) {
@@ -92,4 +95,39 @@ void main(List<String> args) {
   stdout.writeln();
   perPlate
       .forEach((k, v) => stdout.writeln('${k.padRight(12)} ${v[0]}/${v[1]}'));
+
+  // Glyph path repeatability on each labelled still (same image → same key).
+  stdout.writeln();
+  stdout.writeln('glyph repeatability (5× same still):');
+  final clf = GlyphClassifier.synthetic();
+  final reader = GlyphPlateReader(classifier: clf);
+  var stable = 0, tried = 0;
+  for (final id in ids) {
+    final jpg = '$dir/session_$id.jpg';
+    if (!File(jpg).existsSync()) continue;
+    final json = File('$dir/session_$id.json');
+    if (!json.existsSync()) continue;
+    final events =
+        ((jsonDecode(json.readAsStringSync()) as Map)['events'] as List)
+            .cast<Map>();
+    final cap = events.lastWhere((e) => e['event'] == 'capture');
+    final proposed = rect(cap['proposed']);
+    if (proposed == null) continue;
+    final keys = <String>{};
+    for (var i = 0; i < 5; i++) {
+      final seg = segmentCaptureSync(jpg, proposed);
+      final gray = plateGraySync(jpg, proposed);
+      if (seg == null || !seg.found || gray == null) {
+        keys.add('?');
+        continue;
+      }
+      final r = reader.read(gray, seg, const AreaOcr(elements: []));
+      keys.add(r.candidate.key);
+    }
+    tried++;
+    final good = keys.length == 1 && keys.single != '?';
+    if (good) stable++;
+    stdout.writeln('${good ? 'ok ' : 'BAD'} $id ${keys.join(' | ')}');
+  }
+  stdout.writeln('stable $stable/$tried');
 }

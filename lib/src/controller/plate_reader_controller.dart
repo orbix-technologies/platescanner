@@ -14,10 +14,14 @@ import '../models/plate_record.dart';
 import '../parsing/ethiopian_plate_parser.dart';
 import '../parsing/plate_area_detector.dart';
 import '../parsing/plate_arranger.dart';
+import '../recognition/glyph_bank_loader.dart';
+import '../recognition/glyph_classifier.dart';
+import '../recognition/glyph_plate_reader.dart';
+import '../recognition/plate_recognition_service.dart';
+import '../recognition/reading_consensus.dart';
 import '../parsing/plate_section_reader.dart';
 import '../segmentation/plate_segmenter.dart';
 import '../segmentation/segment_capture.dart';
-import '../recognition/plate_recognition_service.dart';
 
 const _uuid = Uuid();
 
@@ -69,6 +73,7 @@ class PlateReaderController extends ChangeNotifier {
     Future<bool> Function()? requestCameraPermission,
     EthiopianPlateParser parser = const EthiopianPlateParser(),
     PlateAreaDetector detector = const PlateAreaDetector(),
+    GlyphClassifier? glyphClassifier,
     int stableFrames = 3,
     this.autoCapture = true,
     bool? recordSessions,
@@ -83,6 +88,8 @@ class PlateReaderController extends ChangeNotifier {
         _parser = parser,
         _arranger = PlateArranger(parser: parser),
         _sectionReader = PlateSectionReader(parser: parser),
+        _glyphClassifier =
+            glyphClassifier ?? GlyphClassifier.synthetic(),
         _detector = detector,
         _tracker = PlateAreaTracker(stableFrames: stableFrames);
 
@@ -92,6 +99,7 @@ class PlateReaderController extends ChangeNotifier {
   final EthiopianPlateParser _parser;
   final PlateArranger _arranger;
   final PlateSectionReader _sectionReader;
+  GlyphClassifier _glyphClassifier;
   final PlateAreaDetector _detector;
   final PlateAreaTracker _tracker;
 
@@ -154,6 +162,8 @@ class PlateReaderController extends ChangeNotifier {
   String? _error;
   PlateReaderErrorCode? _errorCode;
   bool _isLoading = false;
+  bool _lowAgreement = false;
+  double _consensusAgreement = 1;
 
   /// Area snapping after capture: running, and whether it moved the area
   /// onto a found plate outline.
@@ -225,6 +235,17 @@ class PlateReaderController extends ChangeNotifier {
   /// True in review when the draft validates.
   bool get canConfirm => _phase == ScanPhase.review && draftIssues.isEmpty;
 
+  /// True when the three recognition passes disagreed on the plate string.
+  bool get lowAgreement => _lowAgreement;
+
+  /// Fraction of consensus ballots matching the chosen reading (`0`–`1`).
+  double get consensusAgreement => _consensusAgreement;
+
+  /// Whether [lowAgreement] should force the review step even if the host
+  /// asked to skip it (`showReview: false`).
+  bool get requiresReview =>
+      _lowAgreement || (_candidate != null && _candidate!.issues.isNotEmpty);
+
   /// Kind of the last error, when it was a [PlateReaderException] (e.g.
   /// [PlateReaderErrorCode.permissionDenied]), so a UI can explain it.
   PlateReaderErrorCode? get errorCode => _errorCode;
@@ -289,6 +310,9 @@ class PlateReaderController extends ChangeNotifier {
         );
       }
       await _service.initialize();
+      // Non-blocking: synthetic prototypes work until the asset arrives
+      // (and unit tests never wait on a missing rootBundle asset).
+      unawaited(_loadGlyphBank());
       _frameSub = _service.frameStream.listen(_onFrame);
       _errorSub = _service.platformErrorStream.listen(_onPlatformError);
       _initialized = true;
@@ -531,62 +555,129 @@ class PlateReaderController extends ChangeNotifier {
       return;
     }
     _phase = ScanPhase.reading;
+    _lowAgreement = false;
+    _consensusAgreement = 1;
     _log?.event('confirmArea', {'area': SessionLog.rect(area)});
     _notify();
     try {
-      // Sections from the image itself: each one cut out and read alone,
-      // so a vertical stack can't be read into the number. The whole-area
-      // OCR still measures colours, and is the fallback when no number is
-      // found in the image.
-      PlateSegmentation? seg;
-      try {
-        seg = await segmentCapture(frame.path, area);
-      } catch (e) {
-        _log?.event('segmentationError', {'error': '$e'});
-      }
-      if (seg != null) {
-        _log?.event('segmentation', SessionLog.segmentation(seg));
-      }
-      final segmented = seg != null && seg.found;
+      // Hybrid: native crop OCR (accurate on real fonts) + glyph classifier
+      // (deterministic when the bank matches). Three prep variants vote.
       final ocr = await _service.recognizeArea(
         frame.path,
         area,
-        sectionPasses: !segmented,
+        sectionPasses: false,
       );
       _log?.event('areaOcr', SessionLog.areaOcr(ocr));
       if (_phase != ScanPhase.reading) return;
       _areaOcr = ocr;
 
-      ({PlateArrangement arrangement, PlateCandidate candidate}) result;
-      if (segmented) {
-        var crops = _sectionReader.cropsFor(seg, area);
-        var reads = await _service
-            .readCrops(frame.path, [for (final c in crops) c.spec]);
-        result = _sectionReader.read(seg, crops, reads, ocr);
-        if (result.arrangement.number.value.isEmpty) {
-          // The whole-number reads disagreed: read each digit alone too.
-          final digits = _sectionReader.cropsFor(seg, area, digits: true);
-          final more = await _service
-              .readCrops(frame.path, [for (final c in digits) c.spec]);
-          crops = [...crops, ...digits];
-          reads = [...reads, ...more];
-          result = _sectionReader.read(seg, crops, reads, ocr);
+      final glyphReader = GlyphPlateReader(
+        classifier: _glyphClassifier,
+        parser: _parser,
+      );
+      final ballots = <PlateCandidate>[];
+      final arrangements = <PlateArrangement>[];
+      final ballotKeys = <String>[];
+      final ballotSources = <String>[];
+      PlateSegmentation? primarySeg;
+
+      for (final prep in SegmentPrep.values) {
+        PlateSegmentation? seg;
+        try {
+          seg = await segmentCapture(frame.path, area, prep: prep);
+        } catch (e) {
+          _log?.event('segmentationError', {
+            'error': '$e',
+            'prep': prep.name,
+          });
         }
-        _log?.event('crops', {'crops': SessionLog.crops(crops, reads)});
-        if (_phase != ScanPhase.reading) return;
-      } else {
-        result = _arranger.arrange(ocr);
+        if (prep == SegmentPrep.primary) {
+          primarySeg = seg;
+          if (seg != null) {
+            _log?.event('segmentation', SessionLog.segmentation(seg));
+          }
+        }
+        if (seg == null || !seg.found) {
+          final fallback = _arranger.arrange(ocr);
+          ballots.add(fallback.candidate);
+          arrangements.add(fallback.arrangement);
+          ballotKeys.add(fallback.candidate.key);
+          ballotSources.add('arrange:${prep.name}');
+          continue;
+        }
+
+        // 1) Native crop OCR — primary accuracy path for real plate fonts.
+        final ocrPass = await _readWithOcrCrops(frame.path, area, seg, ocr);
+        ballots.add(ocrPass.candidate);
+        arrangements.add(ocrPass.arrangement);
+        ballotKeys.add(ocrPass.candidate.key);
+        ballotSources.add('ocr:${prep.name}');
+
+        // 2) Glyph path — only counted when scores look like a bank match
+        // (synthetic 7-segment prototypes score poorly on real fonts).
+        final gray = plateGraySync(frame.path, area, prep: prep);
+        if (gray == null) continue;
+        final glyphPass = glyphReader.read(gray, seg, ocr);
+        final scored =
+            glyphPass.glyphs.where((g) => g.score > 0).map((g) => g.score);
+        final mean = scored.isEmpty
+            ? 0.0
+            : scored.reduce((a, b) => a + b) / scored.length;
+        if (prep == SegmentPrep.primary) {
+          _log?.event('glyphs', {
+            'labels': [for (final g in glyphPass.glyphs) g.label],
+            'scores': [for (final g in glyphPass.glyphs) g.score],
+            'margins': [for (final g in glyphPass.glyphs) g.margin],
+            'meanScore': mean,
+          });
+        }
+        if (mean >= _minGlyphMeanScore &&
+            glyphPass.candidate.serial != null &&
+            glyphPass.candidate.serial!.isNotEmpty) {
+          ballots.add(glyphPass.candidate);
+          arrangements.add(glyphPass.arrangement);
+          ballotKeys.add(glyphPass.candidate.key);
+          ballotSources.add('glyph:${prep.name}');
+        }
       }
-      _arrangement = result.arrangement;
-      _candidate = result.candidate;
-      _draftCode = result.candidate.code;
-      _draftRegion = result.candidate.regionCode;
-      _draftEmbassy = result.candidate.embassyCode;
-      _draftSerial = result.candidate.serial;
+
+      final consensus = voteReadings(ballots);
+      _lowAgreement = !consensus.agreed;
+      _consensusAgreement = consensus.agreement;
+      _log?.event('consensus', {
+        'keys': ballotKeys,
+        'sources': ballotSources,
+        'winner': consensus.winner.key,
+        'agreement': consensus.agreement,
+        'agreed': consensus.agreed,
+        'meanConfidence': consensus.meanConfidence,
+      });
+
+      // Arrangement from the first ballot that matches the winning key.
+      var arrangement = arrangements.isEmpty
+          ? _arranger.arrange(ocr).arrangement
+          : arrangements.first;
+      for (var i = 0; i < ballots.length; i++) {
+        if (ballots[i].key == consensus.winner.key) {
+          arrangement = arrangements[i];
+          break;
+        }
+      }
+      if (primarySeg == null || !primarySeg.found) {
+        arrangement = _arranger.arrange(ocr).arrangement;
+      }
+
+      _arrangement = arrangement;
+      _candidate = consensus.winner;
+      _draftCode = consensus.winner.code;
+      _draftRegion = consensus.winner.regionCode;
+      _draftEmbassy = consensus.winner.embassyCode;
+      _draftSerial = consensus.winner.serial;
       _edited = false;
       _log?.event('arranged', {
-        ...SessionLog.arrangement(result.arrangement),
-        'reading': SessionLog.candidate(result.candidate),
+        ...SessionLog.arrangement(arrangement),
+        'reading': SessionLog.candidate(consensus.winner),
+        'lowAgreement': _lowAgreement,
       });
       unawaited(_log?.save());
       _phase = ScanPhase.review;
@@ -736,6 +827,8 @@ class PlateReaderController extends ChangeNotifier {
     _detectedArea = null;
     _detectedNational = false;
     _detectedByModel = false;
+    _lowAgreement = false;
+    _consensusAgreement = 1;
     _snapping = false;
     _areaSnapped = false;
     _snap = null;
@@ -763,6 +856,47 @@ class PlateReaderController extends ChangeNotifier {
         PlateReaderErrorCode.invalidState,
         'Call initialize() before startSession()',
       );
+    }
+  }
+
+  /// Glyph ballots below this mean cosine score are ignored (synthetic
+  /// 7-segment prototypes score ~0.2–0.4 on real plate fonts).
+  static const _minGlyphMeanScore = 0.62;
+
+  Future<({PlateArrangement arrangement, PlateCandidate candidate})>
+      _readWithOcrCrops(
+    String path,
+    NormalizedRect area,
+    PlateSegmentation seg,
+    AreaOcr ocr,
+  ) async {
+    var crops = _sectionReader.cropsFor(seg, area);
+    var reads =
+        await _service.readCrops(path, [for (final c in crops) c.spec]);
+    var result = _sectionReader.read(seg, crops, reads, ocr);
+    if (result.arrangement.number.value.isEmpty) {
+      final digits = _sectionReader.cropsFor(seg, area, digits: true);
+      final more =
+          await _service.readCrops(path, [for (final c in digits) c.spec]);
+      crops = [...crops, ...digits];
+      reads = [...reads, ...more];
+      result = _sectionReader.read(seg, crops, reads, ocr);
+    }
+    _log?.event('crops', {
+      'crops': SessionLog.crops(crops, reads),
+    });
+    return result;
+  }
+
+  Future<void> _loadGlyphBank() async {
+    try {
+      final bank = await loadGlyphBankAsset();
+      if (!_disposed && bank.prototypes.isNotEmpty) {
+        _glyphClassifier = GlyphClassifier(bank);
+      }
+    } catch (e) {
+      _logger.w('Glyph bank asset not loaded; using synthetic prototypes',
+          error: e);
     }
   }
 

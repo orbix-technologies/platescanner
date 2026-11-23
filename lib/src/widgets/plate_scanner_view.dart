@@ -150,7 +150,11 @@ class _PlateScannerViewState extends State<PlateScannerView> {
         ConfirmAreaMode.auto => !c.isSnappingArea && c.areaSnapped,
       };
       if (skip) step = c.confirmArea;
-    } else if (c.phase == ScanPhase.review && !o.showReview && c.canConfirm) {
+    } else if (c.phase == ScanPhase.review &&
+        !o.showReview &&
+        c.canConfirm &&
+        !c.requiresReview) {
+      // Never auto-return a disputed or incomplete reading unseen.
       step = _confirm;
     }
     if (step == null) return;
@@ -1036,7 +1040,10 @@ class _ResultSheetState extends State<_ResultSheet> {
     final scheme = Theme.of(context).colorScheme;
     final issues = c.draftIssues;
     // Only what blocks Done is shown, e.g. "Number not read".
-    final detail = issues.map(strings.issue).join(' · ');
+    final detail = [
+      if (c.lowAgreement) strings.readingsDisagreed,
+      ...issues.map(strings.issue),
+    ].join(' · ');
     // Diplomatic plates: the country of the embassy number.
     final mission = c.draftCode == 'CD'
         ? diplomaticMissions[int.tryParse(c.draftEmbassyCode ?? '') ?? -1]

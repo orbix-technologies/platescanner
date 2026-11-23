@@ -45,6 +45,7 @@ class PlateScannerStrings {
     required this.close,
     required this.torch,
     required this.save,
+    this.readingsDisagreed = 'Readings disagreed — please check',
   });
 
   /// English.
@@ -83,7 +84,8 @@ class PlateScannerStrings {
         unsupportedDevice = 'This device cannot read plates.',
         close = 'Close',
         torch = 'Torch',
-        save = 'Save';
+        save = 'Save',
+        readingsDisagreed = 'Readings disagreed — please check';
 
   /// Amharic.
   const PlateScannerStrings.am()
@@ -120,7 +122,8 @@ class PlateScannerStrings {
         unsupportedDevice = 'ይህ መሣሪያ ታርጋ ማንበብ አይችልም።',
         close = 'ዝጋ',
         torch = 'የእጅ ባትሪ',
-        save = 'አስቀምጥ';
+        save = 'አስቀምጥ',
+        readingsDisagreed = 'ንባቦቹ አልተስማሙም — እባክዎ ያረጋግጡ';
 
   /// Built-in strings for [locale]: Amharic for `am`, else English.
   factory PlateScannerStrings.forLocale(Locale? locale) =>
@@ -177,6 +180,9 @@ class PlateScannerStrings {
   /// Closes the edit form.
   final String save;
 
+  /// Review hint when multi-pass consensus disagreed.
+  final String readingsDisagreed;
+
   /// Text for [issue].
   String issue(PlateIssue issue) => switch (issue) {
         PlateIssue.missingCode => issueMissingCode,
@@ -228,6 +234,7 @@ class PlateScannerStrings {
     String? close,
     String? torch,
     String? save,
+    String? readingsDisagreed,
   }) =>
       PlateScannerStrings(
         fitPlate: fitPlate ?? this.fitPlate,
@@ -263,5 +270,6 @@ class PlateScannerStrings {
         close: close ?? this.close,
         torch: torch ?? this.torch,
         save: save ?? this.save,
+        readingsDisagreed: readingsDisagreed ?? this.readingsDisagreed,
       );
 }

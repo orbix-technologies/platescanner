@@ -279,6 +279,7 @@ adb exec-out run-as <your.app.id> tar c cache/et_plate_logs | tar x
   controller, platform details
 - [Plate format](doc/PLATE_FORMAT.md): every plate type and how it's read
 - [Pipeline](doc/PIPELINE.md): each step from camera to reading
+- [Reliability](doc/RELIABILITY.md): glyph classifier + multi-pass consensus
 - [Supported toolchain](doc/SUPPORTED_TOOLCHAIN.md)
 - [Recognition model decision](doc/MODEL_DECISION.md)
 

@@ -1,3 +1,10 @@
+## 0.2.0
+
+- Hybrid reading: native crop OCR (accuracy) + glyph classifier ballots only
+  when mean score ≥ 0.62; three-prep consensus (`voteReadings`).
+- Bundled glyph bank harvested from fixtures (163 real crops + synthetics).
+- Disagreement forces review (`lowAgreement`); `doc/RELIABILITY.md`.
+
 ## 0.1.0
 
 - `PlateReader.checkAvailability()` camera-free preflight.
