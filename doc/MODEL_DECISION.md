@@ -1,6 +1,11 @@
 # Recognition model decision
 
-## Now (0.2.0): glyph bank + consensus; OCR for live framing only
+## Now (0.3.0): type-first routing + hybrid OCR/glyph; OCR for live framing
+
+Plate family is classified before reading ([TYPE_FIRST.md](TYPE_FIRST.md)).
+Character crops still use native OCR with optional glyph ballots.
+
+## Was (0.2.0): glyph bank + consensus; OCR for live framing only
 
 | | Android | iOS |
 |---|---|---|

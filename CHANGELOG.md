@@ -1,3 +1,9 @@
+## 0.3.0
+
+- Type-first routing: `PlateFamily` + `PlateTypeClassifier` + `TypedPlateReader`.
+- Session logs record `typeDecision` / `confirmedFamily`; fixture labels and
+  `tool/type_eval.dart` for per-family accuracy ([doc/TYPE_FIRST.md](doc/TYPE_FIRST.md)).
+
 ## 0.2.0
 
 - Hybrid reading: native crop OCR (accuracy) + glyph classifier ballots only

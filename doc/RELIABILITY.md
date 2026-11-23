@@ -6,17 +6,18 @@ General scene OCR (ML Kit / Vision) is stochastic: the same plate scanned
 twice often yields different characters. Ethiopian plates use a tiny fixed
 character set, so that is the wrong model class.
 
-## Approach (v0.2)
+## Approach (v0.3 type-first)
 
-1. **Keep** live area detection and classical plate segmentation (layout).
-2. **Classify** each segmented glyph with a deterministic prototype bank
-   (`GlyphClassifier` + `assets/glyphs/bank.json`).
-3. **Vote** three prep variants of the same still (`SegmentPrep.primary`,
-   `contrast`, `padVertical`) and majority-lock the canonical plate key
-   (`voteReadings`). Disagreement forces review (`lowAgreement`).
+1. **Classify family** first (`PlateTypeClassifier`: classic / two-row / ETH /
+   special / unknown) — see [TYPE_FIRST.md](TYPE_FIRST.md).
+2. **Read with a typed reader** (`TypedPlateReader`) that only uses that
+   family’s path (ETH skips classic section crops; unknown forces review).
+3. Inside classic/special: crop OCR + glyph ballots when mean score ≥ 0.62,
+   three `SegmentPrep` variants, then `voteReadings`.
+4. Disagreement, unknown family, or low type confidence → review
+   (`requiresReview`).
 
-Scene OCR remains only for live framing and as a colour / fallback path when
-segmentation finds no number.
+Scene OCR remains for live framing, colours, and national/special text hints.
 
 ## Rebuild the glyph bank
 

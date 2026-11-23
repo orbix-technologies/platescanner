@@ -56,6 +56,7 @@ class PlateTypeDecision {
   bool get requiresReview =>
       family == PlateFamily.unknown || confidence < 0.55;
 
+  /// JSON for session logs / eval.
   Map<String, Object?> toJson() => {
         'family': family.name,
         'confidence': confidence,

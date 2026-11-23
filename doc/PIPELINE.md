@@ -7,7 +7,8 @@ time: test → analyse faults → fix → brainstorm better approaches.
 
 | # | Step | Where |
 |---|---|---|
-| 0 | Labelled test set and per-step accuracy | *to build* |
+| 0 | Labelled test set and per-step accuracy | `tool/type_eval.dart`, `test/fixtures/types.json` |
+| 0b | Classify plate family | `recognition/plate_type_classifier.dart` → `TypedPlateReader` |
 | 1 | Find the plate area live | native frame OCR, `parsing/plate_area_detector.dart` |
 | 1b | Snap the area to the plate on the still | `segmentation/plate_bounds_finder.dart` |
 | 2 | Capture the still | `PlateScannerView.kt` / `PlateScannerView.swift` |
