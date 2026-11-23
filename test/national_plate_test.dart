@@ -79,6 +79,25 @@ void main() {
       }
     });
 
+    // ETH AAB4283 on a car (SM-A176B, 2026-11-23 08:42): the last two
+    // digits are boxed as a stacked region pair, which ruled out the
+    // national plate; the whole-area OCR read it and its "ETH" cleanly.
+    test('digits boxed as region letters: the ETH read decides', () {
+      final seg =
+          segmentCaptureSync('test/fixtures/plates/national_real.png', area)!;
+      final crops = reader.cropsFor(seg, area);
+      final r = reader.read(
+        seg,
+        crops,
+        [
+          for (final _ in crops) const <String?>[null, null, null]
+        ],
+        ocr(['AAB4283', 'ETH', '0001428S']),
+      );
+      expect([r.candidate.code, r.candidate.serial], ['ETH', 'AAB4283']);
+      expect(r.candidate.isValid, isTrue);
+    });
+
     test('an old C06703 misread is not a national number', () {
       // Both read on old plates that carry a small "ETH" too.
       for (final t in ['CO67038', 'oCO670:']) {

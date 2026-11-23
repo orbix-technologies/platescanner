@@ -20,6 +20,8 @@ android {
 
     defaultConfig {
         minSdk = 24
+        // Keep rules for host apps' release (R8) builds.
+        consumerProguardFiles "consumer-rules.pro"
     }
 
     compileOptions {

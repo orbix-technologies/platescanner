@@ -53,8 +53,7 @@ void main() {
     c.dispose();
   });
 
-  test('a scan closed mid-session (back button) is logged as closed',
-      () async {
+  test('a scan closed mid-session (back button) is logged as closed', () async {
     final fake = FakePlateService();
     final c = await started(fake);
     c.dispose();
