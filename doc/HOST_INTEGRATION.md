@@ -69,7 +69,7 @@ plate box.
 
 | Parameter | Default | Effect |
 |---|---|---|
-| `stableFrames` | 3 | Steady detections before auto-capture |
+| `stableFrames` | 3 | Steady detections before auto-capture (2 when live confidence ≥ 0.75) |
 | `autoCapture` | true | `false` = the user taps the shutter |
 | `recordSessions` | debug builds | Write a log per scan in `cache/et_plate_logs/` |
 | `regionOfInterest` | set by the view | Normalized area of the preview searched for the plate |

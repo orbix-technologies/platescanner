@@ -10,7 +10,7 @@ Character crops still use native OCR with optional glyph ballots.
 | | Android | iOS |
 |---|---|---|
 | Camera | CameraX Preview + ImageAnalysis (keep-latest), shared ViewPort | AVCaptureSession, aspect-fill preview |
-| Live area | ML Kit Latin text recognition (bundled) | Vision `VNRecognizeTextRequest` (.accurate) |
+| Live area | ML Kit Latin text recognition (bundled) | Vision `VNRecognizeTextRequest` (`.fast` live; `.accurate` still) |
 | Characters | Dart `GlyphClassifier` over segmented ink masks | Same (pure Dart) |
 | Stability | 3× `SegmentPrep` consensus on one still (`voteReadings`) | Same |
 

@@ -589,21 +589,29 @@ class PlateReaderController extends ChangeNotifier {
     _log?.event('confirmArea', {'area': SessionLog.rect(area)});
     _notify();
     try {
+      final totalSw = Stopwatch()..start();
+      final timings = <String, int>{};
+      var sw = Stopwatch()..start();
+
       // One disk read for all prep / glyph passes.
       final still = await PreparedStill.load(frame.path);
+      timings['preparedStillMs'] = sw.elapsedMilliseconds;
 
       // Colours + text hints; sectionPasses off — typed readers request crops.
+      sw = Stopwatch()..start();
       final ocr = await _service.recognizeArea(
         frame.path,
         area,
         sectionPasses: false,
       );
+      timings['areaOcrMs'] = sw.elapsedMilliseconds;
       _log?.event('areaOcr', SessionLog.areaOcr(ocr));
       if (_phase != ScanPhase.reading) return;
       _areaOcr = ocr;
 
       // Primary segmentation feeds the type classifier (geometry signals).
       PlateSegmentation? primarySeg;
+      sw = Stopwatch()..start();
       try {
         primarySeg = await segmentCapture(
           frame.path,
@@ -613,16 +621,19 @@ class PlateReaderController extends ChangeNotifier {
       } catch (e) {
         _log?.event('segmentationError', {'error': '$e', 'prep': 'primary'});
       }
+      timings['primarySegmentMs'] = sw.elapsedMilliseconds;
       if (primarySeg != null) {
         _log?.event('segmentation', SessionLog.segmentation(primarySeg));
       }
 
+      sw = Stopwatch()..start();
       final features = TypeFeatures.from(
         area: area,
         seg: primarySeg,
         ocr: ocr,
       );
       final decision = _typeClassifier.classify(features);
+      timings['typeClassifyMs'] = sw.elapsedMilliseconds;
       _typeDecision = decision;
       _plateFamily = decision.family;
       _typeConfidence = decision.confidence;
@@ -632,6 +643,8 @@ class PlateReaderController extends ChangeNotifier {
         parser: _parser,
         glyphClassifier: _glyphClassifier,
       );
+      var cropOcrMs = 0;
+      sw = Stopwatch()..start();
       final passes = await typed.collectBallots(
         family: decision.family,
         path: frame.path,
@@ -639,19 +652,25 @@ class PlateReaderController extends ChangeNotifier {
         ocr: ocr,
         still: still,
         primarySeg: primarySeg,
-        readCrops: (crops) => _service.readCrops(
-          frame.path,
-          crops,
-        ),
+        readCrops: (crops) async {
+          final cropSw = Stopwatch()..start();
+          final reads = await _service.readCrops(frame.path, crops);
+          cropOcrMs += cropSw.elapsedMilliseconds;
+          return reads;
+        },
         log: (name, [data = const {}]) => _log?.event(name, data),
       );
+      timings['typedBallotsMs'] = sw.elapsedMilliseconds;
+      timings['cropOcrMs'] = cropOcrMs;
 
       final ballots = [for (final p in passes) p.candidate];
       final arrangements = [for (final p in passes) p.arrangement];
       final ballotKeys = [for (final p in passes) p.candidate.key];
       final ballotSources = [for (final p in passes) p.source];
 
+      sw = Stopwatch()..start();
       final consensus = voteReadings(ballots);
+      timings['consensusMs'] = sw.elapsedMilliseconds;
       _lowAgreement = !consensus.agreed && ballots.length > 1;
       _consensusAgreement = consensus.agreement;
       _log?.event('consensus', {
@@ -662,6 +681,7 @@ class PlateReaderController extends ChangeNotifier {
         'agreement': consensus.agreement,
         'agreed': consensus.agreed,
         'meanConfidence': consensus.meanConfidence,
+        'ballotCount': ballots.length,
       });
 
       var arrangement = arrangements.isEmpty
@@ -681,6 +701,8 @@ class PlateReaderController extends ChangeNotifier {
       _draftEmbassy = consensus.winner.embassyCode;
       _draftSerial = consensus.winner.serial;
       _edited = false;
+      timings['confirmAreaMs'] = totalSw.elapsedMilliseconds;
+      _log?.event('timings', timings);
       _log?.event('arranged', {
         ...SessionLog.arrangement(arrangement),
         'reading': SessionLog.candidate(consensus.winner),

@@ -9,21 +9,21 @@ time: test → analyse faults → fix → brainstorm better approaches.
 |---|---|---|
 | 0 | Labelled test set and per-step accuracy | `tool/type_eval.dart`, `test/fixtures/types.json` |
 | 0b | Classify plate family | `recognition/plate_type_classifier.dart` → `TypedPlateReader` |
-| 1 | Find the plate area live | native frame OCR, `parsing/plate_area_detector.dart` |
+| 1 | Find the plate area live | native frame OCR (iOS `.fast`), `PlateAreaTracker` (adaptive) |
 | 1b | Snap the area to the plate on the still | `segmentation/plate_bounds_finder.dart` |
 | 2 | Capture the still | `PlateScannerView.kt` / `PlateScannerView.swift` |
 | 3 | User confirms / adjusts the area | `widgets/plate_scanner_view.dart` |
-| 4 | Prepare the image | `segmentation/segment_capture.dart` |
+| 4 | Prepare the image | `PreparedStill` + `segmentation/segment_capture.dart` |
 | 5 | Ink mask | `segmentation/plate_segmenter.dart` (`_inkMask`, `_eraseLines`, `_open`) |
 | 6 | Shapes | `plate_segmenter.dart` (`_blobs`, filters, `_splitTouching`) |
 | 7 | Columns | `plate_segmenter.dart` (`_columns`, `_classify`, `_mergeHalves`) |
 | 8 | Assign the four sections | `plate_segmenter.dart` (`segment`, `_numberRun`, `_splitJoinedStack`) |
 | 9 | Decide the crops to read | `parsing/plate_section_reader.dart` (`cropsFor`) |
 | 10 | Classify the crops | `GlyphClassifier` + bank (`glyph_plate_reader.dart`); native `readCrops` only as fallback when segmentation fails |
-| 10b | Consensus (3 preps) | `SegmentPrep` + `voteReadings` in `plate_reader_controller.dart` |
+| 10b | Consensus (early-exit or 3 preps) | `TypedPlateReader` + `voteReadings` in `plate_reader_controller.dart` |
 | 11 | Interpret and validate | `plate_section_reader.dart` (`read`), `plate_arranger.dart` (code rules), `ethiopian_plate_parser.dart` |
 | 12 | Review and Done | `widgets/plate_scanner_view.dart` |
-| 13 | Logging | `diagnostics/session_log.dart` |
+| 13 | Logging | `diagnostics/session_log.dart` (`timings` on confirm) |
 
 Tools available for testing:
 

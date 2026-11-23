@@ -12,12 +12,17 @@ character set, so that is the wrong model class.
    special / unknown) — see [TYPE_FIRST.md](TYPE_FIRST.md).
 2. **Read with a typed reader** (`TypedPlateReader`) that only uses that
    family’s path (ETH skips classic section crops; unknown forces review).
-3. Inside classic/special: crop OCR + glyph ballots when mean score ≥ 0.62,
-   three `SegmentPrep` variants, then `voteReadings`.
+3. Inside classic/special: crop OCR + glyph ballots when mean score ≥ 0.62.
+   **Primary early-exit** when OCR confidence ≥ 0.85, serial present, only
+   mild issues, and any glyph ballot agrees — otherwise three `SegmentPrep`
+   variants then `voteReadings`.
 4. Disagreement, unknown family, or low type confidence → review
    (`requiresReview`).
 
-Scene OCR remains for live framing, colours, and national/special text hints.
+`PreparedStill` loads the JPEG once per confirm. Scene OCR remains for live
+framing (iOS `.fast`), colours, and national/special text hints; still/crop
+OCR stays accurate. Auto-capture locks in 2 frames when live confidence ≥
+0.75. Session logs include a `timings` event for each `confirmArea` stage.
 
 ## Rebuild the glyph bank
 
@@ -48,6 +53,8 @@ override a good OCR read).
 - `test/glyph_classifier_test.dart` — synthetic charset smoke
 - `test/reading_consensus_test.dart` — majority / disagreement
 - `test/reliability_repeat_test.dart` — same fixture → identical key ×5
+- `test/typed_early_exit_test.dart` — early-exit gates + `PreparedStill`
+- `test/area_detector_test.dart` — adaptive tracker (2 vs 3 frames)
 
 ## Manual device check
 

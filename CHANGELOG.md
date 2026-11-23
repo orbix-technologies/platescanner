@@ -1,3 +1,11 @@
+## Unreleased
+
+- Faster still reads: `PreparedStill` (one file load) and primary early-exit
+  when OCR confidence ≥ 0.85 and glyph agrees (skips contrast / padVertical).
+- Faster live capture: iOS preview Vision `.fast` (still/crops stay `.accurate`);
+  adaptive area lock (2 frames when confidence ≥ 0.75, else `stableFrames`).
+- Session logs emit a `timings` event (ms per `confirmArea` stage).
+
 ## 0.3.0
 
 - Type-first routing: `PlateFamily` + `PlateTypeClassifier` + `TypedPlateReader`.
