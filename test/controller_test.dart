@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:et_plate_reader/et_plate_reader.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -186,6 +188,54 @@ void main() {
     expect(controller.phase, ScanPhase.detecting);
     expect(controller.capturedFrame, isNull);
     expect(fake.running, isTrue);
+  });
+
+  group('photos', () {
+    late Directory dir;
+    late File photo;
+    setUp(() {
+      dir = Directory.systemTemp.createTempSync('et_plate_test');
+      photo = File('${dir.path}/et_plate_1.jpg')..writeAsBytesSync([0]);
+      fake.framePath = photo.path;
+      controller = PlateReaderController(
+        service: fake,
+        requestCameraPermission: () async => true,
+        stableFrames: 2,
+        recordSessions: false,
+        discardDelay: Duration.zero,
+      );
+    });
+    tearDown(() => dir.deleteSync(recursive: true));
+    Future<void> settle() =>
+        Future<void>.delayed(const Duration(milliseconds: 20));
+
+    test('photo of a retaken scan is deleted', () async {
+      await detecting();
+      await controller.captureArea();
+      await controller.retake();
+      await settle();
+      expect(photo.existsSync(), isFalse);
+    });
+    test('photo of a cancelled scan is deleted', () async {
+      await detecting();
+      await controller.captureArea();
+      await controller.confirmArea();
+      await controller.cancelSession();
+      await settle();
+      expect(photo.existsSync(), isFalse);
+    });
+    test('a confirmed scan keeps its photo for the host', () async {
+      await detecting();
+      await controller.captureArea();
+      await controller.confirmArea();
+      final record = await controller.confirm();
+      await controller.startSession();
+      controller.dispose();
+      await settle();
+      expect(record.imagePath, photo.path);
+      expect(photo.existsSync(), isTrue);
+      controller = PlateReaderController(service: fake);
+    });
   });
 
   test('confirm before review throws', () async {

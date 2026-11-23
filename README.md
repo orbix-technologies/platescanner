@@ -34,7 +34,7 @@ print(result?.plate); // 2-AA-B05475
 | New national plate (2026) | ኢት ETH · AAA0000 | `ETH` | — | `AAA0000` |
 
 Regions: ET, AA, AF, AM, BG, DR, GM, HR, OR, SM (and TG, SD, SP, SW, not yet
-verified). See [doc/PLATE_FORMAT.md](doc/PLATE_FORMAT.md).
+verified).
 
 ## Requirements
 
@@ -92,6 +92,15 @@ android {
 The package already declares the camera permission. Nothing else is needed:
 the ML Kit model is bundled (about 4 MB per ABI), so there's no download on
 first use.
+
+**Release builds.** The package ships its own R8 keep rules (ML Kit, the
+plate detector runtime), applied to your app automatically: no
+`proguard-rules.pro` changes are needed. Test a release build on a phone
+before shipping; debug builds don't shrink code.
+
+**App size.** The OCR and the plate detector add about 26 MB per ABI (OCR library 11 MB, detector runtime 4.5 MB, detector model 10.7 MB). Publish an app
+bundle (`flutter build appbundle`), or build `--split-per-abi` APKs, so each
+phone downloads only its own: a universal APK carries all three ABIs.
 
 ### iOS
 
@@ -167,6 +176,11 @@ There's nothing to create, initialise or dispose.
 | `plateImage` | `Uint8List` | JPEG of the plate, e.g. as evidence |
 | `photoPath` | file path | The full photo, in the app's cache; copy it to keep it |
 
+Photos of scans that end without a result (retake, cancel, scanner closed)
+are deleted by the package. The photo of a confirmed scan is yours: copy it
+if you keep it, delete it if you don't. The OS may clear the cache at any
+time.
+
 **Converting to your own format.** If your backend expects a different
 plate string, convert it in your app. For example, region + code + number
 (`AA207077`):
@@ -228,7 +242,7 @@ stays dark. Override with `PlateScannerTheme(accent: …, onAccent: …)`.
 To place the scanner inside your own layout, use `PlateScannerView` with a
 `PlateReaderController` that you create and `dispose()`. It takes the same
 `options`, `strings` and `theme`, and calls `onPlateConfirmed` with the
-`PlateRecord`. See [doc/HOST_INTEGRATION.md](doc/HOST_INTEGRATION.md).
+`PlateRecord`.
 
 ### Without the camera
 
@@ -266,21 +280,16 @@ final seen = await store.findBySerial(result.record.serial,
 
 In debug builds each scan is logged (the photo, plus a JSON of every step)
 in the app's cache, under `et_plate_logs/`. Turn this on or off with
-`EtPlateReader.scan(context, recordSessions: false)`. To copy the logs from
-an Android device:
+`EtPlateReader.scan(context, recordSessions: false)`. Release builds don't
+record unless you pass `recordSessions: true`; the logs hold photos of
+plates, so treat them as personal data. The newest 500 sessions are kept.
+To copy the logs from an Android device:
 
 ```bash
 adb exec-out run-as <your.app.id> tar c cache/et_plate_logs | tar x
 ```
 
 ## More
-
-- [Host integration](doc/HOST_INTEGRATION.md): `PlateScannerView`, the
-  controller, platform details
-- [Plate format](doc/PLATE_FORMAT.md): every plate type and how it's read
-- [Pipeline](doc/PIPELINE.md): each step from camera to reading
-- [Supported toolchain](doc/SUPPORTED_TOOLCHAIN.md)
-- [Recognition model decision](doc/MODEL_DECISION.md)
 
 ### Example app
 

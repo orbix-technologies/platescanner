@@ -140,6 +140,9 @@ class PlateArranger {
 
     final nBox = number.box;
     final glyph = number.glyph;
+    // The series letter before five digits, in the same word and as tall
+    // (C64915; only letters that look like digits joined the run before).
+    final series = _seriesLetter(chars, number);
 
     // The other sections sit at fixed distances from the number, measured in
     // digit pitch p (measured on real plates: circle centre ≈ 2.8p left of
@@ -159,10 +162,17 @@ class PlateArranger {
     final codeChars = <_Char>[];
     final geezChars = <_Char>[];
     final right = <_Char>[];
+    // Above the number, across it: an old two-row plate's top row (or text
+    // on the car above a one-row plate).
+    final above = <_Char>[];
     for (final c in chars) {
-      if (number.chars.contains(c)) continue;
+      if (number.chars.contains(c) || identical(c, series)) continue;
       if (c.box.height < glyph * _minGlyph) {
         ignored.add(PlateChar(c.text, c.box));
+      } else if (c.box.bottom <= nBox.top + glyph * 0.15 &&
+          c.box.centerX >= nBox.left - p &&
+          c.box.centerX <= nBox.right + p) {
+        above.add(c);
       } else if (_isGeez(c.text) && c.box.centerX < nBox.left) {
         geezChars.add(c); // Ge'ez script is section 2 wherever it lands
       } else if (inZone(c, codeZone)) {
@@ -177,7 +187,25 @@ class PlateArranger {
       }
     }
 
-    final latin = useColumn ? _columnSection(column) : _latinSection(right);
+    var latin = useColumn ? _columnSection(column) : _latinSection(right);
+    // No region right of the number: a top row above it ending in one
+    // ("hhAA" over C64915, "QhtET," over 37617; 2026-11-23). Anything else
+    // up there (TOYOTA, LAND CRUISER) is ignored.
+    if (!latin.detected && above.isNotEmpty) {
+      final top = _latinSection(above);
+      if (top.detected && parser.readRegion(top.value) != null) latin = top;
+    }
+    if (!identical(latin.chars, const <PlateChar>[]) && latin.detected) {
+      for (final c in above) {
+        if (!latin.chars.any((l) => l.box == c.box)) {
+          ignored.add(PlateChar(c.text, c.box));
+        }
+      }
+    } else {
+      for (final c in above) {
+        ignored.add(PlateChar(c.text, c.box));
+      }
+    }
 
     // Special plates: UN / AU / CD in the Latin stack, or a yellow plate
     // (police). Diplomatic plates show the embassy number in big digits at
@@ -211,12 +239,23 @@ class PlateArranger {
         ocr.codeHint,
         codeZone,
         ink: ocr.inkColor,
+        paper: ocr.paperColor,
         votes: ocr.codeVotes,
         special: special,
         embassy: embassy,
       ),
       geezRegion: geezFromLatin(_geezSection(geezChars, geezZone), latin.value),
-      number: number.section,
+      number: series == null
+          ? number.section
+          : PlateSection(
+              kind: PlateSectionKind.number,
+              value: series.text + number.value,
+              chars: [
+                PlateChar(series.text, series.box),
+                ...number.section.chars,
+              ],
+              box: number.box.union(series.box),
+            ),
       // Show where section 4 is expected even when nothing was read there.
       latinRegion: latin.box != null
           ? latin
@@ -310,6 +349,26 @@ class PlateArranger {
     return best ?? _numberIn(chars, minLength);
   }
 
+  /// A series letter (A–E) right before a five-digit [number], in the same
+  /// OCR element, as tall as its digits and no further than a digit's width.
+  _Char? _seriesLetter(List<_Char> chars, _Number number) {
+    if (number.chars.length != 5) return null;
+    final first = number.chars.first;
+    final before = chars
+        .where((c) =>
+            c.element == first.element &&
+            !number.chars.contains(c) &&
+            c.box.centerX < first.box.left)
+        .toList()
+      ..sort((a, b) => b.box.right.compareTo(a.box.right));
+    if (before.isEmpty) return null;
+    final c = before.first;
+    if (c.lowercase || !RegExp(r'^[A-E]$').hasMatch(c.text)) return null;
+    if (c.box.height < number.glyph * _numberGlyph) return null;
+    if (first.box.left - c.box.right > first.box.width * 1.2) return null;
+    return c;
+  }
+
   _Number? _numberIn(List<_Char> chars, int minLength) {
     final digits = chars.where((c) => _isDigit(c.text)).toList();
     if (digits.isEmpty) return null;
@@ -389,6 +448,7 @@ class PlateArranger {
     int? votes,
     NormalizedRect? box,
     List<int>? ink,
+    List<int>? paper,
     String? special,
     String? embassy,
   }) =>
@@ -397,6 +457,7 @@ class PlateArranger {
         hint,
         box,
         ink: ink,
+        paper: paper,
         votes: votes,
         special: special,
         embassy: embassy,
@@ -415,6 +476,7 @@ class PlateArranger {
     String? hint,
     NormalizedRect? zone, {
     List<int>? ink,
+    List<int>? paper,
     int? votes,
     String? special,
     String? embassy,
@@ -460,7 +522,8 @@ class PlateArranger {
     }
     final strong = value != null && (votes ?? 0) >= _strongVotes;
     if (!strong && ink != null && ink.length == 3) {
-      final colour = InkColor.classify(ink[0], ink[1], ink[2]);
+      final colour = (paper == null ? null : InkColor.onPaper(ink, paper)) ??
+          InkColor.classify(ink[0], ink[1], ink[2]);
       final byColour = PlateServiceType.fromInk(colour)?.code;
       const warm = {'1', '5'}; // red and orange look alike on camera
       final sameFamily = warm.contains(byColour) && warm.contains(value);
@@ -635,6 +698,21 @@ class PlateArranger {
           : a.box.top.compareTo(b.box.top);
     });
     var value = letters.map((c) => c.text).join();
+    // The Ge'ez pair read as Latin before the region on a two-row plate's
+    // top row ("hhAA" for ከከ AA, 2-AA-C64915, 2026-11-23): the last two
+    // letters on that row name the region.
+    if (parser.readRegion(value) == null && letters.length > 2) {
+      final last = letters.sublist(letters.length - 2);
+      final sameRow = (last[0].box.centerY - last[1].box.centerY).abs() <
+          last[0].box.height * 0.5;
+      final tail = last.map((c) => c.text).join();
+      if (sameRow && parser.readRegion(tail) != null) {
+        letters
+          ..clear()
+          ..addAll(last);
+        value = tail;
+      }
+    }
     // Loose letters count only if they name a region or are at most two
     // (more is stray text crossing the plate, e.g. a watermark).
     if (parser.readRegion(value) == null && letters.length > 2) {

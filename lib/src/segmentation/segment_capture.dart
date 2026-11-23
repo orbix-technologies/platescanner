@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:isolate';
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:image/image.dart' as img;
@@ -30,6 +31,47 @@ PlateSegmentation? segmentCaptureSync(String path, NormalizedRect area) {
   if (!file.existsSync()) return null;
   final photo = img.decodeImage(file.readAsBytesSync());
   if (photo == null) return null;
+  final s = _segmentWidened(photo, area);
+  if (s == null || !s.found || s.latinStack.length != 2) return s;
+  return s.withStackMatch(stackMatch(photo, area, s.latinStack));
+}
+
+/// Correlation of the grey images of the two region letters [stack]
+/// (normalized to [area] of [photo]), each scaled to 16×20: near 1 when
+/// they are the same letter (AA), low otherwise.
+double? stackMatch(
+    img.Image photo, NormalizedRect area, List<NormalizedRect> stack) {
+  List<double>? glyph(NormalizedRect b) {
+    final x = ((area.left + b.left * area.width) * photo.width).round();
+    final y = ((area.top + b.top * area.height) * photo.height).round();
+    final w = (b.width * area.width * photo.width).round();
+    final h = (b.height * area.height * photo.height).round();
+    if (w < 3 || h < 3 || x < 0 || y < 0) return null;
+    if (x + w > photo.width || y + h > photo.height) return null;
+    final g = img.copyResize(
+      img.copyCrop(photo, x: x, y: y, width: w, height: h),
+      width: 16,
+      height: 20,
+      interpolation: img.Interpolation.average,
+    );
+    final v = [for (final p in g) p.luminanceNormalized.toDouble()];
+    final mean = v.reduce((a, b) => a + b) / v.length;
+    final d = [for (final x in v) x - mean];
+    final norm = math.sqrt(d.fold(0.0, (a, x) => a + x * x));
+    return norm == 0 ? null : [for (final x in d) x / norm];
+  }
+
+  final a = glyph(stack[0]), b = glyph(stack[1]);
+  if (a == null || b == null) return null;
+  var sum = 0.0;
+  for (var i = 0; i < a.length; i++) {
+    sum += a[i] * b[i];
+  }
+  return sum;
+}
+
+/// [area] of [photo] segmented, read again wider when a section is cut.
+PlateSegmentation? _segmentWidened(img.Image photo, NormalizedRect area) {
   final first = _segmentArea(photo, area);
   if (first == null || !first.found) return first;
   // A shape cut by the crop's side with its section missing (the circle
@@ -101,6 +143,7 @@ PlateSegmentation _relative(
     twoRow: s.twoRow,
     columns: s.columns,
     notes: [...s.notes, 'widened'],
+    stackMatch: s.stackMatch,
   );
 }
 

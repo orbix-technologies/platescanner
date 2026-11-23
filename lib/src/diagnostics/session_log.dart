@@ -96,6 +96,27 @@ class SessionLog {
 
   Future<void> _saving = Future.value();
 
+  /// Sessions kept on the device; older ones are deleted (once per run).
+  static const maxSessions = 500;
+  static bool _pruned = false;
+
+  /// Deletes all but the newest [maxSessions] sessions (log and photo).
+  static Future<void> _prune(Directory dir) async {
+    final ids = <String>{};
+    await for (final f in dir.list()) {
+      final m = RegExp(r'session_(\d+)\.json$').firstMatch(f.path);
+      if (m != null) ids.add(m.group(1)!);
+    }
+    if (ids.length <= maxSessions) return;
+    final old = (ids.toList()..sort()).take(ids.length - maxSessions);
+    for (final id in old) {
+      for (final ext in const ['json', 'jpg']) {
+        final f = File('${dir.path}/session_$id.$ext');
+        if (await f.exists()) await f.delete();
+      }
+    }
+  }
+
   /// Writes the log (and the frame, once there is one) now. Safe to call
   /// repeatedly: the same files are overwritten as the session goes on, so a
   /// session that never captured, or that the app was killed in, still
@@ -123,6 +144,10 @@ class SessionLog {
         'events': _events,
       });
       await File('${dir.path}/session_$_id.json').writeAsString(json);
+      if (!_pruned) {
+        _pruned = true;
+        await _prune(dir);
+      }
     } catch (_) {
       // Diagnostics must never break scanning.
     }
@@ -187,6 +212,7 @@ class SessionLog {
         'leftWord': [for (final r in s.leftWord) rect(r)],
         'latinSideBySide': s.latinSideBySide,
         'twoRow': s.twoRow,
+        'stackMatch': s.stackMatch,
         'columns': [
           for (final c in s.columns)
             '${c.kind.name}${c.strictStack ? '*' : ''} ${c.box.left},${c.box.top} '

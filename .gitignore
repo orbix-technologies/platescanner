@@ -44,3 +44,15 @@ build/
 /training/runs/
 /training/*.log
 /training/*.pt
+
+# Internal docs and developer tools (scan-log replay, scoring)
+/doc/
+/tool/
+
+# Detector training (all of it)
+/training/
+
+# Editor and OS leftovers
+*.iml
+.vscode/
+Thumbs.db

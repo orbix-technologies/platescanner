@@ -313,4 +313,31 @@ void main() {
     expect(arranger.geezFromLatin(unread, 'CD').value, 'XX');
     expect(arranger.geezFromLatin(unread, '').value, 'XX');
   });
+
+  group('old two-row plate, text only (SM-A176B logs of 2026-11-23)', () {
+    test('top row "hhAA" over C64915: region AA, series letter kept', () {
+      final r = arranger.arrange(AreaOcr(elements: [
+        word('hhAA', left: 0.32, top: 0.10, bottom: 0.39, charWidth: 0.13),
+        word('C64915', left: 0.22, top: 0.45, bottom: 0.93, charWidth: 0.11),
+      ]));
+      expect(r.candidate.regionCode, 'AA');
+      expect(r.arrangement.number.value, 'C64915');
+    });
+    test('top row "Oht ET" over 36088: region ET', () {
+      final r = arranger.arrange(AreaOcr(elements: [
+        word('Oht', left: 0.10, top: 0.10, bottom: 0.35, charWidth: 0.08),
+        word('ET', left: 0.60, top: 0.10, bottom: 0.35, charWidth: 0.10),
+        word('36088', left: 0.20, top: 0.45, bottom: 0.90, charWidth: 0.12),
+      ]));
+      expect(r.candidate.regionCode, 'ET');
+      expect(r.arrangement.number.value, '36088');
+    });
+    test('"TOYOTA 4WD" above a plate is no region', () {
+      final r = arranger.arrange(AreaOcr(elements: [
+        word('TOYOTAAWD', left: 0.05, top: 0.0, bottom: 0.15, charWidth: 0.09),
+        word('36232', left: 0.20, top: 0.45, bottom: 0.90, charWidth: 0.12),
+      ]));
+      expect(r.candidate.regionCode, isNull);
+    });
+  });
 }

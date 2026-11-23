@@ -142,7 +142,35 @@ enum InkColor {
     if (hue < 18 || hue >= 330) return InkColor.red;
     if (hue < 45) return InkColor.orange;
     if (hue >= 75 && hue < 170) return InkColor.green;
-    if (hue >= 185 && hue < 260) return InkColor.blue;
+    if (hue >= 185 && hue < 260) {
+      // Black ink under daylight or a blue-tinted camera reads as dark,
+      // greyish blue (federal plates, session logs of 2026-11-19: chroma
+      // up to 0.07, value up to 0.27); real blue ink, even in shade, keeps
+      // a chroma of 0.14 or more.
+      if (delta < 0.1 && max < 0.35) return InkColor.black;
+      return InkColor.blue;
+    }
+    return null;
+  }
+
+  /// Blue or green judged against the plate's own [paper] (both
+  /// `[r, g, b]`), which cancels the camera's colour cast; null when
+  /// neither is clear. Each channel's absorbance (1 − ink / paper) is
+  /// compared with their mean: blue ink lets blue through (blue ≤ −0.08,
+  /// below green by 0.04), green ink green (green ≤ −0.04, or below the
+  /// mean with blue absorbed most, ≥ 0.03). Labelled logs of 2026-11-09 and
+  /// 2026-11-19: black ink stays within ±0.04 with blue never above 0.04
+  /// while green is; green ink in shade reads olive or grey on its own.
+  static InkColor? onPaper(List<int> ink, List<int> paper) {
+    if (ink.length != 3 || paper.length != 3) return null;
+    final ab = [
+      for (var i = 0; i < 3; i++) 1 - ink[i] / (paper[i] < 1 ? 1 : paper[i])
+    ];
+    final mean = (ab[0] + ab[1] + ab[2]) / 3;
+    final g = ab[1] - mean, b = ab[2] - mean;
+    if (b <= -0.08 && b < g - 0.04) return InkColor.blue;
+    if (g <= -0.04) return InkColor.green;
+    if (g < -0.01 && b >= 0.03) return InkColor.green;
     return null;
   }
 

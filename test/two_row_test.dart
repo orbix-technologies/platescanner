@@ -39,8 +39,8 @@ void main() {
           expect(r.bottom, lessThanOrEqualTo(seg.number!.top + 0.02));
         }
         // Side by side, not overlapping (they may touch).
-        expect(seg.latinStack[0].right,
-            lessThanOrEqualTo(seg.latinStack[1].left));
+        expect(
+            seg.latinStack[0].right, lessThanOrEqualTo(seg.latinStack[1].left));
       }
     });
   });

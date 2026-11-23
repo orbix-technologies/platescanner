@@ -93,6 +93,16 @@ void main() {
     expect(s.leftDigits, hasLength(2));
   });
 
+  // 4-ET-28313 (SM-A176B, 2026-11-23): the plate's border and a screw join
+  // the last digit, holding the stacked E and T inside one larger shape.
+  test('ET letters inside a border shape: still the Latin stack', () {
+    final s = seg('et_border_stack');
+    expect(s.numberChars, hasLength(5), reason: s.notes.join(' '));
+    expect(s.latinStack, hasLength(2), reason: '${s.columns}');
+    expect(s.latinStack.first.left, greaterThan(s.number!.right - 0.02));
+    expect(s.latinStack[1].top, greaterThan(s.latinStack[0].top));
+  });
+
   test('UN: 7 digits · U/N stack', () {
     final s = seg('un');
     expect(s.numberChars, hasLength(7), reason: '${s.columns}');

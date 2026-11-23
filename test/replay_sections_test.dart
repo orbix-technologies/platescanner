@@ -71,6 +71,10 @@ void main() {
       // ignore: avoid_print
       print('${id.substring(id.length - 5)}  ${r.arrangement.layoutText}'
           '  ${r.arrangement.code.note ?? ''}');
+      // Machine-readable, for scoring against labels.
+      // ignore: avoid_print
+      print('READ $id ${r.candidate.code}-${r.candidate.regionCode}-'
+          '${r.candidate.serial}');
     }
   }, skip: dir == null ? 'set LOGS_DIR' : false);
 }

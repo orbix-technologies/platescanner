@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
@@ -74,6 +75,7 @@ class PlateReaderController extends ChangeNotifier {
     bool? recordSessions,
     NormalizedRect regionOfInterest =
         const NormalizedRect(0.07, 0.25, 0.93, 0.6),
+    this.discardDelay = const Duration(seconds: 30),
   })  : recordSessions = recordSessions ?? kDebugMode,
         _roi = regionOfInterest,
         _service = service ?? PlateRecognitionServiceFactory.create(),
@@ -139,6 +141,32 @@ class PlateReaderController extends ChangeNotifier {
   /// not one guessed from OCR text boxes.
   bool _detectedByModel = false;
   CapturedFrame? _frame;
+
+  /// The confirmed record took the photo ([PlateRecord.imagePath]): it is
+  /// the host's to keep or delete.
+  bool _frameHandedOver = false;
+
+  /// How long the photo of a scan that ended without a result is kept
+  /// before it is deleted, so reads still running on it (snap,
+  /// segmentation, OCR) finish first.
+  final Duration discardDelay;
+
+  /// Deletes the still of a scan that ended without a result (retake,
+  /// cancel, closed). Session logs, when recorded, keep their own copy.
+  void _discard(CapturedFrame? frame) {
+    if (frame == null) return;
+    final saved = _log?.save() ?? Future<void>.value();
+    unawaited(
+        saved.then((_) => Future<void>.delayed(discardDelay)).then((_) async {
+      try {
+        final f = File(frame.path);
+        if (await f.exists()) await f.delete();
+      } catch (_) {
+        // Best effort: the OS clears the cache directory too.
+      }
+    }));
+  }
+
   NormalizedRect? _area;
   PlateArrangement? _arrangement;
   AreaOcr? _areaOcr;
@@ -398,7 +426,10 @@ class PlateReaderController extends ChangeNotifier {
       var proposed = _detectedArea ?? _roi;
       final frame = await _service.captureFrame();
       await _service.pause();
-      if (_phase != ScanPhase.detecting) return false;
+      if (_phase != ScanPhase.detecting) {
+        _discard(frame);
+        return false;
+      }
       // The plate as found on the still itself: the live box may be from
       // an earlier frame.
       final onStill = _plateOnStill(frame.plates, proposed);
@@ -593,6 +624,8 @@ class PlateReaderController extends ChangeNotifier {
       _notify();
     } catch (e, st) {
       _logger.e('Area read failed', error: e, stackTrace: st);
+      // Retaken, cancelled or closed meanwhile (its photo may be gone).
+      if (_phase != ScanPhase.reading) return;
       _onPlatformError(
         e is PlateReaderException ? e.message : 'Reading failed: $e',
       );
@@ -704,6 +737,8 @@ class PlateReaderController extends ChangeNotifier {
       // Only on diplomatic plates (the code may have been edited).
       embassyCode: _draftCode == 'CD' ? _draftEmbassy : null,
     );
+    // The photo is the host's now (PlateRecord.imagePath).
+    _frameHandedOver = true;
     _log?.event('done', {
       'record': record.canonical,
       'editedByUser': record.editedByUser,
@@ -739,6 +774,8 @@ class PlateReaderController extends ChangeNotifier {
     _snapping = false;
     _areaSnapped = false;
     _snap = null;
+    if (!_frameHandedOver) _discard(_frame);
+    _frameHandedOver = false;
     _frame = null;
     _area = null;
     _arrangement = null;
@@ -779,6 +816,7 @@ class PlateReaderController extends ChangeNotifier {
       _log?.event('closed', {'phase': _phase.name});
       unawaited(_log?.save());
     }
+    if (!_frameHandedOver) _discard(_frame);
     _disposed = true;
     unawaited(_frameSub?.cancel());
     unawaited(_errorSub?.cancel());

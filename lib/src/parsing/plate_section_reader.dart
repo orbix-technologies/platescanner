@@ -4,6 +4,7 @@ import '../models/plate_record.dart';
 import '../recognition/plate_recognition_service.dart';
 import '../segmentation/plate_segmenter.dart';
 import 'ethiopian_plate_parser.dart';
+import 'ethiopian_region.dart';
 import 'plate_arranger.dart';
 import 'plate_service_type.dart';
 
@@ -203,8 +204,12 @@ class PlateSectionReader {
     // The new national plate's hatched, pale characters break apart in the
     // image, but the whole-area OCR reads its one line well ("AAAGO00").
     // It has no region letters: a stacked pair on the right rules it out
-    // (a daily permit's word + 091 + O/R reads "eee0912").
-    if (seg.code == null && seg.latinStack.isEmpty) {
+    // (a daily permit's word + 091 + O/R reads "eee0912"). An "ETH" read
+    // beside it settles it: the last two digits are often boxed as a
+    // stacked pair (AAB4283 read as "3 XX – KX").
+    final ethRead = ocr.elements
+        .any((e) => e.text.toUpperCase().replaceAll(' ', '').contains('ETH'));
+    if (seg.code == null && (seg.latinStack.isEmpty || ethRead)) {
       final national = PlateArranger(parser: parser).nationalFromOcr(ocr);
       if (national != null) return national;
     }
@@ -261,9 +266,14 @@ class PlateSectionReader {
         redInk;
     final minDigits = dailyLike ? 2 : 4;
     final number = national ??
-        _voteNumber(_numberReads(readsOf('number', 0), minDigits: minDigits),
-            perDigit, n,
-            singles: singles, blank: blank, minDigits: minDigits) ??
+        _voteNumber(
+            _numberReads(readsOf('number', 0),
+                minDigits: minDigits, segmented: n),
+            perDigit,
+            n,
+            singles: singles,
+            blank: blank,
+            minDigits: minDigits) ??
         '';
     // Boxes per digit: the segmentation's when the counts match, else the
     // number box divided evenly (two touching digits found as one shape).
@@ -320,6 +330,74 @@ class PlateSectionReader {
             letters = v.split('');
             break;
           }
+        }
+      }
+    }
+    // A letter decides only when two of the three ways each crop is read
+    // (photo, black and white, lines erased) show it in its place: the
+    // letter alone, drawn three times, or in the side-by-side word.
+    int support(int i, String l) {
+      final single = readsOf('latin', i), repeat = readsOf('latinRepeat', i);
+      final word = readsOf('latinWord', 0);
+      bool has(List<String?> reads, int p) =>
+          p < reads.length && (reads[p]?.toUpperCase().contains(l) ?? false);
+      var n = 0;
+      for (var p = 0; p < 3; p++) {
+        final w = p < word.length ? _twoLetters(word[p]) : null;
+        if (has(single, p) || has(repeat, p) || w?[i] == l) n++;
+      }
+      return n;
+    }
+
+    // Still no region: one letter read where only one region has it (E on
+    // top or T below: ET; A below: AA), the other unread or a letter no
+    // region has there (federal plates read "E" + "J" / nothing, session
+    // logs of 2026-11-19).
+    if (letters.length == 2 && !known(letters.map((l) => l ?? '?').join())) {
+      final one = _regionFromOneLetter([
+        for (var i = 0; i < 2; i++)
+          letters[i] != null && support(i, letters[i]!) >= 2
+              ? letters[i]
+              : null,
+      ]);
+      if (one != null) letters = one.split('');
+    }
+    // Still no region, the two letters drawn alike and one read as A (or
+    // none read and very alike): AA,
+    // the only region with a letter twice (bottom A read as nothing or a
+    // look-alike, session logs of 2026-11-19).
+    if (letters.length == 2 &&
+        !known(letters.map((l) => l ?? '?').join()) &&
+        (seg.stackMatch ?? 0) >= 0.5 &&
+        // None read at all: only when clearly alike (non-AA ≤ 0.3).
+        (letters.contains('A') ||
+            (letters.every((l) => l == null) && seg.stackMatch! >= 0.6)) &&
+        [0, 1].every((i) =>
+            letters[i] == null ||
+            letters[i] == 'A' ||
+            !EthiopianRegion.values.any((r) => r.code[i] == letters[i]))) {
+      letters = ['A', 'A'];
+    }
+    // Still no region: the whole-area OCR line across the stack ends in it.
+    // On two-row plates the top row often reads as one word ("QhtET," for
+    // ④ ኢት ET) while the crop of a letter beside a screw reads nothing
+    // (4-ET-37617, 2026-11-23).
+    if (letters.length == 2 && !known(letters.map((l) => l ?? '?').join())) {
+      final stack = seg.latinStack.reduce((a, b) => a.union(b));
+      for (final e in ocr.elements) {
+        if (!e.box.containsCenterOf(stack)) continue;
+        final m =
+            RegExp(r'([A-Z]{2})[^A-Z0-9]*$').firstMatch(e.text.toUpperCase());
+        final v = m?.group(1);
+        if (v == null || parser.readRegion(v) == null) continue;
+        // A letter read differently blocks it only when well supported (the
+        // T beside a screw read "H" once, 4-ET-37617).
+        if ([0, 1].every((i) =>
+            letters[i] == null ||
+            letters[i] == v[i] ||
+            support(i, letters[i]!) < 2)) {
+          letters = v.split('');
+          break;
         }
       }
     }
@@ -498,6 +576,7 @@ class PlateSectionReader {
                   ? seg.leftWord.reduce((a, b) => a.union(b))
                   : null),
       ink: ocr.inkColor,
+      paper: ocr.paperColor,
       special: special,
       embassy: embassy,
     );
@@ -533,7 +612,47 @@ class PlateSectionReader {
   /// as "1": "BO5475" + "1"); without its last character it votes too —
   /// mapped again, since the extra character changes how a leading letter
   /// is taken (session logs: B05475).
-  static List<String> _numberReads(List<String?> raw, {int minDigits = 4}) {
+  static List<String> _numberReads(
+    List<String?> raw, {
+    int minDigits = 4,
+    int? segmented,
+  }) {
+    // One character more than the digits found, the first a thin upright:
+    // the plate's edge read as "I" / "|" before the number ("IC61754",
+    // session logs of 2026-11-19).
+    // A read of several lines: the number crop reached above the plate (the
+    // last digit joined to the border up to a "TOYOTA 4WD" badge reads
+    // "TOYOTA4W\nhtET,\n37617", 2026-11-23). The line with the most digits
+    // is the number, when it has enough of them.
+    int digitCount(String s) => RegExp(r'[0-9]').allMatches(s).length;
+    raw = [
+      for (final t in raw)
+        () {
+          if (t == null || !t.contains('\n')) return t;
+          final best = (t.split('\n')
+                ..sort((a, b) => digitCount(b).compareTo(digitCount(a))))
+              .first;
+          return digitCount(best) >= minDigits ? best : t;
+        }(),
+    ];
+    raw = [
+      for (final t in raw)
+        () {
+          if (t == null) return t;
+          final clean = t.replaceAll(RegExp(r'[^0-9A-Za-z|]'), '');
+          // What stays must look like a serial. Nothing comes before a
+          // series letter, so a letter and five digits always; five digits
+          // only when the segmentation found one shape more (a 1 is real).
+          final rest = clean.length > 1 ? clean.substring(1) : '';
+          if (clean.length < 2 || !'Il|i1'.contains(clean[0])) return t;
+          if (RegExp(r'^[A-Z][0-9OoDQUGSBZ]{5}$').hasMatch(rest)) return rest;
+          return segmented != null &&
+                  clean.length == segmented + 1 &&
+                  RegExp(r'^[0-9OoDQUGSBZ]{5}$').hasMatch(rest)
+              ? rest
+              : t;
+        }(),
+    ];
     final mapped = raw.map(_digits).toList();
     final lengths = _majority(
         mapped.where((m) => m.length >= minDigits).map((m) => '${m.length}'));
@@ -639,6 +758,25 @@ class PlateSectionReader {
   static String? _split(Iterable<String> whole, List<String?> singles) {
     final options = whole.toSet();
     return _majority(singles.where(options.contains))?.$1;
+  }
+
+  /// The one region whose code fits [letters] (top, bottom) where a letter
+  /// is read and some region has that letter in that place; null unless
+  /// exactly one fits and at least one letter decided it.
+  static String? _regionFromOneLetter(List<String?> letters) {
+    final codes = [for (final r in EthiopianRegion.values) r.code];
+    bool used(int i, String c) => codes.any((code) => code[i] == c);
+    final fits = codes.where((code) {
+      var decided = false;
+      for (var i = 0; i < 2; i++) {
+        final l = letters[i];
+        if (l == null || !used(i, l)) continue;
+        if (code[i] != l) return false;
+        decided = true;
+      }
+      return decided;
+    }).toList();
+    return fits.length == 1 ? fits.first : null;
   }
 
   /// One letter from a crop's reads: a letter read as such counts once; a

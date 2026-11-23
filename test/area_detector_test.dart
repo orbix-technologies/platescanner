@@ -17,8 +17,7 @@ void main() {
     expect(area.bottom, lessThan(0.6));
   });
 
-  test('a series letter and five 0-like digits is not the national number',
-      () {
+  test('a series letter and five 0-like digits is not the national number', () {
     // Live reads of the two-row B00490 (session logs of 2026-10-27).
     for (final t in ['BOO490', 'BOG490', 'BO0490']) {
       final d = detector.detectDetailed([

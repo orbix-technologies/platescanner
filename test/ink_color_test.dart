@@ -12,6 +12,16 @@ void main() {
       expect(InkColor.classify(30, 30, 35), InkColor.black);
     });
 
+    test('black ink tinted blue by the camera is black (federal plates)', () {
+      // Session logs of 2026-11-19: ④ ET plates logged as dark greyish blue.
+      expect(InkColor.classify(28, 35, 46), InkColor.black);
+      expect(InkColor.classify(18, 21, 29), InkColor.black);
+      // Dark blue ink keeps its chroma; dark green is not blue at all.
+      expect(InkColor.classify(14, 25, 50), InkColor.blue);
+      expect(InkColor.classify(48, 62, 93), InkColor.blue);
+      expect(InkColor.classify(64, 85, 70), isNot(InkColor.black));
+    });
+
     test('washed-out grey is not guessed', () {
       expect(InkColor.classify(150, 150, 150), isNull);
     });
@@ -64,6 +74,25 @@ void main() {
             elements: [number], codeHint: '3', inkColor: [150, 150, 150]),
       );
       expect(r.arrangement.code.value, '3');
+    });
+  });
+
+  group('ink against its own paper (SM-M166P logs of 2026-11-19)', () {
+    test('dark green under a cold light: green, not black', () {
+      // B49900: grey-olive on its own, classified black (code 4).
+      expect(InkColor.classify(106, 107, 96), InkColor.black);
+      expect(InkColor.onPaper([106, 107, 96], [209, 210, 215]), InkColor.green);
+      expect(InkColor.onPaper([97, 102, 87], [178, 189, 189]), InkColor.green);
+    });
+    test('teal-looking green: green', () {
+      expect(InkColor.onPaper([64, 114, 123], [196, 220, 234]), InkColor.green);
+    });
+    test('blue stays blue, black stays undecided', () {
+      expect(InkColor.onPaper([23, 61, 156], [176, 197, 226]), InkColor.blue);
+      expect(InkColor.onPaper([47, 68, 122], [138, 168, 197]), InkColor.blue);
+      expect(InkColor.onPaper([33, 33, 38], [171, 178, 185]), isNull);
+      expect(InkColor.onPaper([45, 47, 47], [97, 112, 122]), isNull);
+      expect(InkColor.onPaper([74, 80, 97], [194, 204, 219]), isNull);
     });
   });
 }

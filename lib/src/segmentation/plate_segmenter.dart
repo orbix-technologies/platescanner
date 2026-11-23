@@ -111,7 +111,30 @@ class PlateSegmentation {
     this.twoRow = false,
     required this.columns,
     this.notes = const [],
+    this.stackMatch,
   });
+
+  /// How alike the two region letters look (correlation of their grey
+  /// images, -1..1), or null. Only AA repeats a letter: AA plates score
+  /// mostly 0.5–0.97, every other region 0.3 or less (AM, AF ≤ 0).
+  final double? stackMatch;
+
+  /// This result with [stackMatch] set.
+  PlateSegmentation withStackMatch(double? match) => PlateSegmentation(
+        number: number,
+        numberChars: numberChars,
+        code: code,
+        codeInner: codeInner,
+        geezStack: geezStack,
+        latinStack: latinStack,
+        leftDigits: leftDigits,
+        leftWord: leftWord,
+        latinSideBySide: latinSideBySide,
+        twoRow: twoRow,
+        columns: columns,
+        notes: notes,
+        stackMatch: match,
+      );
 
   /// How the segmentation went (threshold, counts), for the session log.
   final List<String> notes;
@@ -192,10 +215,42 @@ class PlateSegmenter {
   PlateSegmentation segment(GrayImage g) {
     final plain = _segmentOnce(g);
     final k = _Keystone.of(this, g);
-    if (k == null) return plain;
+    if (k == null) return _trimSlivers(plain);
     final straight = _segmentOnce(k.image);
-    if (score(straight) <= score(plain)) return plain;
-    return k.mapBack(straight);
+    if (score(straight) <= score(plain)) return _trimSlivers(plain);
+    return _trimSlivers(k.mapBack(straight));
+  }
+
+  /// [s] without a first or last number character under 0.55 of the median
+  /// digit width: the plate's edge or border taken for a digit, then read
+  /// as "1" / "I" ("IC61754", "|23759"; session logs of 2026-11-19: edge
+  /// 0.03–0.05 wide, at most 0.51 of the median; the plate font's 1 is 0.8).
+  /// At least five characters stay.
+  static PlateSegmentation _trimSlivers(PlateSegmentation s) {
+    var chars = s.numberChars;
+    if (chars.length < 6) return s;
+    final widths = [for (final c in chars) c.width]..sort();
+    final median = widths[widths.length ~/ 2];
+    bool sliver(NormalizedRect c) => c.width < median * 0.55;
+    if (sliver(chars.first)) chars = chars.sublist(1);
+    if (chars.length >= 6 && sliver(chars.last)) {
+      chars = chars.sublist(0, chars.length - 1);
+    }
+    if (chars.length == s.numberChars.length) return s;
+    return PlateSegmentation(
+      number: chars.reduce((a, b) => a.union(b)),
+      numberChars: chars,
+      code: s.code,
+      codeInner: s.codeInner,
+      geezStack: s.geezStack,
+      latinStack: s.latinStack,
+      leftDigits: s.leftDigits,
+      leftWord: s.leftWord,
+      latinSideBySide: s.latinSideBySide,
+      twoRow: s.twoRow,
+      columns: s.columns,
+      notes: [...s.notes, 'edge sliver dropped'],
+    );
   }
 
   PlateSegmentation _segmentOnce(GrayImage g) {
@@ -369,6 +424,11 @@ class PlateSegmenter {
         latin = c;
         break;
       }
+      final inner = _innerStack(c, numberBox, pitch, hd);
+      if (inner != null) {
+        latin = inner;
+        break;
+      }
       if (c.box.height >= hd * 0.3 && c.box.height <= hd * 0.85) beside.add(c);
     }
     if (latin == null && beside.length >= 2) {
@@ -396,6 +456,28 @@ class PlateSegmenter {
         circle = c;
       } else if (c.kind == ColumnKind.tall && geez != null) {
         leftTall.insert(0, c);
+      } else if (!hasCircle &&
+          circle == null &&
+          geez != null &&
+          leftTall.isEmpty &&
+          c.kind != ColumnKind.tall &&
+          c.box.height >= hd * 0.4 &&
+          c.box.height <= hd * 0.95 &&
+          c.box.width >= c.box.height * 0.75 &&
+          c.box.width <= c.box.height * 1.35 &&
+          geez.box.left - c.box.right <= pitch * 1.5 &&
+          // Right before the Ge'ez stack, and the plate's first shape: a
+          // police or daily plate's word has more letters left of it.
+          columns.indexOf(c) == columns.indexOf(geez) - 1 &&
+          !columns.take(columns.indexOf(c)).any((o) =>
+              o.box.height >= hd * 0.3 &&
+              c.box.left - o.box.right <= pitch * 1.5)) {
+        // A ring broken in pieces (small or soft plates; SM-M166P logs of
+        // 2026-11-19: 45×47 in two pieces taken for a stack, 38×36 in
+        // three) isn't recognised: the square shape next left of the
+        // Ge'ez stack is the circle.
+        circle = c;
+        _notes.add('circle by place');
       }
     }
 
@@ -612,8 +694,8 @@ class PlateSegmenter {
       // One Latin letter lost (joined to a screw and the border, erased
       // with it): the pair is as wide as the Ge'ez pair (two-row B00490).
       if (g != null && l != null && l.width < g.width * 0.7) {
-        l = Blob(l.left, l.top,
-            math.min(w, l.left + (g.width * 1.1).round()), l.bottom, 0);
+        l = Blob(l.left, l.top, math.min(w, l.left + (g.width * 1.1).round()),
+            l.bottom, 0);
       }
       geez = pair(g);
       latin = pair(l);
@@ -1089,6 +1171,35 @@ class PlateSegmenter {
       return ColumnKind.tall;
     }
     return ColumnKind.short;
+  }
+
+  /// The region letters inside a column held together by a larger shape: the
+  /// plate's border and a screw joined to the last digit (4-ET-28313,
+  /// 2026-11-23) take the stacked E and T into one "short" column. Two
+  /// letter-sized shapes, one above the other, right of the number, become
+  /// the stack. Null when there are none.
+  Column? _innerStack(Column c, Blob numberBox, double pitch, double hd) {
+    if (c.kind == ColumnKind.stack || c.blobs.length < 3) return null;
+    final parts = c.blobs
+        .where((b) =>
+            b.height >= hd * 0.3 &&
+            b.height <= hd * 0.7 &&
+            b.width <= b.height * 1.3 &&
+            b.left >= numberBox.right - pitch * 0.2)
+        .toList()
+      ..sort((a, b) => a.top.compareTo(b.top));
+    for (var i = 0; i + 1 < parts.length; i++) {
+      final top = parts[i], bottom = parts[i + 1];
+      final overlap =
+          math.min(top.right, bottom.right) - math.max(top.left, bottom.left);
+      if (overlap < math.min(top.width, bottom.width) * 0.5) continue;
+      if (bottom.top < top.bottom - top.height * 0.2) continue;
+      final ratio = top.height / bottom.height;
+      if (ratio < 0.7 || ratio > 1.4) continue;
+      return Column([top, bottom], top.union(bottom), ColumnKind.stack,
+          strictStack: true);
+    }
+    return null;
   }
 
   /// Two stacked letters joined into one shape (blur, a border or screw
