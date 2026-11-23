@@ -15,5 +15,29 @@ enum PlateFamily {
   special,
 
   /// Classifier could not decide; force review.
-  unknown,
+  unknown;
+
+  /// Best-effort family from a confirmed reading (for session labelling).
+  static PlateFamily fromConfirmed({
+    required String? code,
+    required String? regionCode,
+    required String? serial,
+    required bool twoRow,
+  }) {
+    if (code == 'ETH' ||
+        (serial != null && RegExp(r'^[A-Z]{3}\d{4}$').hasMatch(serial))) {
+      return PlateFamily.nationalEth;
+    }
+    if (code == 'CD' ||
+        code == 'UN' ||
+        code == 'AU' ||
+        code == 'POLICE' ||
+        code == 'TEMP' ||
+        code == 'DAILY') {
+      return PlateFamily.special;
+    }
+    if (twoRow) return PlateFamily.classicTwoRow;
+    if (code != null || regionCode != null) return PlateFamily.classicSingle;
+    return PlateFamily.unknown;
+  }
 }

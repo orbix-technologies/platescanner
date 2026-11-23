@@ -784,9 +784,18 @@ class PlateReaderController extends ChangeNotifier {
       // Only on diplomatic plates (the code may have been edited).
       embassyCode: _draftCode == 'CD' ? _draftEmbassy : null,
     );
+    final confirmedFamily = PlateFamily.fromConfirmed(
+      code: record.code,
+      regionCode: record.regionCode,
+      serial: record.serial,
+      twoRow: record.layout == PlateLayout.twoRow,
+    );
     _log?.event('done', {
       'record': record.canonical,
       'editedByUser': record.editedByUser,
+      'family': _plateFamily.name,
+      'confirmedFamily': confirmedFamily.name,
+      'typeConfidence': _typeConfidence,
     });
     unawaited(_log?.save());
     _phase = ScanPhase.confirmed;
