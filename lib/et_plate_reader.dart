@@ -33,6 +33,7 @@ export 'src/models/plate_record.dart'
 export 'src/parsing/diplomatic_codes.dart' show diplomaticMissions;
 export 'src/parsing/ethiopian_plate_parser.dart' show EthiopianPlateParser;
 export 'src/parsing/ethiopian_region.dart' show EthiopianRegion;
+export 'src/parsing/plate_family.dart' show PlateFamily;
 export 'src/parsing/plate_service_type.dart'
     show InkColor, PaperColor, PlateServiceType;
 export 'src/segmentation/plate_bounds_finder.dart'
@@ -52,6 +53,8 @@ export 'src/recognition/glyph_classifier.dart' show GlyphClassifier, GlyphResult
 export 'src/recognition/glyph_plate_reader.dart' show GlyphPlateReader;
 export 'src/recognition/reading_consensus.dart'
     show ReadingConsensus, voteReadings;
+export 'src/recognition/plate_type_classifier.dart'
+    show PlateTypeClassifier, PlateTypeDecision, TypeFeatures;
 export 'src/recognition/plate_availability.dart'
     show PlateReader, PlateReaderAvailability, PlateReaderAvailabilityStatus;
 export 'src/recognition/plate_recognition_service.dart'
